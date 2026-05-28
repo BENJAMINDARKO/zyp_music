@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:just_audio/just_audio.dart';
 import '../entities/video.dart';
 
 abstract class AudioRepository {
@@ -11,4 +13,6 @@ abstract class AudioRepository {
   Future<Duration> getPosition();
   Future<Duration> getDuration();
   Future<bool> isPlaying();
+  Stream<ProcessingState> get processingStateStream;
+  bool get currentTrackCompleted;
 }

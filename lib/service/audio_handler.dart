@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
 class YTMusixAudioHandler extends BaseAudioHandler {
   final AudioPlayer _player = AudioPlayer();
-  final _playerStateListener = <void Function()>[];
+  StreamSubscription<PlaybackEvent>? _eventSubscription;
 
   YTMusixAudioHandler() {
-    _player.playbackEventStream.listen(_onPlaybackEvent);
+    _eventSubscription = _player.playbackEventStream.listen(_onPlaybackEvent);
   }
 
   @override
@@ -21,6 +22,7 @@ class YTMusixAudioHandler extends BaseAudioHandler {
   @override
   Future<void> stop() async {
     await _player.stop();
+    await _player.setAudioSource(AudioSource.uri(Uri.parse('')));
   }
 
   @override
@@ -36,15 +38,22 @@ class YTMusixAudioHandler extends BaseAudioHandler {
 
   void setMediaItem(MediaItem item) {
     mediaItem.add(item);
-    _player.setAudioSource(AudioSource.uri(Uri.parse(item.id)));
+  }
+
+  void playUri(String uri) async {
+    await _player.setAudioSource(AudioSource.uri(Uri.parse(uri)));
+    await _player.play();
+  }
+
+  void playAudioSource(AudioSource source) async {
+    await _player.setAudioSource(source);
+    await _player.play();
   }
 
   AudioPlayer get player => _player;
 
-  void addPlayerStateListener(void Function() listener) {
-    _playerStateListener.add(listener);
-    _player.playbackEventStream.listen((_) => listener());
-  }
+  Future<Duration> get duration async =>
+      _player.duration ?? Duration.zero;
 
   void _onPlaybackEvent(PlaybackEvent event) {
     playbackState.add(playbackState.value.copyWith(
@@ -80,6 +89,7 @@ class YTMusixAudioHandler extends BaseAudioHandler {
   }
 
   void dispose() {
+    _eventSubscription?.cancel();
     _player.dispose();
   }
 }

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:just_audio/just_audio.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 
@@ -15,7 +17,8 @@ class PlayerProvider extends ChangeNotifier {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   String? _error;
-  bool _isPolling = false;
+  Timer? _pollTimer;
+  StreamSubscription? _completionSubscription;
 
   Track? get currentTrack => _currentTrack;
   List<Track> get queue => _queue;
@@ -35,6 +38,8 @@ class PlayerProvider extends ChangeNotifier {
   Future<void> playTrack(Track track) async {
     _isLoading = true;
     _error = null;
+    _stopPolling();
+    _completionSubscription?.cancel();
     notifyListeners();
 
     try {
@@ -42,8 +47,8 @@ class PlayerProvider extends ChangeNotifier {
       final audioUrl = await _audioRepository.getAudioUrl(track);
       await _audioRepository.playTrack(track, audioUrl);
       _isPlaying = true;
-      _duration = await _audioRepository.getDuration();
       _startPolling();
+      _listenForCompletion();
     } catch (e) {
       _error = 'Failed to play: ${e.toString()}';
     } finally {
@@ -59,20 +64,30 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   Future<void> togglePlayPause() async {
-    if (_isPlaying) {
-      await _audioRepository.pause();
-      _isPlaying = false;
-    } else {
-      await _audioRepository.resume();
-      _isPlaying = true;
+    try {
+      if (_isPlaying) {
+        await _audioRepository.pause();
+        _isPlaying = false;
+      } else {
+        await _audioRepository.resume();
+        _isPlaying = true;
+      }
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to toggle playback: ${e.toString()}';
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   Future<void> seekTo(Duration position) async {
-    await _audioRepository.seek(position);
-    _position = position;
-    notifyListeners();
+    try {
+      await _audioRepository.seek(position);
+      _position = position;
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to seek: ${e.toString()}';
+      notifyListeners();
+    }
   }
 
   Future<void> next() async {
@@ -83,25 +98,39 @@ class PlayerProvider extends ChangeNotifier {
 
   Future<void> previous() async {
     if (_currentIndex > 0) {
-      await playFromQueue(_currentIndex - 1);
+      _currentIndex--;
+      await playTrack(_queue[_currentIndex]);
     }
   }
 
   void _startPolling() {
-    _isPolling = true;
-    Future.doWhile(() async {
-      if (!_isPolling) return false;
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!_isPolling) return false;
-      _position = await _audioRepository.getPosition();
-      _duration = await _audioRepository.getDuration();
-      notifyListeners();
-      return _isPolling;
+    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      try {
+        _position = await _audioRepository.getPosition();
+        _duration = await _audioRepository.getDuration();
+        notifyListeners();
+      } catch (_) {}
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  void _listenForCompletion() {
+    _completionSubscription?.cancel();
+    _completionSubscription =
+        _audioRepository.processingStateStream.listen((state) {
+      if (state == ProcessingState.completed && _queue.isNotEmpty) {
+        next();
+      }
     });
   }
 
   Future<void> stop() async {
-    _isPolling = false;
+    _stopPolling();
+    _completionSubscription?.cancel();
     await _audioRepository.stop();
     _isPlaying = false;
     _position = Duration.zero;
@@ -115,7 +144,8 @@ class PlayerProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _isPolling = false;
+    _stopPolling();
+    _completionSubscription?.cancel();
     super.dispose();
   }
 }

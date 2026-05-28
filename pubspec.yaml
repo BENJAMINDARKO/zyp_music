@@ -39,7 +39,6 @@ dependencies:
   audio_service: ^0.18.16
   provider: ^6.1.2
   cached_network_image: ^3.4.1
-  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:

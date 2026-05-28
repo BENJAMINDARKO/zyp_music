@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:ytmusix/domain/entities/video.dart';
 import 'package:ytmusix/domain/repositories/audio_repository.dart';
 import 'package:ytmusix/presentation/providers/player_provider.dart';
@@ -43,6 +45,13 @@ class MockAudioRepository implements AudioRepository {
 
   @override
   Future<bool> isPlaying() async => _playing;
+
+  @override
+  Stream<ProcessingState> get processingStateStream =>
+      const Stream.empty();
+
+  @override
+  bool get currentTrackCompleted => false;
 }
 
 void main() {

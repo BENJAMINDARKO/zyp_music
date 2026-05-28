@@ -40,10 +40,15 @@ class YoutubeRemoteDataSource {
     if (audioStreams.isEmpty) {
       throw Exception('No audio streams available for video $videoId');
     }
-    final bestAudio = audioStreams
+    var candidates = audioStreams
         .where((s) =>
             s.container == StreamContainer.mp4 ||
             s.container == StreamContainer.webM)
+        .toList();
+    if (candidates.isEmpty) {
+      candidates = audioStreams.toList();
+    }
+    final bestAudio = candidates
         .reduce((a, b) => a.bitrate.compareTo(b.bitrate) > 0 ? a : b);
     return bestAudio.url.toString();
   }

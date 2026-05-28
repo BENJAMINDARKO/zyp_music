@@ -35,11 +35,14 @@ class PlaylistProvider extends ChangeNotifier {
   }
 
   Future<void> loadSavedPlaylists() async {
+    _isLoading = true;
+    notifyListeners();
     try {
       _playlists = await _repository.getSavedPlaylists();
-      notifyListeners();
     } catch (e) {
       _error = 'Failed to load saved playlists';
+    } finally {
+      _isLoading = false;
       notifyListeners();
     }
   }
@@ -64,11 +67,14 @@ class PlaylistProvider extends ChangeNotifier {
   }
 
   String _extractPlaylistId(String input) {
-    final uri = Uri.tryParse(input);
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return trimmed;
+    final uri = Uri.tryParse(trimmed);
     if (uri != null && uri.queryParameters.containsKey('list')) {
-      return uri.queryParameters['list']!;
+      final id = uri.queryParameters['list'];
+      if (id != null && id.isNotEmpty) return id;
     }
-    return input.trim();
+    return trimmed;
   }
 
   void clearError() {

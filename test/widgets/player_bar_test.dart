@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
-import 'package:ytmusix/domain/entities/video.dart';
 import 'package:ytmusix/presentation/providers/player_provider.dart';
 import 'package:ytmusix/presentation/widgets/player_bar.dart';
+import 'package:ytmusix/domain/entities/video.dart';
 import 'package:ytmusix/domain/repositories/audio_repository.dart';
 
 class MockAudioRepo implements AudioRepository {
@@ -17,22 +19,12 @@ class MockAudioRepo implements AudioRepository {
   @override Future<Duration> getPosition() async => Duration.zero;
   @override Future<Duration> getDuration() async => Duration.zero;
   @override Future<bool> isPlaying() async => false;
-}
 
-Widget createTestWidget() {
-  final repo = MockAudioRepo();
-  final provider = PlayerProvider(repo);
+  @override
+  Stream<ProcessingState> get processingStateStream => const Stream.empty();
 
-  provider.setQueue([
-    Track(id: 'v1', title: 'Test Track', author: 'Test Artist'),
-  ]);
-
-  return MaterialApp(
-    home: ChangeNotifierProvider<PlayerProvider>.value(
-      value: provider,
-      child: const Scaffold(body: PlayerBar()),
-    ),
-  );
+  @override
+  bool get currentTrackCompleted => false;
 }
 
 void main() {

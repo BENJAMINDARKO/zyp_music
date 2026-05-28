@@ -38,7 +38,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       description: playlist.description,
       thumbnailUrl: playlist.thumbnailUrl,
       author: playlist.author,
-      videoCount: playlist.videoCount,
+      videoCount: playlist.tracks.length,
     ));
     await localDatabase.insertTracks(
       playlist.id,

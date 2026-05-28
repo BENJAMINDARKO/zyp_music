@@ -25,7 +25,8 @@ class AudioRepositoryImpl implements AudioRepository {
       id: audioUrl,
       title: track.title,
       artist: track.author ?? '',
-      artUri: track.thumbnailUrl != null ? Uri.tryParse(track.thumbnailUrl!) : null,
+      artUri:
+          track.thumbnailUrl != null ? Uri.tryParse(track.thumbnailUrl!) : null,
     ));
     await _handler.player.setAudioSource(AudioSource.uri(Uri.parse(audioUrl)));
     await _handler.play();
@@ -64,7 +65,7 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<Duration> getDuration() async {
-    return _handler.player.duration ?? Duration.zero;
+    return _handler.duration;
   }
 
   @override
@@ -72,8 +73,14 @@ class AudioRepositoryImpl implements AudioRepository {
     return _handler.player.playing;
   }
 
-  AudioPlayer get player => _handler.player;
-  YTMusixAudioHandler get handler => _handler;
+  @override
+  Stream<ProcessingState> get processingStateStream =>
+      _handler.player.processingStateStream;
+
+  @override
+  bool get currentTrackCompleted =>
+      _handler.player.processingState == ProcessingState.completed &&
+      _handler.player.playing == false;
 
   void dispose() {
     _handler.dispose();

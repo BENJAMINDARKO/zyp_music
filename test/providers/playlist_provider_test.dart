@@ -40,7 +40,9 @@ class MockPlaylistRepository implements PlaylistRepository {
 
   @override
   Future<Playlist?> getCachedPlaylist(String playlistId) async {
-    return _store[playlistId];
+    final p = _store[playlistId];
+    if (p == null) return null;
+    return p;
   }
 }
 

@@ -6,7 +6,7 @@ class Track {
   final String? author;
   final int index;
 
-  Track({
+  const Track({
     required this.id,
     required this.title,
     this.thumbnailUrl,

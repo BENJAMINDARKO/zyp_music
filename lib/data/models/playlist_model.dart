@@ -36,7 +36,7 @@ class PlaylistModel {
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    return <String, dynamic>{
       'id': id,
       'title': title,
       'description': description,
