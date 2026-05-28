@@ -7,25 +7,41 @@ import '../providers/player_provider.dart';
 import '../widgets/player_bar.dart';
 import '../widgets/video_tile.dart';
 
-class PlaylistScreen extends StatelessWidget {
+class PlaylistScreen extends StatefulWidget {
   final Playlist playlist;
 
   const PlaylistScreen({super.key, required this.playlist});
 
   @override
+  State<PlaylistScreen> createState() => _PlaylistScreenState();
+}
+
+class _PlaylistScreenState extends State<PlaylistScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<PlaylistProvider>().loadCachedPlaylist(widget.playlist.id);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(playlist.title),
+        title: Text(widget.playlist.title),
       ),
       body: Consumer2<PlaylistProvider, PlayerProvider>(
         builder: (context, playlistProvider, playerProvider, _) {
-          final tracks = playlistProvider.currentPlaylist?.tracks ?? playlist.tracks;
-          final isCurrentlyPlaying = playerProvider.queue == tracks && tracks.isNotEmpty;
+          final playlist = playlistProvider.currentPlaylist?.id == widget.playlist.id
+              ? playlistProvider.currentPlaylist!
+              : widget.playlist;
+          final tracks = playlist.tracks;
+          final currentTrackId = playerProvider.currentTrack?.id;
 
           return Column(
             children: [
-              _buildHeader(context, tracks, isCurrentlyPlaying, playerProvider),
+              _buildHeader(context, tracks, playerProvider),
               Expanded(
                 child: tracks.isEmpty
                     ? const Center(child: Text('No tracks found'))
@@ -35,8 +51,7 @@ class PlaylistScreen extends StatelessWidget {
                           final track = tracks[index];
                           return TrackTile(
                             track: track,
-                            isCurrent: isCurrentlyPlaying &&
-                                playerProvider.currentTrack?.id == track.id,
+                            isCurrent: currentTrackId == track.id,
                             onTap: () {
                               playerProvider.setQueue(tracks, startIndex: index);
                               playerProvider.playTrack(track);
@@ -53,7 +68,7 @@ class PlaylistScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, List<Track> tracks, bool isCurrentlyPlaying, PlayerProvider playerProvider) {
+  Widget _buildHeader(BuildContext context, List<Track> tracks, PlayerProvider playerProvider) {
     return Container(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -61,7 +76,7 @@ class PlaylistScreen extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.network(
-              playlist.thumbnailUrl ?? '',
+              widget.playlist.thumbnailUrl ?? '',
               width: 80,
               height: 80,
               fit: BoxFit.cover,
@@ -79,7 +94,7 @@ class PlaylistScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  playlist.title,
+                  widget.playlist.title,
                   style: Theme.of(context).textTheme.titleMedium,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,

@@ -2,6 +2,7 @@ import '../entities/video.dart';
 
 abstract class AudioRepository {
   Future<String> getAudioUrl(Track track);
+  Future<void> playTrack(Track track, String audioUrl);
   Future<void> play(String url);
   Future<void> pause();
   Future<void> resume();

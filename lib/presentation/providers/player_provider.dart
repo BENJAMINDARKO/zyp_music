@@ -15,6 +15,7 @@ class PlayerProvider extends ChangeNotifier {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   String? _error;
+  bool _isPolling = false;
 
   Track? get currentTrack => _currentTrack;
   List<Track> get queue => _queue;
@@ -39,10 +40,10 @@ class PlayerProvider extends ChangeNotifier {
     try {
       _currentTrack = track;
       final audioUrl = await _audioRepository.getAudioUrl(track);
-      await _audioRepository.play(audioUrl);
+      await _audioRepository.playTrack(track, audioUrl);
       _isPlaying = true;
       _duration = await _audioRepository.getDuration();
-      _startPositionPolling();
+      _startPolling();
     } catch (e) {
       _error = 'Failed to play: ${e.toString()}';
     } finally {
@@ -86,18 +87,21 @@ class PlayerProvider extends ChangeNotifier {
     }
   }
 
-  void _startPositionPolling() {
+  void _startPolling() {
+    _isPolling = true;
     Future.doWhile(() async {
+      if (!_isPolling) return false;
       await Future.delayed(const Duration(milliseconds: 500));
-      if (!_isPlaying) return false;
+      if (!_isPolling) return false;
       _position = await _audioRepository.getPosition();
       _duration = await _audioRepository.getDuration();
       notifyListeners();
-      return _isPlaying;
+      return _isPolling;
     });
   }
 
-  void stop() async {
+  Future<void> stop() async {
+    _isPolling = false;
     await _audioRepository.stop();
     _isPlaying = false;
     _position = Duration.zero;
@@ -107,5 +111,11 @@ class PlayerProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isPolling = false;
+    super.dispose();
   }
 }

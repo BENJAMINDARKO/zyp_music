@@ -44,6 +44,16 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> loadCachedPlaylist(String playlistId) async {
+    try {
+      final cached = await _repository.getCachedPlaylist(playlistId);
+      if (cached != null) {
+        _currentPlaylist = cached;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
   Future<void> deletePlaylist(String playlistId) async {
     await _repository.deletePlaylist(playlistId);
     _playlists.removeWhere((p) => p.id == playlistId);

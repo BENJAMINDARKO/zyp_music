@@ -1,8 +1,10 @@
 # Pending Decisions
 
-- [ ] **backend**: No backend preference specified (Options: node.js, python, java, go, firebase)
-- [ ] **database**: No database preference specified (Options: postgresql, mongodb, sqlite, mysql, firebase)
+All decisions resolved.
 
-## Unresolved Items
-- All deferred decisions must be resolved
-- Stack choices not yet finalized
+## Future Improvements
+- [ ] Add audio_service integration for lock screen controls
+- [ ] Add background audio playback service
+- [ ] Write unit tests
+- [ ] Add playlist search functionality
+- [ ] Implement offline download mode

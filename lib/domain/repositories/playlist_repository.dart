@@ -8,4 +8,5 @@ abstract class PlaylistRepository {
   Future<void> deletePlaylist(String playlistId);
   Future<void> saveTrack(String playlistId, Track track);
   Future<List<Track>> getCachedTracks(String playlistId);
+  Future<Playlist?> getCachedPlaylist(String playlistId);
 }

@@ -75,4 +75,21 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
     final models = await localDatabase.getTracks(playlistId);
     return models.map((m) => m.toEntity()).toList();
   }
+
+  @override
+  Future<Playlist?> getCachedPlaylist(String playlistId) async {
+    final playlists = await localDatabase.getAllPlaylists();
+    final match = playlists.where((p) => p.id == playlistId).firstOrNull;
+    if (match == null) return null;
+    final tracks = await getCachedTracks(playlistId);
+    return Playlist(
+      id: match.id,
+      title: match.title,
+      description: match.description,
+      thumbnailUrl: match.thumbnailUrl,
+      author: match.author,
+      videoCount: match.videoCount,
+      tracks: tracks,
+    );
+  }
 }
