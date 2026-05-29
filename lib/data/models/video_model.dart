@@ -24,7 +24,7 @@ class TrackModel {
       thumbnailUrl: map['thumbnailUrl'] as String?,
       durationSeconds: map['durationSeconds'] as int? ?? 0,
       author: map['author'] as String?,
-      index: map['index'] as int? ?? 0,
+      index: map['idx'] as int? ?? 0,
     );
   }
 
@@ -35,7 +35,7 @@ class TrackModel {
       'thumbnailUrl': thumbnailUrl,
       'durationSeconds': durationSeconds,
       'author': author,
-      'index': index,
+      'idx': index,
     };
   }
 

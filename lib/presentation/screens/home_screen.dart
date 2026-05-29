@@ -4,6 +4,7 @@ import '../../core/constants/app_constants.dart';
 import '../providers/playlist_provider.dart';
 import '../widgets/playlist_card.dart';
 import 'playlist_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,6 +37,15 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text(AppConstants.appName),
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const SettingsScreen(),
+              ),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () => _showInfo(context),
           ),
@@ -54,34 +64,31 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSearchBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              decoration: const InputDecoration(
-                hintText: AppConstants.defaultPlaylistHint,
-                prefixIcon: Icon(Icons.link),
+      child: TextField(
+        controller: _controller,
+        decoration: InputDecoration(
+          hintText: AppConstants.defaultPlaylistHint,
+          prefixIcon: const Icon(Icons.link),
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_controller.text.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () {
+                    _controller.clear();
+                    setState(() {});
+                  },
+                ),
+              IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () => _loadPlaylist(context),
               ),
-              onSubmitted: (_) => _loadPlaylist(context),
-            ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Consumer<PlaylistProvider>(
-            builder: (context, provider, _) {
-              return ElevatedButton(
-                onPressed: provider.isLoading ? null : () => _loadPlaylist(context),
-                child: provider.isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                      )
-                    : const Text('Load'),
-              );
-            },
-          ),
-        ],
+        ),
+        onSubmitted: (_) => _loadPlaylist(context),
+        onChanged: (_) => setState(() {}),
       ),
     );
   }
@@ -179,10 +186,32 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _loadPlaylist(BuildContext context) {
+  Future<void> _loadPlaylist(BuildContext context) async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
-    context.read<PlaylistProvider>().fetchPlaylist(text);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Loading $text...'), duration: const Duration(seconds: 2)),
+    );
+    final provider = context.read<PlaylistProvider>();
+    final playlist = await provider.fetchPlaylist(text);
+    if (playlist != null && mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PlaylistScreen(playlist: playlist),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.error ?? 'Failed to load playlist'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _confirmDelete(BuildContext context, String playlistId) {

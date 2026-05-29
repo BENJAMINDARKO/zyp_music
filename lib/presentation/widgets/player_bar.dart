@@ -88,6 +88,16 @@ class PlayerBar extends StatelessWidget {
                   backgroundColor: Colors.grey[800],
                   color: Theme.of(context).colorScheme.primary,
                 ),
+                if (player.error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      player.error!,
+                      style: const TextStyle(color: Colors.red, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
               ],
             ),
           ),

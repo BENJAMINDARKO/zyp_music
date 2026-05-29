@@ -17,17 +17,23 @@ class PlaylistProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  Future<void> fetchPlaylist(String playlistId) async {
+  Future<Playlist?> fetchPlaylist(String playlistId) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
       final cleanId = _extractPlaylistId(playlistId);
+      if (cleanId.isEmpty) {
+        _error = 'Could not extract a playlist ID from that URL';
+        return null;
+      }
       _currentPlaylist = await _repository.getPlaylist(cleanId);
       await loadSavedPlaylists();
+      return _currentPlaylist;
     } catch (e) {
-      _error = 'Failed to load playlist: ${e.toString()}';
+      _error = '${e.toString()}';
+      return null;
     } finally {
       _isLoading = false;
       notifyListeners();

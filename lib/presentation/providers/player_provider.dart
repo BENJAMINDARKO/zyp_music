@@ -50,7 +50,7 @@ class PlayerProvider extends ChangeNotifier {
       _startPolling();
       _listenForCompletion();
     } catch (e) {
-      _error = 'Failed to play: ${e.toString()}';
+      _error = '${e.toString()}';
     } finally {
       _isLoading = false;
       notifyListeners();
