@@ -109,7 +109,6 @@ lib/
 
 - **Audio downloads fully before playing** — the entire muxed stream (~3-8 MB) downloads to a temp file before playback starts. Streaming via `AudioSource.uri()` fails due to ExoPlayer dropping Custom headers on 302 redirects.
 - **YouTube rate limiting** — frequent stream requests may get 429 errors; 3 retries with backoff are implemented.
-- **RD (radio mix) playlists** — use a hardcoded track list as a placeholder until the browse API is tested with new client version.
 - **Pub cache patch** — overwritten when `flutter pub upgrade` runs; must be re-applied manually.
 
 ## License

@@ -1,4 +1,0 @@
--firstbackup thid working verson
--the direct test button is still on top
--play buttons do not show on locked screen
--

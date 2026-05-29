@@ -106,7 +106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             const SizedBox(height: 24),
             Text(
-              'After logging in, restart the app for changes to take effect.',
+              'Login cookies are saved to your device.',
               style: TextStyle(color: Colors.grey[400], fontSize: 13),
             ),
           ],

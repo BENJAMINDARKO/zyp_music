@@ -1,4 +1,0 @@
--using our current color sheme
--pick the youtube logo and pixilate it 
--add a hoverhead headset on it 
--make the it bold and also visible and simple

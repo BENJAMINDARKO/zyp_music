@@ -18,6 +18,10 @@ migrate_working_dir/
 *.iws
 .idea/
 
+# AI assistant tool artifacts
+.flow/
+.omo/
+
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
@@ -28,6 +32,7 @@ migrate_working_dir/
 **/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins-dependencies
+.metadata
 .pub-cache/
 .pub/
 /build/
@@ -43,3 +48,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Project junk
+error.txt
+logo.txt
+update.txt
