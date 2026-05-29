@@ -3,6 +3,7 @@ import '../entities/video.dart';
 
 abstract class PlaylistRepository {
   Future<Playlist> getPlaylist(String playlistId);
+  Future<Playlist> getFromUrl(String input);
   Future<List<Playlist>> getSavedPlaylists();
   Future<void> savePlaylist(Playlist playlist);
   Future<void> deletePlaylist(String playlistId);

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../providers/playlist_provider.dart';
+import '../providers/player_provider.dart';
 import '../widgets/playlist_card.dart';
 import '../widgets/pixel_logo.dart';
+import '../widgets/now_playing_card.dart';
 import 'playlist_screen.dart';
 import 'settings_screen.dart';
 
@@ -63,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildSearchBar(context),
           _buildErrorBanner(),
+          _buildNowPlaying(context),
           Expanded(child: _buildContent(context)),
         ],
       ),
@@ -75,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: TextField(
         controller: _controller,
         decoration: InputDecoration(
-          hintText: AppConstants.defaultPlaylistHint,
+          hintText: 'Paste a YouTube link (video, playlist, or mix)',
           prefixIcon: const Icon(Icons.link),
           suffixIcon: Row(
             mainAxisSize: MainAxisSize.min,
@@ -131,6 +134,24 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNowPlaying(BuildContext context) {
+    return Consumer<PlayerProvider>(
+      builder: (context, player, _) {
+        if (player.currentTrack == null) return const SizedBox.shrink();
+        return NowPlayingCard(
+          track: player.currentTrack!,
+          isPlaying: player.isPlaying,
+          isLoading: player.isLoading,
+          position: player.position,
+          duration: player.duration,
+          onPlayPause: player.togglePlayPause,
+          onPrevious: player.currentIndex > 0 ? player.previous : null,
+          onNext: player.currentIndex + 1 < player.queue.length ? player.next : null,
         );
       },
     );
@@ -202,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
       SnackBar(content: Text('Loading $text...'), duration: const Duration(seconds: 2)),
     );
     final provider = context.read<PlaylistProvider>();
-    final playlist = await provider.fetchPlaylist(text);
+    final playlist = await provider.fetchFromUrl(text);
     if (playlist != null && mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       Navigator.push(
@@ -215,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(provider.error ?? 'Failed to load playlist'),
+          content: Text(provider.error ?? 'Failed to load'),
           backgroundColor: Colors.red,
         ),
       );

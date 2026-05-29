@@ -47,6 +47,18 @@ class YoutubeRemoteDataSource {
     );
   }
 
+  Future<TrackModel> getVideo(String videoId) async {
+    final video = await _yt.videos.get(videoId);
+    return TrackModel(
+      id: video.id.value,
+      title: video.title,
+      author: video.author,
+      durationSeconds: video.duration?.inSeconds ?? 0,
+      thumbnailUrl: video.thumbnails.mediumResUrl,
+      index: 0,
+    );
+  }
+
   Future<String> getAudioUrl(String videoId) async {
     var attempt = 0;
     while (true) {

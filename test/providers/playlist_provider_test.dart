@@ -44,6 +44,16 @@ class MockPlaylistRepository implements PlaylistRepository {
     if (p == null) return null;
     return p;
   }
+
+  @override
+  Future<Playlist> getFromUrl(String input) async {
+    final trimmed = input.trim();
+    final playlist = _store.values.firstWhere(
+      (p) => p.id == trimmed || p.title == trimmed,
+      orElse: () => Playlist(id: trimmed, title: trimmed),
+    );
+    return playlist;
+  }
 }
 
 void main() {

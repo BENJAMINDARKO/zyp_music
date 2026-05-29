@@ -25,6 +25,62 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   }
 
   @override
+  Future<Playlist> getFromUrl(String input) async {
+    final trimmed = input.trim();
+
+    final videoId = _parseVideoId(trimmed);
+    final playlistId = _parsePlaylistId(trimmed);
+
+    if (playlistId != null) {
+      final playlist = await remoteDataSource.getPlaylist(playlistId);
+      await localDatabase.insertPlaylist(playlist);
+      await localDatabase.insertTracks(playlist.id, playlist.tracks);
+      return playlist.toEntity();
+    }
+
+    if (videoId != null) {
+      final track = await remoteDataSource.getVideo(videoId);
+      return Playlist(
+        id: videoId,
+        title: track.title,
+        author: track.author,
+        thumbnailUrl: track.thumbnailUrl,
+        videoCount: 1,
+        tracks: [track.toEntity()],
+      );
+    }
+
+    throw Exception('Could not parse YouTube URL or ID: $input');
+  }
+
+  String? _parseVideoId(String input) {
+    final patterns = [
+      RegExp(r'(?:youtube\.com/watch\?.*v=)([a-zA-Z0-9_-]{11})'),
+      RegExp(r'(?:youtu\.be/)([a-zA-Z0-9_-]{11})'),
+      RegExp(r'(?:youtube\.com/shorts/)([a-zA-Z0-9_-]{11})'),
+      RegExp(r'(?:m\.youtube\.com/watch\?.*v=)([a-zA-Z0-9_-]{11})'),
+      RegExp(r'^([a-zA-Z0-9_-]{11})$'),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(input);
+      if (match != null) return match.group(1);
+    }
+    return null;
+  }
+
+  String? _parsePlaylistId(String input) {
+    final patterns = [
+      RegExp(r'(?:list=)([a-zA-Z0-9_-]+)'),
+      RegExp(r'^([a-zA-Z0-9_-]{13,})$'),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(input);
+      if (match != null) return match.group(1);
+    }
+    return null;
+  }
+
+  @override
   Future<List<Playlist>> getSavedPlaylists() async {
     final models = await localDatabase.getAllPlaylists();
     return models.map((m) => m.toEntity()).toList();
