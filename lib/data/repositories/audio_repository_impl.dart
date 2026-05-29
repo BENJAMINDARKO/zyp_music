@@ -1,3 +1,4 @@
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
 import '../../domain/entities/video.dart';
@@ -9,11 +10,26 @@ class AudioRepositoryImpl implements AudioRepository {
   final YoutubeRemoteDataSource remoteDataSource;
   final AuthService _authService;
   final AudioPlayer _player = AudioPlayer();
+  bool _androidConfigured = false;
 
   AudioRepositoryImpl({
     required this.remoteDataSource,
     AuthService? authService,
   }) : _authService = authService ?? AuthService();
+
+  Future<void> _setupAndroid() async {
+    if (_androidConfigured) return;
+    _androidConfigured = true;
+
+    try {
+      await _player.setAndroidAudioAttributes(
+        const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.music,
+          usage: AndroidAudioUsage.media,
+        ),
+      );
+    } catch (_) {}
+  }
 
   @override
   Future<String> getAudioUrl(Track track) async {
@@ -63,6 +79,7 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<void> playTrack(Track track, String audioUrl) async {
+    await _setupAndroid();
     final resolvedUrl = await _resolveRedirects(audioUrl);
     await _player.setAudioSource(
       AudioSource.uri(Uri.parse(resolvedUrl)),

@@ -15,6 +15,7 @@ dependencies:
   youtube_explode_dart: ^3.1.0
   just_audio: ^0.9.43
   provider: ^6.1.2
+  audio_session: ^0.1.25
   cached_network_image: ^3.4.1
   shared_preferences: ^2.3.0
   webview_flutter: ^4.10.0
