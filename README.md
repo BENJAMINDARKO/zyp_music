@@ -31,7 +31,7 @@ A Flutter mobile app that streams audio from public YouTube playlists. No backen
 ## Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ytmusix-flowos.git
+git clone https://github.com/niiabe/ytmusix-flowos.git
 cd ytmusix-flowos
 flutter pub get
 ```
