@@ -40,7 +40,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
     if (videoId != null) {
       final track = await remoteDataSource.getVideo(videoId);
-      return Playlist(
+      final playlist = Playlist(
         id: videoId,
         title: track.title,
         author: track.author,
@@ -48,6 +48,22 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         videoCount: 1,
         tracks: [track.toEntity()],
       );
+      await localDatabase.insertPlaylist(PlaylistModel(
+        id: playlist.id,
+        title: playlist.title,
+        thumbnailUrl: playlist.thumbnailUrl,
+        author: playlist.author,
+        videoCount: 1,
+      ));
+      await localDatabase.insertTrack(playlist.id, TrackModel(
+        id: track.id,
+        title: track.title,
+        thumbnailUrl: track.thumbnailUrl,
+        durationSeconds: track.durationSeconds,
+        author: track.author,
+        index: 0,
+      ));
+      return playlist;
     }
 
     throw Exception('Could not parse YouTube URL or ID: $input');

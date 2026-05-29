@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../providers/player_provider.dart';
 
 class PlayerBar extends StatelessWidget {
-  const PlayerBar({super.key});
+  final VoidCallback? onTap;
+
+  const PlayerBar({super.key, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +13,9 @@ class PlayerBar extends StatelessWidget {
       builder: (context, player, _) {
         if (player.currentTrack == null) return const SizedBox.shrink();
 
-        return Container(
+        return GestureDetector(
+          onTap: onTap,
+          child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
@@ -101,6 +105,7 @@ class PlayerBar extends StatelessWidget {
               ],
             ),
           ),
+        ),
         );
       },
     );

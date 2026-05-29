@@ -11,6 +11,7 @@ class NowPlayingCard extends StatelessWidget {
   final VoidCallback onPlayPause;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+  final VoidCallback? onTap;
 
   const NowPlayingCard({
     super.key,
@@ -22,11 +23,14 @@ class NowPlayingCard extends StatelessWidget {
     required this.onPlayPause,
     this.onPrevious,
     this.onNext,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -121,6 +125,7 @@ class NowPlayingCard extends StatelessWidget {
             ),
         ],
       ),
+    ),
     );
   }
 }

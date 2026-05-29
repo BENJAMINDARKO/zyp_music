@@ -6,6 +6,7 @@ import '../providers/playlist_provider.dart';
 import '../providers/player_provider.dart';
 import '../widgets/player_bar.dart';
 import '../widgets/video_tile.dart';
+import 'player_screen.dart';
 
 class PlaylistScreen extends StatefulWidget {
   final Playlist playlist;
@@ -60,7 +61,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         },
                       ),
               ),
-              const PlayerBar(),
+              PlayerBar(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PlayerScreen()),
+                ),
+              ),
             ],
           );
         },

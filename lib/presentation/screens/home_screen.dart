@@ -7,6 +7,7 @@ import '../widgets/playlist_card.dart';
 import '../widgets/pixel_logo.dart';
 import '../widgets/now_playing_card.dart';
 import 'playlist_screen.dart';
+import 'player_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -152,6 +153,10 @@ class _HomeScreenState extends State<HomeScreen> {
           onPlayPause: player.togglePlayPause,
           onPrevious: player.currentIndex > 0 ? player.previous : null,
           onNext: player.currentIndex + 1 < player.queue.length ? player.next : null,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PlayerScreen()),
+          ),
         );
       },
     );

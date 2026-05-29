@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:audio_session/audio_session.dart';
 import 'app.dart';
 import 'data/datasources/local/playlist_database.dart';
 import 'data/datasources/remote/youtube_remote_datasource.dart';
@@ -8,6 +9,17 @@ import 'service/auth_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final session = await AudioSession.instance;
+  await session.configure(const AudioSessionConfiguration(
+    avAudioSessionCategory: AVAudioSessionCategory.playback,
+    androidAudioAttributes: AndroidAudioAttributes(
+      contentType: AndroidAudioContentType.music,
+      usage: AndroidAudioUsage.media,
+    ),
+    androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+    androidWillPauseWhenDucked: false,
+  ));
 
   final authService = AuthService();
   final remoteDataSource = YoutubeRemoteDataSource(authService: authService);

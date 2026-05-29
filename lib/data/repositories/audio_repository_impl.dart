@@ -82,7 +82,7 @@ class AudioRepositoryImpl implements AudioRepository {
     await _setupAndroid();
     final resolvedUrl = await _resolveRedirects(audioUrl);
     await _player.setAudioSource(
-      AudioSource.uri(Uri.parse(resolvedUrl)),
+      AudioSource.uri(Uri.parse(resolvedUrl), tag: track),
     );
     await _player.play();
   }
