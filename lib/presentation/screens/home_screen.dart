@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../providers/playlist_provider.dart';
 import '../widgets/playlist_card.dart';
+import '../widgets/pixel_logo.dart';
 import 'playlist_screen.dart';
 import 'settings_screen.dart';
 
@@ -34,7 +35,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(AppConstants.appName),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LogoWithHeadset(size: 32),
+            const SizedBox(width: 8),
+            const Text(AppConstants.appName),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -140,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.playlist_add, size: 64, color: Colors.grey[600]),
+                const LogoWithHeadset(size: 100),
                 const SizedBox(height: 16),
                 Text(
                   'No playlists yet',
