@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
 import '../../domain/entities/video.dart';
@@ -10,7 +9,6 @@ class AudioRepositoryImpl implements AudioRepository {
   final YoutubeRemoteDataSource remoteDataSource;
   final AuthService _authService;
   final AudioPlayer _player = AudioPlayer();
-  String? _tempFilePath;
 
   AudioRepositoryImpl({
     required this.remoteDataSource,
@@ -35,33 +33,48 @@ class AudioRepositoryImpl implements AudioRepository {
     return headers;
   }
 
+  Future<String> _resolveRedirects(String url) async {
+    final client = http.Client();
+    try {
+      var current = url;
+      for (var i = 0; i < 10; i++) {
+        final req = http.Request('GET', Uri.parse(current));
+        req.headers.addAll(await _getHeaders());
+        req.followRedirects = false;
+        final resp = await client.send(req);
+        final status = resp.statusCode;
+        await resp.stream.drain();
+
+        if (status >= 300 && status < 400) {
+          final location = resp.headers['location'];
+          if (location == null) break;
+          current = Uri.parse(location).isAbsolute
+              ? location
+              : Uri.parse(current).resolve(location).toString();
+        } else {
+          return current;
+        }
+      }
+      return current;
+    } finally {
+      client.close();
+    }
+  }
+
   @override
   Future<void> playTrack(Track track, String audioUrl) async {
-    final headers = await _getHeaders();
-
-    final client = http.Client();
-    final req = http.Request('GET', Uri.parse(audioUrl));
-    req.headers.addAll(headers);
-    final resp = await client.send(req);
-
-    final dir = Directory.systemTemp;
-    _tempFilePath = '${dir.path}/yt_${track.id}.mp4';
-    final file = File(_tempFilePath!);
-    final sink = file.openWrite();
-    await resp.stream.pipe(sink);
-    await sink.flush();
-    await sink.close();
-    client.close();
-
-    await _player.setAudioSource(AudioSource.file(_tempFilePath!));
+    final resolvedUrl = await _resolveRedirects(audioUrl);
+    await _player.setAudioSource(
+      AudioSource.uri(Uri.parse(resolvedUrl)),
+    );
     await _player.play();
   }
 
   @override
   Future<void> play(String url) async {
-    final headers = await _getHeaders();
+    final resolvedUrl = await _resolveRedirects(url);
     await _player.setAudioSource(
-      AudioSource.uri(Uri.parse(url), headers: headers),
+      AudioSource.uri(Uri.parse(resolvedUrl)),
     );
     await _player.play();
   }
@@ -79,7 +92,6 @@ class AudioRepositoryImpl implements AudioRepository {
   @override
   Future<void> stop() async {
     await _player.stop();
-    _cleanup();
   }
 
   @override
@@ -111,17 +123,7 @@ class AudioRepositoryImpl implements AudioRepository {
       _player.processingState == ProcessingState.completed &&
       _player.playing == false;
 
-  void _cleanup() {
-    if (_tempFilePath != null) {
-      try {
-        File(_tempFilePath!).delete();
-      } catch (_) {}
-      _tempFilePath = null;
-    }
-  }
-
   void dispose() {
     _player.dispose();
-    _cleanup();
   }
 }
