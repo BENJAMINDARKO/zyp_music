@@ -25,6 +25,12 @@ class MockAudioRepo implements AudioRepository {
 
   @override
   bool get currentTrackCompleted => false;
+
+  @override
+  Stream<void> get onSkipNextRequested => const Stream.empty();
+
+  @override
+  Stream<void> get onSkipPreviousRequested => const Stream.empty();
 }
 
 void main() {

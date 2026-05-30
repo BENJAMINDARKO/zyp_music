@@ -8,6 +8,8 @@ import 'data/repositories/audio_repository_impl.dart';
 import 'data/repositories/playlist_repository_impl.dart';
 import 'service/auth_service.dart';
 import 'service/audio_handler.dart';
+import 'service/download_service.dart';
+import 'presentation/providers/download_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,11 +47,20 @@ Future<void> main() async {
 
   final audioRepository = AudioRepositoryImpl(
     remoteDataSource: remoteDataSource,
-    audioHandler: audioHandler,
+    handler: audioHandler,
+    database: localDatabase,
   );
+
+  final downloadService = DownloadService(
+    remoteDataSource: remoteDataSource,
+    database: localDatabase,
+  );
+  final downloadProvider = DownloadProvider(downloadService);
+  await downloadProvider.init();
 
   runApp(YTMusixApp(
     playlistRepository: playlistRepository,
     audioRepository: audioRepository,
+    downloadProvider: downloadProvider,
   ));
 }

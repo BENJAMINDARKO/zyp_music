@@ -1,21 +1,29 @@
+import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../datasources/remote/youtube_remote_datasource.dart';
+import '../datasources/local/playlist_database.dart';
 import '../../service/audio_handler.dart';
 
 class AudioRepositoryImpl implements AudioRepository {
   final YoutubeRemoteDataSource remoteDataSource;
   final MusicAudioHandler _handler;
+  final PlaylistDatabase _database;
 
   AudioRepositoryImpl({
     required this.remoteDataSource,
-    required MusicAudioHandler audioHandler,
-  }) : _handler = audioHandler;
+    required this._handler,
+    required this._database,
+  });
 
   @override
   Future<String> getAudioUrl(Track track) async {
+    final localPath = await _database.getDownloadedFilePath(track.id);
+    if (localPath != null && File(localPath).existsSync()) {
+      return localPath;
+    }
     return remoteDataSource.getAudioUrl(track.id);
   }
 
@@ -30,17 +38,24 @@ class AudioRepositoryImpl implements AudioRepository {
           : null,
       duration: track.duration,
     );
+
+    String playUrl;
+    final localPath = await _database.getDownloadedFilePath(track.id);
+    if (localPath != null && File(localPath).existsSync()) {
+      playUrl = localPath;
+    } else {
+      playUrl = await _handler.resolveRedirects(audioUrl);
+    }
+
     final queue = _handler.queue.value;
     if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
       _handler.mediaItem.add(item);
-      final resolved = await _handler.resolveRedirects(audioUrl);
-      await _handler.playTrack(resolved, item);
+      await _handler.playTrack(playUrl, item);
     } else {
       final newQueue = List<MediaItem>.from(queue);
       newQueue.add(item);
       _handler.queue.add(newQueue);
-      final resolved = await _handler.resolveRedirects(audioUrl);
-      await _handler.playTrack(resolved, item);
+      await _handler.playTrack(playUrl, item);
     }
   }
 
@@ -77,4 +92,10 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   bool get currentTrackCompleted => _handler.currentTrackCompleted;
+
+  @override
+  Stream<void> get onSkipNextRequested => _handler.skipNextRequested.stream;
+
+  @override
+  Stream<void> get onSkipPreviousRequested => _handler.skipPreviousRequested.stream;
 }

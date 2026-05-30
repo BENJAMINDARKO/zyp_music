@@ -17,8 +17,9 @@ class PlaylistDatabase {
     final path = join(dbPath, 'ytmusix.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createTables,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -46,6 +47,35 @@ class PlaylistDatabase {
         FOREIGN KEY (playlistId) REFERENCES playlists(id) ON DELETE CASCADE
       )
     ''');
+    await db.execute('''
+      CREATE TABLE downloaded_tracks (
+        id TEXT PRIMARY KEY,
+        playlistId TEXT NOT NULL,
+        title TEXT NOT NULL,
+        thumbnailUrl TEXT,
+        durationSeconds INTEGER DEFAULT 0,
+        author TEXT,
+        filePath TEXT NOT NULL,
+        downloadedAt INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS downloaded_tracks (
+          id TEXT PRIMARY KEY,
+          playlistId TEXT NOT NULL,
+          title TEXT NOT NULL,
+          thumbnailUrl TEXT,
+          durationSeconds INTEGER DEFAULT 0,
+          author TEXT,
+          filePath TEXT NOT NULL,
+          downloadedAt INTEGER NOT NULL
+        )
+      ''');
+    }
   }
 
   Future<void> insertPlaylist(PlaylistModel playlist) async {
@@ -94,5 +124,67 @@ class PlaylistDatabase {
         whereArgs: [playlistId],
         orderBy: 'idx ASC');
     return maps.map((m) => TrackModel.fromMap(m)).toList();
+  }
+
+  Future<void> markTrackDownloaded(
+      String trackId, String playlistId, String filePath,
+      {String title = '', String? thumbnailUrl, int durationSeconds = 0, String? author}) async {
+    final db = await database;
+    await db.insert('downloaded_tracks', {
+      'id': trackId,
+      'playlistId': playlistId,
+      'title': title,
+      'thumbnailUrl': thumbnailUrl,
+      'durationSeconds': durationSeconds,
+      'author': author,
+      'filePath': filePath,
+      'downloadedAt': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<bool> isTrackDownloaded(String trackId) async {
+    final db = await database;
+    final result = await db.query('downloaded_tracks',
+        where: 'id = ?', whereArgs: [trackId], limit: 1);
+    return result.isNotEmpty;
+  }
+
+  Future<String?> getDownloadedFilePath(String trackId) async {
+    final db = await database;
+    final result = await db.query('downloaded_tracks',
+        where: 'id = ?', whereArgs: [trackId], limit: 1);
+    if (result.isEmpty) return null;
+    return result.first['filePath'] as String?;
+  }
+
+  Future<List<Map<String, dynamic>>> getDownloadedTracks(String playlistId) async {
+    final db = await database;
+    return db.query('downloaded_tracks',
+        where: 'playlistId = ?', whereArgs: [playlistId]);
+  }
+
+  Future<void> removeDownloadedTrack(String trackId) async {
+    final db = await database;
+    await db.delete('downloaded_tracks', where: 'id = ?', whereArgs: [trackId]);
+  }
+
+  Future<List<String>> getDownloadedFilePaths(String playlistId) async {
+    final db = await database;
+    final result = await db.query('downloaded_tracks',
+        columns: ['filePath'],
+        where: 'playlistId = ?', whereArgs: [playlistId]);
+    return result.map((r) => r['filePath'] as String).toList();
+  }
+
+  Future<void> removeDownloadedPlaylist(String playlistId) async {
+    final db = await database;
+    await db.delete('downloaded_tracks',
+        where: 'playlistId = ?', whereArgs: [playlistId]);
+  }
+
+  Future<Set<String>> getAllDownloadedTrackIds() async {
+    final db = await database;
+    final result = await db.query('downloaded_tracks', columns: ['id']);
+    return result.map((r) => r['id'] as String).toSet();
   }
 }

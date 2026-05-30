@@ -5,51 +5,98 @@ import '../../domain/entities/playlist.dart';
 class PlaylistCard extends StatelessWidget {
   final Playlist playlist;
   final VoidCallback onTap;
+  final VoidCallback? onPlay;
+  final VoidCallback? onDownload;
   final VoidCallback? onDelete;
 
   const PlaylistCard({
     super.key,
     required this.playlist,
     required this.onTap,
+    this.onPlay,
+    this.onDownload,
     this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(8),
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 56,
-            height: 56,
-            child: CachedNetworkImage(
-              imageUrl: playlist.thumbnailUrl ?? '',
-              fit: BoxFit.cover,
-              placeholder: (context, url) => Container(color: Colors.grey[800]),
-              errorWidget: (context, url, error) => const Icon(Icons.music_note, color: Colors.grey),
+    return Dismissible(
+      key: ValueKey(playlist.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        if (onDelete == null) return false;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Remove playlist'),
+            content: const Text('Remove this playlist from your library?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Remove', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true) {
+          onDelete!.call();
+        }
+        return false;
+      },
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: ListTile(
+          contentPadding: const EdgeInsets.all(8),
+          leading: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: CachedNetworkImage(
+                imageUrl: playlist.thumbnailUrl ?? '',
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(color: Colors.grey[800]),
+                errorWidget: (context, url, error) => const Icon(Icons.music_note, color: Colors.grey),
+              ),
             ),
           ),
+          title: Text(
+            playlist.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            '${playlist.videoCount} tracks${playlist.author != null ? ' · ${playlist.author}' : ''}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (onPlay != null)
+                  IconButton(
+                    icon: const Icon(Icons.play_arrow, size: 20),
+                    onPressed: onPlay,
+                  ),
+                if (onDownload != null)
+                  IconButton(
+                    icon: const Icon(Icons.download, size: 20),
+                    onPressed: onDownload,
+                  ),
+              ],
+            ),
+          onTap: onTap,
         ),
-        title: Text(
-          playlist.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          '${playlist.videoCount} tracks${playlist.author != null ? ' · ${playlist.author}' : ''}',
-          style: const TextStyle(fontSize: 12),
-        ),
-        trailing: onDelete != null
-            ? IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                onPressed: onDelete,
-              )
-            : null,
-        onTap: onTap,
       ),
     );
   }

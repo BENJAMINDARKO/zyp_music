@@ -1,0 +1,8 @@
+
+
+- when a playlist is playing, show play/pause icon depending of the status of the playing. 
+-download button on the home screen for a playlist or single song on the home screen not workig. 
+-I think download is not working because there is not indication if download is on going or not.
+
+
+-let us make the design clean. replace the input box and replace is with a search icon, the icon reveals the input box with the current functions the input box is doing and showing now . then retracts after its usage is done. 

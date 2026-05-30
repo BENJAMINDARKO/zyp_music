@@ -7,7 +7,14 @@ import '../../domain/repositories/audio_repository.dart';
 class PlayerProvider extends ChangeNotifier {
   final AudioRepository _audioRepository;
 
-  PlayerProvider(this._audioRepository);
+  PlayerProvider(this._audioRepository) {
+    _skipNextSubscription = _audioRepository.onSkipNextRequested.listen((_) {
+      next();
+    });
+    _skipPrevSubscription = _audioRepository.onSkipPreviousRequested.listen((_) {
+      previous();
+    });
+  }
 
   Track? _currentTrack;
   List<Track> _queue = [];
@@ -19,6 +26,8 @@ class PlayerProvider extends ChangeNotifier {
   String? _error;
   Timer? _pollTimer;
   StreamSubscription? _completionSubscription;
+  StreamSubscription? _skipNextSubscription;
+  StreamSubscription? _skipPrevSubscription;
 
   Track? get currentTrack => _currentTrack;
   List<Track> get queue => _queue;
@@ -147,6 +156,8 @@ class PlayerProvider extends ChangeNotifier {
   void dispose() {
     _stopPolling();
     _completionSubscription?.cancel();
+    _skipNextSubscription?.cancel();
+    _skipPrevSubscription?.cancel();
     super.dispose();
   }
 }

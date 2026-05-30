@@ -211,7 +211,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   );
                 },
-                onDelete: () => _confirmDelete(context, playlist.id),
+                onPlay: () async {
+                  final cachedTracks = await provider.getCachedTracks(playlist.id);
+                  if (cachedTracks != null && cachedTracks.isNotEmpty && context.mounted) {
+                    final playerProvider = context.read<PlayerProvider>();
+                    playerProvider.setQueue(cachedTracks, startIndex: 0);
+                    await playerProvider.playTrack(cachedTracks.first);
+                  } else if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Open the playlist first to cache tracks')),
+                    );
+                  }
+                },
+                onDownload: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PlaylistScreen(playlist: playlist, autoDownload: true),
+                    ),
+                  );
+                },
+                onDelete: () => provider.deletePlaylist(playlist.id),
               );
             },
           ),
@@ -246,29 +266,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-  }
-
-  void _confirmDelete(BuildContext context, String playlistId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove playlist'),
-        content: const Text('Remove this playlist from your library?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<PlaylistProvider>().deletePlaylist(playlistId);
-              Navigator.pop(ctx);
-            },
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showInfo(BuildContext context) {

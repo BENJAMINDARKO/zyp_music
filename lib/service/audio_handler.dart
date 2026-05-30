@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
@@ -7,7 +8,27 @@ class MusicAudioHandler extends BaseAudioHandler {
   final AudioPlayer _player = AudioPlayer();
   final AuthService _authService = AuthService();
 
-  final _defaultPlaybackState = PlaybackState(
+  final skipNextRequested = StreamController<void>.broadcast();
+  final skipPreviousRequested = StreamController<void>.broadcast();
+
+  final _controls = [
+    MediaControl.skipToPrevious,
+    MediaControl.play,
+    MediaControl.pause,
+    MediaControl.skipToNext,
+  ];
+
+  final _systemActions = <MediaAction>{
+    MediaAction.skipToPrevious,
+    MediaAction.play,
+    MediaAction.pause,
+    MediaAction.skipToNext,
+  };
+
+  PlaybackState get _defaultPlaybackState => PlaybackState(
+    controls: _controls,
+    systemActions: _systemActions,
+    androidCompactActionIndices: [1, 0, 3],
     processingState: AudioProcessingState.idle,
     playing: false,
     updatePosition: Duration.zero,
@@ -22,7 +43,12 @@ class MusicAudioHandler extends BaseAudioHandler {
     _player.processingStateStream.listen(_onProcessingState);
     _player.positionStream.listen((pos) {
       final current = playbackState.valueOrNull ?? _defaultPlaybackState;
-      playbackState.add(current.copyWith(updatePosition: pos));
+      playbackState.add(current.copyWith(
+        updatePosition: pos,
+        controls: _controls,
+        systemActions: _systemActions,
+        androidCompactActionIndices: [1, 0, 3],
+      ));
     });
     _player.durationStream.listen((dur) {
       if (dur != null) {
@@ -39,6 +65,9 @@ class MusicAudioHandler extends BaseAudioHandler {
     playbackState.add(current.copyWith(
       playing: state.playing,
       processingState: _convertState(state.processingState),
+      controls: _controls,
+      systemActions: _systemActions,
+      androidCompactActionIndices: [1, 0, 3],
     ));
   }
 
@@ -82,9 +111,11 @@ class MusicAudioHandler extends BaseAudioHandler {
     _currentIndex = _queue.indexWhere((e) => e.id == item.id);
     if (_currentIndex == -1) _currentIndex = null;
     mediaItem.add(item);
-    final resolved = await _resolveRedirects(url);
+    final uri = url.startsWith('http') || url.startsWith('https')
+        ? Uri.parse(await _resolveRedirects(url))
+        : Uri.file(url);
     await _player.setAudioSource(
-      AudioSource.uri(Uri.parse(resolved), tag: item),
+      AudioSource.uri(uri, tag: item),
     );
     await _player.play();
   }
@@ -107,20 +138,24 @@ class MusicAudioHandler extends BaseAudioHandler {
   @override
   Future<void> stop() async {
     await _player.stop();
-    playbackState.add(_defaultPlaybackState);
+    playbackState.add(_defaultPlaybackState.copyWith(
+      controls: _controls,
+      systemActions: _systemActions,
+      androidCompactActionIndices: [1, 0, 3],
+    ));
   }
 
   @override
   Future<void> skipToNext() async {
     if (_currentIndex != null && _currentIndex! + 1 < _queue.length) {
-      _currentIndex = _currentIndex! + 1;
+      skipNextRequested.add(null);
     }
   }
 
   @override
   Future<void> skipToPrevious() async {
     if (_currentIndex != null && _currentIndex! > 0) {
-      _currentIndex = _currentIndex! - 1;
+      skipPreviousRequested.add(null);
     }
   }
 

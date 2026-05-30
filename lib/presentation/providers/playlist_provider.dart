@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/playlist.dart';
+import '../../domain/entities/video.dart';
 import '../../domain/repositories/playlist_repository.dart';
 
 class PlaylistProvider extends ChangeNotifier {
@@ -86,6 +87,14 @@ class PlaylistProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {}
+  }
+
+  Future<List<Track>?> getCachedTracks(String playlistId) async {
+    try {
+      return _repository.getCachedTracks(playlistId);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> deletePlaylist(String playlistId) async {
