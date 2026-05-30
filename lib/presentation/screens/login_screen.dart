@@ -79,9 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Login with Google'),
-        backgroundColor: const Color(0xFF121212),
       ),
-      backgroundColor: const Color(0xFF121212),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),

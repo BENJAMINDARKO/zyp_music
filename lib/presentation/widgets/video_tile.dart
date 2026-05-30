@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/utils/format_duration.dart';
 import '../../domain/entities/video.dart';
 
 class TrackTile extends StatelessWidget {
@@ -42,7 +43,7 @@ class TrackTile extends StatelessWidget {
         ),
       ),
       subtitle: Text(
-        '${track.author ?? 'Unknown'} · ${_formatDuration(track.duration)}',
+        '${track.author ?? 'Unknown'} · ${formatDuration(track.duration)}',
         style: const TextStyle(fontSize: 12),
       ),
       trailing: isCurrent
@@ -52,9 +53,4 @@ class TrackTile extends StatelessWidget {
     );
   }
 
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60);
-    final seconds = d.inSeconds.remainder(60);
-    return '${d.inHours > 0 ? '${d.inHours}:' : ''}${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
 }

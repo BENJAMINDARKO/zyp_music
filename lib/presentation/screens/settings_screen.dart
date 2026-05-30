@@ -29,9 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: const Color(0xFF121212),
       ),
-      backgroundColor: const Color(0xFF121212),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

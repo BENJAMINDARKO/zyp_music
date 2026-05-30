@@ -4,9 +4,8 @@ class AuthenticatedClient extends http.BaseClient {
   final http.Client _inner;
   final String? _cookies;
 
-  AuthenticatedClient({http.Client? inner, String? cookies})
-      : _inner = inner ?? http.Client(),
-        _cookies = cookies;
+  AuthenticatedClient({http.Client? inner, this._cookies})
+      : _inner = inner ?? http.Client();
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) {

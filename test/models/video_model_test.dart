@@ -11,7 +11,7 @@ void main() {
         'thumbnailUrl': 'https://example.com/thumb.jpg',
         'durationSeconds': 300,
         'author': 'Test Author',
-        'index': 1,
+        'idx': 1,
       };
 
       final model = TrackModel.fromMap(map);
@@ -57,7 +57,7 @@ void main() {
       expect(map['thumbnailUrl'], 'https://example.com/thumb.jpg');
       expect(map['durationSeconds'], 180);
       expect(map['author'], 'Author');
-      expect(map['index'], 2);
+      expect(map['idx'], 2);
     });
 
     test('toEntity converts correctly', () {

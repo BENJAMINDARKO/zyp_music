@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:audio_service/audio_service.dart';
 import 'app.dart';
 import 'data/datasources/local/playlist_database.dart';
 import 'data/datasources/remote/youtube_remote_datasource.dart';
 import 'data/repositories/audio_repository_impl.dart';
 import 'data/repositories/playlist_repository_impl.dart';
 import 'service/auth_service.dart';
+import 'service/audio_handler.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,9 +31,21 @@ Future<void> main() async {
     remoteDataSource: remoteDataSource,
     localDatabase: localDatabase,
   );
+
+  final audioHandler = await AudioService.init(
+    builder: () => MusicAudioHandler(),
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'ytmusix_music',
+      androidNotificationChannelName: 'Music Playback',
+      androidNotificationIcon: 'mipmap/ic_launcher',
+      androidNotificationOngoing: true,
+      androidNotificationClickStartsActivity: true,
+    ),
+  );
+
   final audioRepository = AudioRepositoryImpl(
     remoteDataSource: remoteDataSource,
-    authService: authService,
+    audioHandler: audioHandler,
   );
 
   runApp(YTMusixApp(

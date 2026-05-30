@@ -1,12 +1,6 @@
 package com.ytmusix.ytmusix
 
-import io.flutter.embedding.android.FlutterActivity
-import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.embedding.engine.FlutterEngineCache
+import com.ryanheise.audioservice.AudioServiceFragmentActivity
 
-class MainActivity : FlutterActivity() {
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        FlutterEngineCache.getInstance().put("audio_service_engine", flutterEngine)
-    }
+class MainActivity : AudioServiceFragmentActivity() {
 }

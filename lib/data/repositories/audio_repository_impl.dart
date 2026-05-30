@@ -1,146 +1,80 @@
-import 'package:audio_session/audio_session.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:http/http.dart' as http;
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../datasources/remote/youtube_remote_datasource.dart';
-import '../../service/auth_service.dart';
+import '../../service/audio_handler.dart';
 
 class AudioRepositoryImpl implements AudioRepository {
   final YoutubeRemoteDataSource remoteDataSource;
-  final AuthService _authService;
-  final AudioPlayer _player = AudioPlayer();
-  bool _androidConfigured = false;
+  final MusicAudioHandler _handler;
 
   AudioRepositoryImpl({
     required this.remoteDataSource,
-    AuthService? authService,
-  }) : _authService = authService ?? AuthService();
-
-  Future<void> _setupAndroid() async {
-    if (_androidConfigured) return;
-    _androidConfigured = true;
-
-    try {
-      await _player.setAndroidAudioAttributes(
-        const AndroidAudioAttributes(
-          contentType: AndroidAudioContentType.music,
-          usage: AndroidAudioUsage.media,
-        ),
-      );
-    } catch (_) {}
-  }
+    required MusicAudioHandler audioHandler,
+  }) : _handler = audioHandler;
 
   @override
   Future<String> getAudioUrl(Track track) async {
     return remoteDataSource.getAudioUrl(track.id);
   }
 
-  Future<Map<String, String>> _getHeaders() async {
-    final cookies = await _authService.getCookies();
-    final headers = <String, String>{
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-          'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-      'Referer': 'https://www.youtube.com/',
-    };
-    if (cookies != null && cookies.isNotEmpty) {
-      headers['Cookie'] = cookies;
-    }
-    return headers;
-  }
-
-  Future<String> _resolveRedirects(String url) async {
-    final client = http.Client();
-    try {
-      var current = url;
-      for (var i = 0; i < 10; i++) {
-        final req = http.Request('GET', Uri.parse(current));
-        req.headers.addAll(await _getHeaders());
-        req.followRedirects = false;
-        final resp = await client.send(req);
-        final status = resp.statusCode;
-        await resp.stream.drain();
-
-        if (status >= 300 && status < 400) {
-          final location = resp.headers['location'];
-          if (location == null) break;
-          current = Uri.parse(location).isAbsolute
-              ? location
-              : Uri.parse(current).resolve(location).toString();
-        } else {
-          return current;
-        }
-      }
-      return current;
-    } finally {
-      client.close();
-    }
-  }
-
   @override
   Future<void> playTrack(Track track, String audioUrl) async {
-    await _setupAndroid();
-    final resolvedUrl = await _resolveRedirects(audioUrl);
-    await _player.setAudioSource(
-      AudioSource.uri(Uri.parse(resolvedUrl), tag: track),
+    final item = MediaItem(
+      id: track.id,
+      title: track.title,
+      artist: track.author ?? '',
+      artUri: track.thumbnailUrl != null
+          ? Uri.tryParse(track.thumbnailUrl!)
+          : null,
+      duration: track.duration,
     );
-    await _player.play();
+    final queue = _handler.queue.value;
+    if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
+      _handler.mediaItem.add(item);
+      final resolved = await _handler.resolveRedirects(audioUrl);
+      await _handler.playTrack(resolved, item);
+    } else {
+      final newQueue = List<MediaItem>.from(queue);
+      newQueue.add(item);
+      _handler.queue.add(newQueue);
+      final resolved = await _handler.resolveRedirects(audioUrl);
+      await _handler.playTrack(resolved, item);
+    }
   }
 
   @override
   Future<void> play(String url) async {
-    final resolvedUrl = await _resolveRedirects(url);
-    await _player.setAudioSource(
-      AudioSource.uri(Uri.parse(resolvedUrl)),
-    );
-    await _player.play();
+    final resolved = await _handler.resolveRedirects(url);
+    await _handler.playTrack(resolved, const MediaItem(id: '', title: ''));
   }
 
   @override
-  Future<void> pause() async {
-    await _player.pause();
-  }
+  Future<void> pause() => _handler.pause();
 
   @override
-  Future<void> resume() async {
-    await _player.play();
-  }
+  Future<void> resume() => _handler.play();
 
   @override
-  Future<void> stop() async {
-    await _player.stop();
-  }
+  Future<void> stop() => _handler.stop();
 
   @override
-  Future<void> seek(Duration position) async {
-    await _player.seek(position);
-  }
+  Future<void> seek(Duration position) => _handler.seek(position);
 
   @override
-  Future<Duration> getPosition() async {
-    return _player.position;
-  }
+  Future<Duration> getPosition() async => _handler.position;
 
   @override
-  Future<Duration> getDuration() async {
-    return _player.duration ?? Duration.zero;
-  }
+  Future<Duration> getDuration() async => _handler.duration;
 
   @override
-  Future<bool> isPlaying() async {
-    return _player.playing;
-  }
+  Future<bool> isPlaying() async => _handler.isPlaying;
 
   @override
   Stream<ProcessingState> get processingStateStream =>
-      _player.processingStateStream;
+      _handler.processingStateStream;
 
   @override
-  bool get currentTrackCompleted =>
-      _player.processingState == ProcessingState.completed &&
-      _player.playing == false;
-
-  void dispose() {
-    _player.dispose();
-  }
+  bool get currentTrackCompleted => _handler.currentTrackCompleted;
 }

@@ -9,8 +9,7 @@ A Flutter mobile app that streams audio from public YouTube playlists, single vi
 - **Now-playing card** — home screen shows the current track with thumbnail, controls, and progress bar; tap to open expanded player
 - **Expanded player** — full-screen player with album art, seek slider, and large playback controls
 - **Mini player** — persistent player bar at the bottom of the playlist screen; tap to open expanded player
-- **Lockscreen controls** — Android AudioSession configured for background playback and lockscreen controls
-- **Notification controls** — Android media notification permission and audio focus handling included
+- **Lockscreen & notification controls** — Android media notification with playback actions, track info, and album art
 - **Google login** — in-app WebView for cookie-based auth to access private/restricted content
 - **Queue management** — play, pause, skip, previous, auto-advance on track completion
 - **Local SQLite cache** — playlists and single videos stored offline for quick reload
@@ -25,7 +24,8 @@ A Flutter mobile app that streams audio from public YouTube playlists, single vi
 | Architecture | Hexagonal (domain/data/presentation) |
 | State | Provider |
 | YouTube API | `youtube_explode_dart` 3.1.0 (patched client version) |
-| Audio | `just_audio` 0.9.46 |
+| Audio playback | `just_audio` 0.9.46 |
+| Lockscreen/notification | `audio_service` 0.18.18 |
 | Storage | sqflite + shared_preferences |
 | Auth | WebView cookie extraction |
 
@@ -66,28 +66,33 @@ flutter run
 
 ```
 lib/
-├── app.dart                  # App entry point + theme
-├── main.dart                 # Dependency injection + run
+├── app.dart                    # App entry point + theme
+├── main.dart                   # Dependency injection + AudioService.init
+├── core/
+│   └── utils/
+│       └── format_duration.dart # Shared duration formatting
 ├── domain/
-│   ├── entities/             # Track, Playlist models
-│   └── repositories/         # AudioRepository, PlaylistRepository interfaces
+│   ├── entities/               # Track, Playlist models
+│   └── repositories/           # AudioRepository, PlaylistRepository interfaces
 ├── data/
 │   ├── datasources/
-│   │   ├── remote/           # YoutubeRemoteDataSource, AuthenticatedClient
-│   │   └── local/            # PlaylistDatabase (SQLite)
-│   ├── models/               # Data-layer DTOs
-│   └── repositories/         # AudioRepositoryImpl, PlaylistRepositoryImpl
+│   │   ├── remote/             # YoutubeRemoteDataSource, AuthenticatedClient
+│   │   └── local/              # PlaylistDatabase (SQLite)
+│   ├── models/                 # Data-layer DTOs
+│   └── repositories/           # AudioRepositoryImpl, PlaylistRepositoryImpl
 ├── presentation/
-│   ├── screens/              # HomeScreen, PlayerScreen, SettingsScreen, LoginScreen, PlaylistScreen
-│   ├── providers/            # PlayerProvider, PlaylistProvider
-│   └── widgets/              # PlayerBar, TrackTile, PlaylistCard, NowPlayingCard, PixelLogo
+│   ├── screens/                # HomeScreen, PlayerScreen, SettingsScreen, LoginScreen, PlaylistScreen
+│   ├── providers/              # PlayerProvider, PlaylistProvider
+│   └── widgets/                # PlayerBar, TrackTile, PlaylistCard, NowPlayingCard, PixelLogo
 └── service/
-    └── auth_service.dart     # SharedPreferences cookie storage
+    ├── audio_handler.dart      # MusicAudioHandler (audio_service bridge)
+    └── auth_service.dart       # SharedPreferences cookie storage
 ```
 
 ## Known Issues
 
 - **Pub cache patch** — overwritten when `flutter pub upgrade` runs; must be re-applied manually.
+- **YouTube mixes** — may still not load depending on mix metadata structure (tracked in `futureroadmap.txt`).
 
 ## License
 

@@ -229,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     final provider = context.read<PlaylistProvider>();
     final playlist = await provider.fetchFromUrl(text);
-    if (playlist != null && mounted) {
+    if (playlist != null && context.mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       Navigator.push(
         context,
@@ -237,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (_) => PlaylistScreen(playlist: playlist),
         ),
       );
-    } else if (mounted) {
+    } else if (context.mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -19,6 +19,8 @@ dependencies:
   cached_network_image: ^3.4.1
   shared_preferences: ^2.3.0
   webview_flutter: ^4.10.0
+  webview_flutter_android: ^4.12.0
+  audio_service: ^0.18.18
 
 dev_dependencies:
   flutter_test:

@@ -38,10 +38,13 @@ class YoutubeRemoteDataSource {
       ));
     }
 
+    final thumbnailUrl = tracks.isNotEmpty ? tracks.first.thumbnailUrl : null;
+
     return PlaylistModel(
       id: playlistId,
       title: ytPlaylist.title,
       author: ytPlaylist.author,
+      thumbnailUrl: thumbnailUrl,
       videoCount: tracks.length,
       tracks: tracks,
     );
@@ -61,6 +64,7 @@ class YoutubeRemoteDataSource {
 
   Future<String> getAudioUrl(String videoId) async {
     var attempt = 0;
+    final stopwatch = Stopwatch()..start();
     while (true) {
       try {
         final manifest = await _yt.videos.streams
@@ -74,7 +78,7 @@ class YoutubeRemoteDataSource {
           return best.url.toString();
         }
 
-        var audioStreams = manifest.audioOnly.toList();
+        final audioStreams = manifest.audioOnly.toList();
         if (audioStreams.isEmpty) {
           throw Exception('No audio streams available for video $videoId');
         }
@@ -91,7 +95,9 @@ class YoutubeRemoteDataSource {
         return bestAudio.url.toString();
       } on Exception catch (e) {
         attempt++;
-        if (attempt >= 3) rethrow;
+        if (attempt >= 3 || stopwatch.elapsed > const Duration(seconds: 45)) {
+          rethrow;
+        }
         if (e.toString().contains('requestLimit') ||
             e.toString().contains('429')) {
           await Future.delayed(Duration(seconds: 2 * attempt));

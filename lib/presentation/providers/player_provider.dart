@@ -32,6 +32,7 @@ class PlayerProvider extends ChangeNotifier {
   void setQueue(List<Track> tracks, {int startIndex = 0}) {
     _queue = tracks;
     _currentIndex = startIndex;
+    _error = null;
     notifyListeners();
   }
 
@@ -50,7 +51,7 @@ class PlayerProvider extends ChangeNotifier {
       _startPolling();
       _listenForCompletion();
     } catch (e) {
-      _error = '${e.toString()}';
+      _error = e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();

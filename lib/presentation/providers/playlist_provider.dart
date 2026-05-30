@@ -29,10 +29,10 @@ class PlaylistProvider extends ChangeNotifier {
         return null;
       }
       _currentPlaylist = await _repository.getPlaylist(cleanId);
-      await loadSavedPlaylists();
+      await _reloadSilently();
       return _currentPlaylist;
     } catch (e) {
-      _error = '${e.toString()}';
+      _error = e.toString();
       return null;
     } finally {
       _isLoading = false;
@@ -47,12 +47,10 @@ class PlaylistProvider extends ChangeNotifier {
 
     try {
       _currentPlaylist = await _repository.getFromUrl(input);
-      if (_currentPlaylist!.tracks.length > 1) {
-        await loadSavedPlaylists();
-      }
+      await _reloadSilently();
       return _currentPlaylist;
     } catch (e) {
-      _error = '${e.toString()}';
+      _error = e.toString();
       return null;
     } finally {
       _isLoading = false;
@@ -60,8 +58,15 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _reloadSilently() async {
+    try {
+      _playlists = await _repository.getSavedPlaylists();
+    } catch (_) {}
+  }
+
   Future<void> loadSavedPlaylists() async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
     try {
       _playlists = await _repository.getSavedPlaylists();

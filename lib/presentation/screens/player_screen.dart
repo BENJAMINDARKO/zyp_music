@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/utils/format_duration.dart';
 import '../providers/player_provider.dart';
 
 class PlayerScreen extends StatelessWidget {
@@ -60,7 +61,7 @@ class PlayerScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 Row(
                   children: [
-                    Text(_formatDuration(player.position),
+                    Text(formatDuration(player.position),
                         style: const TextStyle(fontSize: 12, color: Colors.grey)),
                     Expanded(
                       child: SliderTheme(
@@ -83,7 +84,7 @@ class PlayerScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Text(_formatDuration(player.duration),
+                    Text(formatDuration(player.duration),
                         style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
                 ),
@@ -138,9 +139,4 @@ class PlayerScreen extends StatelessWidget {
     );
   }
 
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes.remainder(60);
-    final seconds = d.inSeconds.remainder(60);
-    return '${d.inHours > 0 ? '${d.inHours}:' : ''}${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
 }
