@@ -1,17 +1,40 @@
-#Icons [DONE]
-- [DONE] when a playlist is playing, show play/pause icon depending of the status of the playing. 
-- [DONE] download button on the home screen for a playlist or single song on the home screen not working. 
-- [DONE] I think download is not working because there is not indication if download is on going or not.
-- [DONE] let us make the design clean. replace the input box and replace is with a search icon, the icon reveals the input box with the current functions the input box is doing and showing now . then retracts after its usage is done. 
-- [DONE] if the song is downloaded song / play list is downloaded change the download icon color for indication
-- [DONE] depending on the playing status of the file /song. use either play or pause to indicate. even in the playlist 
+lets do some ui fixes. 
+- move the export icons into setting. group under settings.
+-make logo a bit bigger .
+-the info icon should be moved to settings. at he bottom of settings.
+-the search and link icon should do same thing. so remove the link Icon and leave the search icon. 
+-now make the logo a bit giber to suite the design 
+-on the now playing screen, there is a right overflow by 8.0pixels ontop of the repeat icon
 
-#logic [DONE]
-- [DONE] this app should be offline first . when playlist is already downloaded. play from file first. do not stream. only stream if the file is not downloaded. 
-- [DONE] when there are multiple music files a an added play list. add download button/icon by each file for when the user wants to download a specific music in the list.
-- [DONE] when the list is long, there should be download ahead of time just like spotify so there wouldn't be delay when the current file is completed playing and it is time for the next file to play.
+## Critical Issues to Fix
 
-# future roadmap [DONE]
+### 1. High-Frequency Polling Causing UI Overhead
+`PlayerProvider._startPolling()` (presentation/providers/player_provider.dart:297-310) fires `notifyListeners()` every **300ms** via `Timer.periodic`, **plus** position/duration stream listeners that also trigger. This causes ~3 forced rebuilds/sec even when nothing changes.
 
-- [DONE] check what can be built on and added to the project
-- [DONE] https://github.com/monochrome-music/monochrome. added monochrome-inspired features to futureroadmap.txt
+Use the streams directly with a debounce, or listen to `playerStateStream` instead.
+
+### 2. HTTP Client Not Closed
+`MusicAudioHandler.resolveRedirects()` (service/audio_handler.dart:61) creates `http.Client()` but never closes it — **memory leak** on every redirect resolution.
+
+### 3. Response Body Drained on Redirects
+`NetworkUtils.resolveRedirects()` (core/utils/network_utils.dart:18) calls `resp.stream.drain()` for 3xx responses. Redirect responses have no body — just close the response.
+
+### 4. Sequential Pre-Downloads
+`DownloadProvider.preDownloadUpcoming()` (presentation/providers/download_provider.dart:96) awaits each track download sequentially. For `prebufferCount=3`, 3 sequential HTTP downloads block queuing. Use `Future.wait` or batch.
+
+### 5. Database Race Condition on Init
+`PlaylistDatabase._database` (data/datasources/local/playlist_database.dart:9-13) has a TOCTOU race: two concurrent accesses while uninitialized will both call `_initDatabase()`. Guard with a latch/completer.
+
+### 6. No Index on `downloaded_tracks.playlistId`
+Table created at `playlist_database.dart:30-39`. Queries filtering by `playlistId` (e.g. `getDownloadedFilePaths`, `removeDownloadedPlaylist`) will be **full table scans** at scale.
+
+---
+
+## Estimated Impact if Unaddressed
+
+| Issue | Severity | Impact |
+|---|---|---|
+| 300ms polling | High | Battery drain + jank on lower-end devices |
+| HTTP client leak | High | OOM over long sessions |
+| DB race | Medium | Crash on rapid playlist loads |
+| Sequential downloads | Medium | Slow queue buildup |

@@ -143,6 +143,12 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   }
 
   @override
+  Future<List<Track>> search(String query) async {
+    final models = await remoteDataSource.search(query);
+    return models.map((m) => m.toEntity()).toList();
+  }
+
+  @override
   Future<List<Track>> getCachedTracks(String playlistId) async {
     final models = await localDatabase.getTracks(playlistId);
     return models.map((m) => m.toEntity()).toList();

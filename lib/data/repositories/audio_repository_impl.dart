@@ -19,12 +19,12 @@ class AudioRepositoryImpl implements AudioRepository {
   });
 
   @override
-  Future<String> getAudioUrl(Track track) async {
+  Future<String> getAudioUrl(Track track, {String quality = 'medium'}) async {
     final localPath = await _database.getDownloadedFilePath(track.id);
     if (localPath != null && File(localPath).existsSync()) {
       return localPath;
     }
-    return remoteDataSource.getAudioUrl(track.id);
+    return remoteDataSource.getAudioUrl(track.id, quality: quality);
   }
 
   @override

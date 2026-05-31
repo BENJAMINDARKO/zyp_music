@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../core/utils/network_utils.dart';
 import '../data/datasources/local/playlist_database.dart';
 import '../data/datasources/remote/youtube_remote_datasource.dart';
 import '../domain/entities/playlist.dart';
@@ -35,9 +36,11 @@ class DownloadService {
 
   final _progressController = StreamController<DownloadProgress>.broadcast();
   final _completedController = StreamController<String>.broadcast();
+  final _errorController = StreamController<String>.broadcast();
 
   Stream<DownloadProgress> get progressStream => _progressController.stream;
   Stream<String> get completedStream => _completedController.stream;
+  Stream<String> get errorStream => _errorController.stream;
 
   bool _cancelled = false;
 
@@ -60,13 +63,13 @@ class DownloadService {
     return dir.path;
   }
 
-  Future<void> downloadTrack(Track track, String playlistId) async {
+  Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
     if (await _database.isTrackDownloaded(track.id)) return;
     final dir = await _getDownloadDir(playlistId);
     final filePath = p.join(dir, '${track.id}.mp4');
 
     try {
-      final audioUrl = await _remoteDataSource.getAudioUrl(track.id);
+      final audioUrl = await _remoteDataSource.getAudioUrl(track.id, quality: quality);
       final resolved = await _resolveRedirects(audioUrl);
       await _downloadFile(resolved, filePath, track, 0, 1);
       await _database.markTrackDownloaded(
@@ -80,6 +83,7 @@ class DownloadService {
       );
       _completedController.add(track.id);
     } catch (e) {
+      _errorController.add('Failed to download ${track.title}: $e');
       _progressController.add(DownloadProgress(
         trackId: track.id,
         trackTitle: track.title,
@@ -91,7 +95,7 @@ class DownloadService {
     }
   }
 
-  Future<void> downloadPlaylist(Playlist playlist) async {
+  Future<void> downloadPlaylist(Playlist playlist, {String quality = 'medium'}) async {
     _cancelled = false;
     final dir = await _getDownloadDir(playlist.id);
     final tracks = playlist.tracks;
@@ -105,7 +109,7 @@ class DownloadService {
       if (await _database.isTrackDownloaded(track.id)) continue;
 
       try {
-        final audioUrl = await _remoteDataSource.getAudioUrl(track.id);
+        final audioUrl = await _remoteDataSource.getAudioUrl(track.id, quality: quality);
         final resolved = await _resolveRedirects(audioUrl);
         await _downloadFile(resolved, filePath, track, i, total);
         await _database.markTrackDownloaded(
@@ -119,6 +123,7 @@ class DownloadService {
         );
         _completedController.add(track.id);
       } catch (e) {
+        _errorController.add('Failed to download ${track.title}: $e');
         _progressController.add(DownloadProgress(
           trackId: track.id,
           trackTitle: track.title,
@@ -160,25 +165,8 @@ class DownloadService {
     await sink.close();
   }
 
-  Future<String> _resolveRedirects(String url) async {
-    var current = url;
-    for (var i = 0; i < 10; i++) {
-      final req = http.Request('GET', Uri.parse(current));
-      req.followRedirects = false;
-      final resp = await _client.send(req);
-      final status = resp.statusCode;
-      await resp.stream.drain();
-      if (status >= 300 && status < 400) {
-        final location = resp.headers['location'];
-        if (location == null) break;
-        current = Uri.parse(location).isAbsolute
-            ? location
-            : Uri.parse(current).resolve(location).toString();
-      } else {
-        return current;
-      }
-    }
-    return current;
+  Future<String> _resolveRedirects(String url) {
+    return NetworkUtils.resolveRedirects(_client, url);
   }
 
   void cancelDownload() {
@@ -215,5 +203,6 @@ class DownloadService {
     _client.close();
     _progressController.close();
     _completedController.close();
+    _errorController.close();
   }
 }

@@ -56,9 +56,9 @@ cd ytmusix-flowos
 flutter pub get
 ```
 
-### Pub Cache Patch
+### Pub Cache Patch (youtube_explode_dart)
 
-The `youtube_explode_dart` package needs a patch in the pub cache to return non-empty browse API results:
+The `youtube_explode_dart` package needs a patch to return non-empty browse API results:
 
 **File:** `$PUB_CACHE/hosted/pub.dev/youtube_explode_dart-3.1.0/lib/src/reverse_engineering/youtube_http_client.dart`
 
@@ -69,6 +69,8 @@ Change the InnerTube client context to:
 ```
 
 Without this patch, the browse API returns empty `contents` and mix playlists fail to load.
+
+> **Note:** This patch is overwritten on `flutter pub upgrade` — must be re-applied.
 
 ### Run (Debug)
 
@@ -88,29 +90,63 @@ Output: `build/app/outputs/flutter-apk/app-release.apk` (~55MB)
 
 ```
 lib/
-├── app.dart                    # App entry point + theme
-├── main.dart                   # Dependency injection + AudioService.init
+├── app.dart                        # App entry point + theme
+├── main.dart                       # DI + AudioService.init
 ├── core/
-│   ├── constants/              # App constants
+│   ├── constants/
+│   │   ├── app_constants.dart
+│   │   ├── audio_quality.dart
+│   │   ├── playlist_sort_mode.dart
+│   │   └── repeat_mode.dart
+│   ├── theme/
+│   │   └── app_theme.dart          # Dark Spotify-inspired theme
 │   └── utils/
-│       └── format_duration.dart # Shared duration formatting
+│       ├── format_duration.dart
+│       └── network_utils.dart      # Redirect resolution
 ├── domain/
-│   ├── entities/               # Track, Playlist models
-│   └── repositories/           # AudioRepository, PlaylistRepository interfaces
+│   ├── entities/
+│   │   ├── playlist.dart
+│   │   └── video.dart              # Track entity
+│   └── repositories/
+│       ├── audio_repository.dart
+│       └── playlist_repository.dart
 ├── data/
 │   ├── datasources/
-│   │   ├── remote/             # YoutubeRemoteDataSource, AuthenticatedClient
-│   │   └── local/              # PlaylistDatabase (SQLite)
-│   ├── models/                 # Data-layer DTOs
-│   └── repositories/           # AudioRepositoryImpl, PlaylistRepositoryImpl
+│   │   ├── remote/
+│   │   │   ├── youtube_remote_datasource.dart
+│   │   │   └── authenticated_client.dart
+│   │   └── local/
+│   │       └── playlist_database.dart  # SQLite
+│   ├── models/
+│   │   ├── playlist_model.dart
+│   │   └── video_model.dart
+│   └── repositories/
+│       ├── audio_repository_impl.dart
+│       └── playlist_repository_impl.dart
 ├── presentation/
-│   ├── screens/                # HomeScreen, PlayerScreen, SettingsScreen, LoginScreen, PlaylistScreen
-│   ├── providers/              # PlayerProvider, PlaylistProvider, DownloadProvider
-│   └── widgets/                # PlayerBar, TrackTile, PlaylistCard, NowPlayingCard, PixelLogo
+│   ├── screens/
+│   │   ├── home_screen.dart
+│   │   ├── player_screen.dart      # Full-screen player
+│   │   ├── playlist_screen.dart
+│   │   ├── search_screen.dart
+│   │   ├── settings_screen.dart
+│   │   └── login_screen.dart       # WebView Google auth
+│   ├── providers/
+│   │   ├── player_provider.dart
+│   │   ├── playlist_provider.dart
+│   │   ├── download_provider.dart
+│   │   └── settings_provider.dart
+│   └── widgets/
+│       ├── player_bar.dart
+│       ├── video_tile.dart
+│       ├── playlist_card.dart
+│       ├── now_playing_card.dart
+│       ├── queue_sheet.dart
+│       └── pixel_logo.dart
 └── service/
-    ├── audio_handler.dart      # MusicAudioHandler (audio_service bridge)
-    ├── auth_service.dart       # flutter_secure_storage cookie storage
-    └── download_service.dart   # DownloadService (offline downloads)
+    ├── audio_handler.dart          # MusicAudioHandler (audio_service bridge)
+    ├── auth_service.dart           # flutter_secure_storage cookies
+    └── download_service.dart       # Offline downloads with progress
 ```
 
 ## Testing
@@ -123,9 +159,17 @@ flutter test
 
 ## Known Issues
 
+### App
 - **Pub cache patch** — overwritten when `flutter pub upgrade` runs; must be re-applied manually.
 - **YouTube mixes** — may still not load depending on mix metadata structure (tracked in `futureroadmap.txt`).
 - **Samsung GPU `BufferQueue` timeout** — harmless Adreno driver spam in logcat on Exynos devices; does not affect playback.
+
+### Code Quality (tracked in `errorandFeatureRequest.txt`)
+- **300ms polling** — `PlayerProvider` fires `notifyListeners()` every 300ms via `Timer.periodic` plus stream listeners. Causes ~3 forced rebuilds/sec.
+- **HTTP client leak** — `MusicAudioHandler.resolveRedirects()` creates `http.Client()` without closing it.
+- **DB race on init** — `PlaylistDatabase._database` can double-init under concurrent access.
+- **No index on `downloaded_tracks.playlistId`** — full table scans at scale.
+- **Sequential pre-downloads** — `preDownloadUpcoming` awaits each track sequentially instead of batching.
 
 ## Roadmap
 

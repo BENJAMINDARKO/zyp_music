@@ -10,57 +10,83 @@ import 'service/auth_service.dart';
 import 'service/audio_handler.dart';
 import 'service/download_service.dart';
 import 'presentation/providers/download_provider.dart';
+import 'presentation/providers/settings_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final session = await AudioSession.instance;
-  await session.configure(const AudioSessionConfiguration(
-    avAudioSessionCategory: AVAudioSessionCategory.playback,
-    androidAudioAttributes: AndroidAudioAttributes(
-      contentType: AndroidAudioContentType.music,
-      usage: AndroidAudioUsage.media,
-    ),
-    androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-    androidWillPauseWhenDucked: false,
-  ));
+  try {
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration(
+      avAudioSessionCategory: AVAudioSessionCategory.playback,
+      androidAudioAttributes: AndroidAudioAttributes(
+        contentType: AndroidAudioContentType.music,
+        usage: AndroidAudioUsage.media,
+      ),
+      androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+      androidWillPauseWhenDucked: false,
+    ));
 
-  final authService = AuthService();
-  final remoteDataSource = YoutubeRemoteDataSource(authService: authService);
-  await remoteDataSource.init();
-  final localDatabase = PlaylistDatabase();
-  final playlistRepository = PlaylistRepositoryImpl(
-    remoteDataSource: remoteDataSource,
-    localDatabase: localDatabase,
-  );
+    final authService = AuthService();
+    final remoteDataSource = YoutubeRemoteDataSource(authService: authService);
+    await remoteDataSource.init();
+    final localDatabase = PlaylistDatabase();
+    final playlistRepository = PlaylistRepositoryImpl(
+      remoteDataSource: remoteDataSource,
+      localDatabase: localDatabase,
+    );
 
-  final audioHandler = await AudioService.init(
-    builder: () => MusicAudioHandler(),
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'ytmusix_music',
-      androidNotificationChannelName: 'Music Playback',
-      androidNotificationIcon: 'mipmap/ic_launcher',
-      androidNotificationOngoing: true,
-      androidNotificationClickStartsActivity: true,
-    ),
-  );
+    final settingsProvider = SettingsProvider();
+    await settingsProvider.load();
 
-  final audioRepository = AudioRepositoryImpl(
-    remoteDataSource: remoteDataSource,
-    handler: audioHandler,
-    database: localDatabase,
-  );
+    final audioHandler = await AudioService.init(
+      builder: () => MusicAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'ytmusix_music',
+        androidNotificationChannelName: 'Music Playback',
+        androidNotificationIcon: 'mipmap/ic_launcher',
+        androidNotificationOngoing: true,
+        androidNotificationClickStartsActivity: true,
+      ),
+    );
 
-  final downloadService = DownloadService(
-    remoteDataSource: remoteDataSource,
-    database: localDatabase,
-  );
-  final downloadProvider = DownloadProvider(downloadService);
-  await downloadProvider.init();
+    final audioRepository = AudioRepositoryImpl(
+      remoteDataSource: remoteDataSource,
+      handler: audioHandler,
+      database: localDatabase,
+    );
 
-  runApp(YTMusixApp(
-    playlistRepository: playlistRepository,
-    audioRepository: audioRepository,
-    downloadProvider: downloadProvider,
-  ));
+    final downloadService = DownloadService(
+      remoteDataSource: remoteDataSource,
+      database: localDatabase,
+    );
+    final downloadProvider = DownloadProvider(downloadService);
+    await downloadProvider.init();
+
+    runApp(YTMusixApp(
+      playlistRepository: playlistRepository,
+      audioRepository: audioRepository,
+      downloadProvider: downloadProvider,
+      settingsProvider: settingsProvider,
+      audioHandler: audioHandler,
+    ));
+  } catch (e) {
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Failed to initialize: $e',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
+        ),
+        theme: ThemeData.dark(),
+      ),
+    );
+  }
 }

@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/constants/audio_quality.dart';
+import '../providers/settings_provider.dart';
+import '../providers/playlist_provider.dart';
 import '../../service/auth_service.dart';
 import 'login_screen.dart';
 
@@ -30,85 +37,325 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: Consumer<SettingsProvider>(
+        builder: (context, settings, _) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildSectionHeader('Playback'),
+              const SizedBox(height: 8),
+              _buildPrebufferSlider(settings),
+              const SizedBox(height: 24),
+              _buildQualitySelector(settings),
+              const SizedBox(height: 32),
+              _buildSectionHeader('YouTube Login'),
+              const SizedBox(height: 8),
+              _buildLoginStatus(),
+              const SizedBox(height: 24),
+              _buildLoginButton(),
+              if (_hasCookies) ...[
+                const SizedBox(height: 12),
+                _buildLogoutButton(),
+              ],
+              const SizedBox(height: 24),
+              Text(
+                'Login cookies are saved to your device.',
+                style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              ),
+              const SizedBox(height: 32),
+              _buildSectionHeader('Import / Export'),
+              const SizedBox(height: 8),
+              _buildImportExportSection(),
+              const SizedBox(height: 32),
+              _buildInfoButton(),
+              const SizedBox(height: 32),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  Widget _buildPrebufferSlider(SettingsProvider settings) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'YouTube Login',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              'Pre-download ahead tracks',
+              style: TextStyle(fontSize: 14, color: Colors.white70),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  _hasCookies ? Icons.check_circle : Icons.cancel,
-                  color: _hasCookies ? Colors.greenAccent : Colors.grey,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _hasCookies ? 'Logged in' : 'Not logged in',
-                  style: TextStyle(
-                    color: _hasCookies ? Colors.greenAccent : Colors.grey,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  final result = await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  );
-                  if (result == true) {
-                    await _checkCookies();
-                  }
-                },
-                icon: const Icon(Icons.login),
-                label: const Text('Login with Google'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black87,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_hasCookies)
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () async {
-                    await _authService.clearCookies();
-                    await _checkCookies();
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.redAccent,
-                    side: const BorderSide(color: Colors.redAccent),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text('Logout'),
-                ),
-              ),
-            const SizedBox(height: 24),
             Text(
-              'Login cookies are saved to your device.',
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              '${settings.prebufferCount}',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
+        Slider(
+          value: settings.prebufferCount.toDouble(),
+          min: 0,
+          max: 10,
+          divisions: 10,
+          onChanged: (v) => settings.setPrebufferCount(v.round()),
+        ),
+        Text(
+          'Number of upcoming tracks to pre-download (0 = disabled)',
+          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQualitySelector(SettingsProvider settings) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Audio quality',
+          style: TextStyle(fontSize: 14, color: Colors.white70),
+        ),
+        const SizedBox(height: 8),
+        ...AudioQuality.values.map((quality) {
+          final isSelected = settings.audioQuality == quality;
+          return RadioListTile<AudioQuality>(
+            value: quality,
+            groupValue: settings.audioQuality,
+            title: Text(_qualityLabel(quality)),
+            subtitle: Text(
+              _qualityDescription(quality),
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            selected: isSelected,
+            onChanged: (v) {
+              if (v != null) settings.setAudioQuality(v);
+            },
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          );
+        }),
+      ],
+    );
+  }
+
+  String _qualityLabel(AudioQuality q) {
+    switch (q) {
+      case AudioQuality.low:
+        return 'Low (~64 kbps)';
+      case AudioQuality.medium:
+        return 'Medium (~128 kbps)';
+      case AudioQuality.high:
+        return 'High (best available)';
+    }
+  }
+
+  String _qualityDescription(AudioQuality q) {
+    switch (q) {
+      case AudioQuality.low:
+        return 'Uses less data, fastest loading';
+      case AudioQuality.medium:
+        return 'Balanced quality and data usage';
+      case AudioQuality.high:
+        return 'Best audio quality, more data usage';
+    }
+  }
+
+  Widget _buildLoginStatus() {
+    return Row(
+      children: [
+        Icon(
+          _hasCookies ? Icons.check_circle : Icons.cancel,
+          color: _hasCookies ? Colors.greenAccent : Colors.grey,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          _hasCookies ? 'Logged in' : 'Not logged in',
+          style: TextStyle(
+            color: _hasCookies ? Colors.greenAccent : Colors.grey,
+            fontSize: 14,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoginButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () async {
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+          if (result == true) {
+            await _checkCookies();
+          }
+        },
+        icon: const Icon(Icons.login),
+        label: const Text('Login with Google'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _importPlaylists() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json', 'md', 'xml', 'txt'],
+      );
+      if (result == null || result.files.single.path == null) return;
+      if (!mounted) return;
+      final provider = context.read<PlaylistProvider>();
+      final count = await provider.importPlaylists(result.files.single.path!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported $count playlist(s)')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportPlaylists(String format) async {
+    try {
+      final provider = context.read<PlaylistProvider>();
+      final path = await provider.exportPlaylists(format);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported to: $path'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildImportExportSection() {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _importPlaylists,
+            icon: const Icon(Icons.file_download),
+            label: const Text('Import playlists from file'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _showExportDialog(),
+            icon: const Icon(Icons.file_upload),
+            label: const Text('Export playlists'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showExportDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Export playlists'),
+        content: const Text('Choose a format:'),
+        actions: [
+          TextButton(onPressed: () { Navigator.pop(ctx); _exportPlaylists('json'); }, child: const Text('JSON')),
+          TextButton(onPressed: () { Navigator.pop(ctx); _exportPlaylists('md'); }, child: const Text('Markdown')),
+          TextButton(onPressed: () { Navigator.pop(ctx); _exportPlaylists('xml'); }, child: const Text('XML')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: TextButton.icon(
+        onPressed: () async {
+          final info = await PackageInfo.fromPlatform();
+          if (!mounted) return;
+          showAboutDialog(
+            context: context,
+            applicationName: AppConstants.appName,
+            applicationVersion: info.version,
+            applicationLegalese: 'For personal, educational use only.\nNot affiliated with YouTube.',
+          );
+        },
+        icon: const Icon(Icons.info_outline, size: 18),
+        label: const Text('About'),
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.grey[400],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () async {
+          await _authService.clearCookies();
+          await _checkCookies();
+        },
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.redAccent,
+          side: const BorderSide(color: Colors.redAccent),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: const Text('Logout'),
       ),
     );
   }

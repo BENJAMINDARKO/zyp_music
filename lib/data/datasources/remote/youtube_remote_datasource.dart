@@ -64,7 +64,7 @@ class YoutubeRemoteDataSource {
     );
   }
 
-  Future<String> getAudioUrl(String videoId) async {
+  Future<String> getAudioUrl(String videoId, {String quality = 'medium'}) async {
     var attempt = 0;
     final stopwatch = Stopwatch()..start();
     while (true) {
@@ -75,8 +75,7 @@ class YoutubeRemoteDataSource {
 
         final muxed = manifest.muxed;
         if (muxed.isNotEmpty) {
-          final best = muxed
-              .reduce((a, b) => a.bitrate.compareTo(b.bitrate) < 0 ? a : b);
+          final best = _selectByQuality(muxed, quality);
           return best.url.toString();
         }
 
@@ -92,8 +91,7 @@ class YoutubeRemoteDataSource {
         if (candidates.isEmpty) {
           candidates = audioStreams;
         }
-        final bestAudio = candidates
-            .reduce((a, b) => a.bitrate.compareTo(b.bitrate) < 0 ? a : b);
+        final bestAudio = _selectByQuality(candidates, quality);
         return bestAudio.url.toString();
       } on TimeoutException {
         attempt++;
@@ -122,6 +120,37 @@ class YoutubeRemoteDataSource {
         }
       }
     }
+  }
+
+  AudioStreamInfo _selectByQuality(List<AudioStreamInfo> streams, String quality) {
+    final sorted = List<AudioStreamInfo>.from(streams)
+      ..sort((a, b) => a.bitrate.compareTo(b.bitrate));
+    switch (quality) {
+      case 'low':
+        return sorted.first;
+      case 'high':
+        return sorted.last;
+      case 'medium':
+      default:
+        return sorted[sorted.length ~/ 2];
+    }
+  }
+
+  Future<List<TrackModel>> search(String query) async {
+    final results = await _yt.search.search(query);
+    final tracks = <TrackModel>[];
+    for (var i = 0; i < results.length; i++) {
+      final video = results[i];
+      tracks.add(TrackModel(
+        id: video.id.value,
+        title: video.title,
+        author: video.author,
+        durationSeconds: video.duration?.inSeconds ?? 0,
+        thumbnailUrl: video.thumbnails.mediumResUrl,
+        index: i,
+      ));
+    }
+    return tracks;
   }
 
   void dispose() {

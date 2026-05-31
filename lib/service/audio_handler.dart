@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
+import '../core/utils/network_utils.dart';
 import 'auth_service.dart';
 
 class MusicAudioHandler extends BaseAudioHandler {
@@ -11,14 +12,14 @@ class MusicAudioHandler extends BaseAudioHandler {
   final skipNextRequested = StreamController<void>.broadcast();
   final skipPreviousRequested = StreamController<void>.broadcast();
 
-  final _controls = [
+  static const _controls = [
     MediaControl.skipToPrevious,
     MediaControl.play,
     MediaControl.pause,
     MediaControl.skipToNext,
   ];
 
-  final _systemActions = <MediaAction>{
+  static const _systemActions = <MediaAction>{
     MediaAction.skipToPrevious,
     MediaAction.play,
     MediaAction.pause,
@@ -36,12 +37,16 @@ class MusicAudioHandler extends BaseAudioHandler {
 
   var _queue = <MediaItem>[];
   int? _currentIndex;
+  StreamSubscription? _playerStateSub;
+  StreamSubscription? _processingSub;
+  StreamSubscription? _positionSub;
+  StreamSubscription? _durationSub;
 
   MusicAudioHandler() {
     playbackState.add(_defaultPlaybackState);
-    _player.playerStateStream.listen(_onPlayerState);
-    _player.processingStateStream.listen(_onProcessingState);
-    _player.positionStream.listen((pos) {
+    _playerStateSub = _player.playerStateStream.listen(_onPlayerState);
+    _processingSub = _player.processingStateStream.listen(_onProcessingState);
+    _positionSub = _player.positionStream.listen((pos) {
       final current = playbackState.valueOrNull ?? _defaultPlaybackState;
       playbackState.add(current.copyWith(
         updatePosition: pos,
@@ -50,7 +55,7 @@ class MusicAudioHandler extends BaseAudioHandler {
         androidCompactActionIndices: [1, 0, 3],
       ));
     });
-    _player.durationStream.listen((dur) {
+    _durationSub = _player.durationStream.listen((dur) {
       if (dur != null) {
         final item = mediaItem.value;
         if (item != null) {
@@ -116,9 +121,11 @@ class MusicAudioHandler extends BaseAudioHandler {
     _currentIndex = _queue.indexWhere((e) => e.id == item.id);
     if (_currentIndex == -1) _currentIndex = null;
     mediaItem.add(item);
+    final client = http.Client();
     final uri = url.startsWith('http') || url.startsWith('https')
-        ? Uri.parse(await _resolveRedirects(url))
+        ? Uri.parse(await NetworkUtils.resolveRedirects(client, url, headers: await _getHeaders()))
         : Uri.file(url);
+    client.close();
     await _player.setAudioSource(
       AudioSource.uri(uri, tag: item),
     );
@@ -129,6 +136,11 @@ class MusicAudioHandler extends BaseAudioHandler {
     _queue = List.from(items);
     _currentIndex = startIndex;
     queue.add(_queue);
+  }
+
+  void clearQueue() {
+    _queue = [];
+    _currentIndex = null;
   }
 
   @override
@@ -169,33 +181,6 @@ class MusicAudioHandler extends BaseAudioHandler {
     await stop();
   }
 
-  Future<String> _resolveRedirects(String url) async {
-    final client = http.Client();
-    try {
-      var current = url;
-      for (var i = 0; i < 10; i++) {
-        final req = http.Request('GET', Uri.parse(current));
-        req.headers.addAll(await _getHeaders());
-        req.followRedirects = false;
-        final resp = await client.send(req);
-        final status = resp.statusCode;
-        await resp.stream.drain();
-        if (status >= 300 && status < 400) {
-          final location = resp.headers['location'];
-          if (location == null) break;
-          current = Uri.parse(location).isAbsolute
-              ? location
-              : Uri.parse(current).resolve(location).toString();
-        } else {
-          return current;
-        }
-      }
-      return current;
-    } finally {
-      client.close();
-    }
-  }
-
   Future<Map<String, String>> _getHeaders() async {
     final cookies = await _authService.getCookies();
     final headers = <String, String>{
@@ -211,9 +196,14 @@ class MusicAudioHandler extends BaseAudioHandler {
 
   Future<Map<String, String>> getHeaders() => _getHeaders();
 
-  Future<String> resolveRedirects(String url) => _resolveRedirects(url);
+  Future<String> resolveRedirects(String url) =>
+      NetworkUtils.resolveRedirects(http.Client(), url, headers: null);
 
   void dispose() {
+    _playerStateSub?.cancel();
+    _processingSub?.cancel();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
     _player.dispose();
   }
 }

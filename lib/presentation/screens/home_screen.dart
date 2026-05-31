@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/playlist_sort_mode.dart';
 import '../../domain/entities/playlist.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/player_provider.dart';
 import '../providers/download_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/playlist_card.dart';
 import '../widgets/pixel_logo.dart';
 import '../widgets/now_playing_card.dart';
 import 'playlist_screen.dart';
 import 'player_screen.dart';
+import 'search_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,21 +23,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _controller = TextEditingController();
-  bool _showSearch = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PlaylistProvider>().loadSavedPlaylists();
+      context.read<PlayerProvider>().loadRecentlyPlayed();
     });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 
   @override
@@ -44,12 +39,63 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LogoWithHeadset(size: 32),
-            const SizedBox(width: 8),
-            const Text(AppConstants.appName),
+            LogoWithHeadset(size: 40),
+            const SizedBox(width: 10),
+            const Text(AppConstants.appName, style: TextStyle(fontSize: 20)),
           ],
         ),
         actions: [
+          Consumer<PlaylistProvider>(
+            builder: (context, provider, _) => PopupMenuButton<PlaylistSortMode>(
+              onSelected: provider.setSortMode,
+              initialValue: provider.sortMode,
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: PlaylistSortMode.dateAdded,
+                  child: Row(
+                    children: [
+                      if (provider.sortMode == PlaylistSortMode.dateAdded)
+                        const Icon(Icons.check, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Date added'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: PlaylistSortMode.title,
+                  child: Row(
+                    children: [
+                      if (provider.sortMode == PlaylistSortMode.title)
+                        const Icon(Icons.check, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Title'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: PlaylistSortMode.trackCount,
+                  child: Row(
+                    children: [
+                      if (provider.sortMode == PlaylistSortMode.trackCount)
+                        const Icon(Icons.check, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Track count'),
+                    ],
+                  ),
+                ),
+              ],
+              icon: const Icon(Icons.sort),
+              tooltip: 'Sort playlists',
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Search YouTube',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SearchScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(
@@ -59,68 +105,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => _showInfo(context),
-          ),
         ],
       ),
       body: Column(
         children: [
-          _buildSearchBar(context),
           _buildErrorBanner(),
           _buildNowPlaying(context),
+          _buildRecentlyPlayed(context),
           Expanded(child: _buildContent(context)),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: AnimatedSize(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: Alignment.topCenter,
-        child: _showSearch
-            ? TextField(
-                autofocus: true,
-                controller: _controller,
-                decoration: InputDecoration(
-                  hintText: 'Paste a YouTube link (video, playlist, or mix)',
-                  prefixIcon: const Icon(Icons.link),
-                  suffixIcon: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_controller.text.isNotEmpty)
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          onPressed: () {
-                            _controller.clear();
-                            setState(() {});
-                          },
-                        ),
-                      IconButton(
-                        icon: const Icon(Icons.add),
-                        onPressed: () => _loadPlaylist(context),
-                      ),
-                    ],
-                  ),
-                ),
-                onSubmitted: (_) {
-                  _loadPlaylist(context);
-                  setState(() => _showSearch = false);
-                },
-                onChanged: (_) => setState(() {}),
-              )
-            : Center(
-                child: IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: () => setState(() => _showSearch = true),
-                  tooltip: 'Add YouTube link',
-                ),
-              ),
       ),
     );
   }
@@ -182,6 +175,87 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildRecentlyPlayed(BuildContext context) {
+    return Consumer<PlayerProvider>(
+      builder: (context, player, _) {
+        final recent = player.recentlyPlayed;
+        if (recent.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.history, size: 18, color: Colors.grey[400]),
+                  const SizedBox(width: 6),
+                  Text('Recently played', style: TextStyle(color: Colors.grey[400], fontSize: 13, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 72,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: recent.length,
+                itemBuilder: (context, index) {
+                  final track = recent[index];
+                  return GestureDetector(
+                    onTap: () {
+                      player.setQueue([track], startIndex: 0);
+                      final settings = context.read<SettingsProvider>();
+                      player.playTrack(track, quality: settings.audioQuality);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+                    },
+                    child: Container(
+                      width: 180,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.network(
+                              track.thumbnailUrl ?? '',
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                width: 48, height: 48,
+                                color: Colors.grey[800],
+                                child: const Icon(Icons.music_note, size: 24),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildContent(BuildContext context) {
     return Consumer3<PlaylistProvider, PlayerProvider, DownloadProvider>(
       builder: (context, provider, playerProvider, downloadProvider, _) {
@@ -193,8 +267,8 @@ class _HomeScreenState extends State<HomeScreen> {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                const LogoWithHeadset(size: 100),
+                  children: [
+                const LogoWithHeadset(size: 120),
                 const SizedBox(height: 16),
                 Text(
                   'No playlists yet',
@@ -206,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Paste a YouTube playlist link above to get started',
+                  'Search YouTube or paste a link to get started',
                   style: TextStyle(color: Colors.grey[500]),
                 ),
               ],
@@ -249,7 +323,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   final cachedTracks = await provider.getCachedTracks(playlist.id);
                   if (cachedTracks != null && cachedTracks.isNotEmpty && context.mounted) {
                     playerProvider.setQueue(cachedTracks, startIndex: 0, playlistId: playlist.id);
-                    await playerProvider.playTrack(cachedTracks.first);
+                    final settings = context.read<SettingsProvider>();
+                    await playerProvider.playTrack(cachedTracks.first, quality: settings.audioQuality);
                   } else if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Open the playlist first to cache tracks')),
@@ -277,7 +352,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       videoCount: cachedTracks.length,
                       tracks: cachedTracks,
                     );
-                    downloadProvider.downloadPlaylist(fullPlaylist);
+                    final settings = context.read<SettingsProvider>();
+                    downloadProvider.downloadPlaylist(fullPlaylist, quality: settings.audioQuality.name);
                   } else if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Open the playlist first to load tracks, then download')),
@@ -293,40 +369,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _loadPlaylist(BuildContext context) async {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Loading $text...'), duration: const Duration(seconds: 2)),
-    );
-    final provider = context.read<PlaylistProvider>();
-    final playlist = await provider.fetchFromUrl(text);
-    if (playlist != null && context.mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PlaylistScreen(playlist: playlist),
-        ),
-      );
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.error ?? 'Failed to load'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _showInfo(BuildContext context) {
-    showAboutDialog(
-      context: context,
-      applicationName: AppConstants.appName,
-      applicationVersion: '1.0.0',
-      applicationLegalese: 'For personal, educational use only.\nNot affiliated with YouTube.',
-    );
-  }
 }

@@ -42,7 +42,7 @@ class DownloadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> downloadPlaylist(Playlist playlist) async {
+  Future<void> downloadPlaylist(Playlist playlist, {String quality = 'medium'}) async {
     if (_downloadingPlaylists.contains(playlist.id)) return;
 
     _downloadingPlaylists.add(playlist.id);
@@ -67,7 +67,7 @@ class DownloadProvider extends ChangeNotifier {
       notifyListeners();
     });
 
-    await _downloadService.downloadPlaylist(playlist);
+    await _downloadService.downloadPlaylist(playlist, quality: quality);
 
     _downloadingPlaylists.remove(playlist.id);
     _playlistDownloadProgress.remove(playlist.id);
@@ -82,16 +82,17 @@ class DownloadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> downloadTrack(Track track, String playlistId) async {
+  Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
     if (_downloadedTrackIds.contains(track.id)) return;
     if (_activeDownloads.containsKey(track.id)) return;
-    await _downloadService.downloadTrack(track, playlistId);
+    await _downloadService.downloadTrack(track, playlistId, quality: quality);
   }
 
-  Future<void> preDownloadUpcoming(List<Track> queue, int currentIndex, String playlistId) async {
+  Future<void> preDownloadUpcoming(List<Track> queue, int currentIndex, String playlistId,
+      {int prebufferCount = 3}) async {
     if (queue.isEmpty) return;
     final start = (currentIndex + 1).clamp(0, queue.length);
-    final end = (start + 3).clamp(0, queue.length);
+    final end = (start + prebufferCount).clamp(0, queue.length);
     for (var i = start; i < end; i++) {
       final track = queue[i];
       if (_downloadedTrackIds.contains(track.id)) continue;

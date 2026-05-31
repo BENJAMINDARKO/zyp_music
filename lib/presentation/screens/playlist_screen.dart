@@ -5,6 +5,7 @@ import '../../domain/entities/video.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/player_provider.dart';
 import '../providers/download_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/player_bar.dart';
 import '../widgets/video_tile.dart';
 import 'player_screen.dart';
@@ -30,10 +31,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       final player = context.read<PlayerProvider>();
       _trackChangedHandler = () {
         if (!mounted) return;
-        // Only pre-download if this playlist is the active playback source
         if (player.currentPlaylistId != widget.playlist.id) return;
         final dl = context.read<DownloadProvider>();
-        dl.preDownloadUpcoming(player.queue, player.currentIndex, widget.playlist.id);
+        final settings = context.read<SettingsProvider>();
+        dl.preDownloadUpcoming(player.queue, player.currentIndex, widget.playlist.id,
+            prebufferCount: settings.prebufferCount);
       };
       player.addTrackChangedListener(_trackChangedHandler!);
       context.read<PlaylistProvider>().loadCachedPlaylist(widget.playlist.id);
@@ -82,24 +84,31 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               Expanded(
                 child: tracks.isEmpty
                     ? const Center(child: Text('No tracks found'))
-                    : ListView.builder(
-                        itemCount: tracks.length,
-                        itemBuilder: (context, index) {
-                          final track = tracks[index];
-                          return TrackTile(
-                            track: track,
-                            isCurrent: currentTrackId == track.id,
-                            isDownloaded: downloadProvider.downloadedTrackIds.contains(track.id),
-                            isDownloading: downloadProvider.activeDownloads.containsKey(track.id),
-                            onDownload: downloadProvider.downloadedTrackIds.contains(track.id)
-                                ? null
-                                : () => downloadProvider.downloadTrack(track, widget.playlist.id),
-                            onTap: () {
-                              playerProvider.setQueue(tracks, startIndex: index, playlistId: widget.playlist.id);
-                              playerProvider.playTrack(track);
-                            },
-                          );
+                    : RefreshIndicator(
+                        onRefresh: () async {
+                          final provider = context.read<PlaylistProvider>();
+                          await provider.fetchPlaylist(widget.playlist.id);
                         },
+                        child: ListView.builder(
+                          itemCount: tracks.length,
+                          itemBuilder: (context, index) {
+                            final track = tracks[index];
+                            return TrackTile(
+                              track: track,
+                              isCurrent: currentTrackId == track.id,
+                              isDownloaded: downloadProvider.downloadedTrackIds.contains(track.id),
+                              isDownloading: downloadProvider.activeDownloads.containsKey(track.id),
+                              onDownload: downloadProvider.downloadedTrackIds.contains(track.id)
+                                  ? null
+                                  : () => downloadProvider.downloadTrack(track, widget.playlist.id),
+                              onTap: () {
+                                final quality = context.read<SettingsProvider>().audioQuality;
+                                playerProvider.setQueue(tracks, startIndex: index, playlistId: widget.playlist.id);
+                                playerProvider.playTrack(track, quality: quality);
+                              },
+                            );
+                          },
+                        ),
                       ),
               ),
               PlayerBar(
@@ -217,8 +226,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             IconButton(
               icon: const Icon(Icons.shuffle),
               onPressed: () {
+                final quality = context.read<SettingsProvider>().audioQuality;
                 playerProvider.setQueue(tracks, startIndex: 0, playlistId: widget.playlist.id);
-                playerProvider.playTrack(tracks.first);
+                playerProvider.toggleShuffle();
+                playerProvider.playTrack(tracks.first, quality: quality);
               },
             ),
         ],
@@ -250,8 +261,9 @@ class _PlayPauseButton extends StatelessWidget {
       return IconButton(
         icon: const Icon(Icons.play_arrow),
         onPressed: () {
-          playerProvider.setQueue(tracks, startIndex: 0, playlistId: playlistId);
-          playerProvider.playTrack(tracks.first);
+          final quality = context.read<SettingsProvider>().audioQuality;
+        playerProvider.setQueue(tracks, startIndex: 0, playlistId: playlistId);
+        playerProvider.playTrack(tracks.first, quality: quality);
         },
       );
     }
