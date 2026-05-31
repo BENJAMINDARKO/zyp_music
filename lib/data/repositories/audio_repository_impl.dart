@@ -39,13 +39,12 @@ class AudioRepositoryImpl implements AudioRepository {
       duration: track.duration,
     );
 
-    String playUrl;
-    final localPath = await _database.getDownloadedFilePath(track.id);
-    if (localPath != null && File(localPath).existsSync()) {
-      playUrl = localPath;
-    } else {
-      playUrl = await _handler.resolveRedirects(audioUrl);
-    }
+    final isLocal = audioUrl.startsWith('/') ||
+        audioUrl.startsWith('file://') ||
+        !audioUrl.startsWith('http');
+    final playUrl = isLocal
+        ? audioUrl
+        : await _handler.resolveRedirects(audioUrl);
 
     final queue = _handler.queue.value;
     if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
@@ -82,6 +81,12 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<Duration> getDuration() async => _handler.duration;
+
+  @override
+  Stream<Duration> get positionStream => _handler.positionStream;
+
+  @override
+  Stream<Duration> get durationStream => _handler.durationStream;
 
   @override
   Future<bool> isPlaying() async => _handler.isPlaying;

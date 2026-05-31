@@ -8,6 +8,11 @@ class PlaylistCard extends StatelessWidget {
   final VoidCallback? onPlay;
   final VoidCallback? onDownload;
   final VoidCallback? onDelete;
+  final bool isCurrentPlaylist;
+  final bool isPlaying;
+  final bool isDownloaded;
+  final bool isDownloading;
+  final double? downloadProgress;
 
   const PlaylistCard({
     super.key,
@@ -16,6 +21,11 @@ class PlaylistCard extends StatelessWidget {
     this.onPlay,
     this.onDownload,
     this.onDelete,
+    this.isCurrentPlaylist = false,
+    this.isPlaying = false,
+    this.isDownloaded = false,
+    this.isDownloading = false,
+    this.downloadProgress,
   });
 
   @override
@@ -55,47 +65,73 @@ class PlaylistCard extends StatelessWidget {
       ),
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(8),
-          leading: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: CachedNetworkImage(
-                imageUrl: playlist.thumbnailUrl ?? '',
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(color: Colors.grey[800]),
-                errorWidget: (context, url, error) => const Icon(Icons.music_note, color: Colors.grey),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.all(8),
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: CachedNetworkImage(
+                    imageUrl: playlist.thumbnailUrl ?? '',
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(color: Colors.grey[800]),
+                    errorWidget: (context, url, error) => const Icon(Icons.music_note, color: Colors.grey),
+                  ),
+                ),
               ),
+              title: Text(
+                playlist.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                '${playlist.videoCount} tracks${playlist.author != null ? ' · ${playlist.author}' : ''}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onPlay != null)
+                      IconButton(
+                        icon: Icon(
+                          isCurrentPlaylist && isPlaying
+                              ? Icons.pause
+                              : Icons.play_arrow,
+                          size: 20,
+                        ),
+                        onPressed: onPlay,
+                      ),
+                    if (onDownload != null)
+                      IconButton(
+                        icon: Icon(
+                          Icons.download,
+                          size: 20,
+                          color: isDownloaded
+                              ? Colors.green
+                              : isDownloading
+                                  ? Colors.orange
+                                  : null,
+                        ),
+                        onPressed: onDownload,
+                      ),
+                  ],
+                ),
+              onTap: onTap,
             ),
-          ),
-          title: Text(
-            playlist.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            '${playlist.videoCount} tracks${playlist.author != null ? ' · ${playlist.author}' : ''}',
-            style: const TextStyle(fontSize: 12),
-          ),
-          trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (onPlay != null)
-                  IconButton(
-                    icon: const Icon(Icons.play_arrow, size: 20),
-                    onPressed: onPlay,
-                  ),
-                if (onDownload != null)
-                  IconButton(
-                    icon: const Icon(Icons.download, size: 20),
-                    onPressed: onDownload,
-                  ),
-              ],
-            ),
-          onTap: onTap,
+            if (isDownloading && downloadProgress != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: LinearProgressIndicator(
+                  value: downloadProgress!.clamp(0.0, 1.0),
+                  minHeight: 2,
+                ),
+              ),
+          ],
         ),
       ),
     );

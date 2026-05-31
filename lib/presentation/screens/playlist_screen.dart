@@ -21,13 +21,34 @@ class PlaylistScreen extends StatefulWidget {
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
   bool _autoDownloadStarted = false;
+  VoidCallback? _trackChangedHandler;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final player = context.read<PlayerProvider>();
+      _trackChangedHandler = () {
+        if (!mounted) return;
+        // Only pre-download if this playlist is the active playback source
+        if (player.currentPlaylistId != widget.playlist.id) return;
+        final dl = context.read<DownloadProvider>();
+        dl.preDownloadUpcoming(player.queue, player.currentIndex, widget.playlist.id);
+      };
+      player.addTrackChangedListener(_trackChangedHandler!);
       context.read<PlaylistProvider>().loadCachedPlaylist(widget.playlist.id);
     });
+  }
+
+  @override
+  void dispose() {
+    if (_trackChangedHandler != null) {
+      try {
+        context.read<PlayerProvider>().removeTrackChangedListener(_trackChangedHandler!);
+      } catch (_) {}
+      _trackChangedHandler = null;
+    }
+    super.dispose();
   }
 
   @override
@@ -69,8 +90,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                             track: track,
                             isCurrent: currentTrackId == track.id,
                             isDownloaded: downloadProvider.downloadedTrackIds.contains(track.id),
+                            isDownloading: downloadProvider.activeDownloads.containsKey(track.id),
+                            onDownload: downloadProvider.downloadedTrackIds.contains(track.id)
+                                ? null
+                                : () => downloadProvider.downloadTrack(track, widget.playlist.id),
                             onTap: () {
-                              playerProvider.setQueue(tracks, startIndex: index);
+                              playerProvider.setQueue(tracks, startIndex: index, playlistId: widget.playlist.id);
                               playerProvider.playTrack(track);
                             },
                           );
@@ -128,6 +153,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Widget _buildHeader(BuildContext context, Playlist playlist, List<Track> tracks,
       PlayerProvider playerProvider, DownloadProvider downloadProvider, bool isDownloading) {
+    final isFullyDownloaded = tracks.isNotEmpty &&
+        tracks.every((t) => downloadProvider.downloadedTrackIds.contains(t.id));
     return Container(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -173,20 +200,24 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             )
           else
             IconButton(
-              icon: const Icon(Icons.download),
-              onPressed: tracks.isEmpty
+              icon: Icon(
+                Icons.download,
+                color: isFullyDownloaded ? Colors.green : null,
+              ),
+              onPressed: tracks.isEmpty || isFullyDownloaded
                   ? null
                   : () => downloadProvider.downloadPlaylist(playlist),
             ),
           _PlayPauseButton(
             tracks: tracks,
             playerProvider: playerProvider,
+            playlistId: widget.playlist.id,
           ),
           if (tracks.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.shuffle),
               onPressed: () {
-                playerProvider.setQueue(tracks, startIndex: 0);
+                playerProvider.setQueue(tracks, startIndex: 0, playlistId: widget.playlist.id);
                 playerProvider.playTrack(tracks.first);
               },
             ),
@@ -199,15 +230,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 class _PlayPauseButton extends StatelessWidget {
   final List<Track> tracks;
   final PlayerProvider playerProvider;
+  final String playlistId;
 
   const _PlayPauseButton({
     required this.tracks,
     required this.playerProvider,
+    required this.playlistId,
   });
 
   bool get _isPlayingFromThisPlaylist {
-    final current = playerProvider.currentTrack;
-    return current != null && tracks.any((t) => t.id == current.id);
+    return playerProvider.currentPlaylistId == playlistId;
   }
 
   @override
@@ -218,7 +250,7 @@ class _PlayPauseButton extends StatelessWidget {
       return IconButton(
         icon: const Icon(Icons.play_arrow),
         onPressed: () {
-          playerProvider.setQueue(tracks, startIndex: 0);
+          playerProvider.setQueue(tracks, startIndex: 0, playlistId: playlistId);
           playerProvider.playTrack(tracks.first);
         },
       );

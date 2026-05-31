@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../domain/entities/playlist.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/player_provider.dart';
+import '../providers/download_provider.dart';
 import '../widgets/playlist_card.dart';
 import '../widgets/pixel_logo.dart';
 import '../widgets/now_playing_card.dart';
@@ -19,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _controller = TextEditingController();
+  bool _showSearch = false;
 
   @override
   void initState() {
@@ -76,31 +79,48 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSearchBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: TextField(
-        controller: _controller,
-        decoration: InputDecoration(
-          hintText: 'Paste a YouTube link (video, playlist, or mix)',
-          prefixIcon: const Icon(Icons.link),
-          suffixIcon: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_controller.text.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () {
-                    _controller.clear();
-                    setState(() {});
-                  },
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: Alignment.topCenter,
+        child: _showSearch
+            ? TextField(
+                autofocus: true,
+                controller: _controller,
+                decoration: InputDecoration(
+                  hintText: 'Paste a YouTube link (video, playlist, or mix)',
+                  prefixIcon: const Icon(Icons.link),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_controller.text.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () {
+                            _controller.clear();
+                            setState(() {});
+                          },
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: () => _loadPlaylist(context),
+                      ),
+                    ],
+                  ),
                 ),
-              IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: () => _loadPlaylist(context),
+                onSubmitted: (_) {
+                  _loadPlaylist(context);
+                  setState(() => _showSearch = false);
+                },
+                onChanged: (_) => setState(() {}),
+              )
+            : Center(
+                child: IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () => setState(() => _showSearch = true),
+                  tooltip: 'Add YouTube link',
+                ),
               ),
-            ],
-          ),
-        ),
-        onSubmitted: (_) => _loadPlaylist(context),
-        onChanged: (_) => setState(() {}),
       ),
     );
   }
@@ -163,8 +183,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildContent(BuildContext context) {
-    return Consumer<PlaylistProvider>(
-      builder: (context, provider, _) {
+    return Consumer3<PlaylistProvider, PlayerProvider, DownloadProvider>(
+      builder: (context, provider, playerProvider, downloadProvider, _) {
         if (provider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -201,8 +221,18 @@ class _HomeScreenState extends State<HomeScreen> {
             itemCount: provider.playlists.length,
             itemBuilder: (context, index) {
               final playlist = provider.playlists[index];
+              final isCurrentPlaylist = playerProvider.currentPlaylistId == playlist.id;
+              final isDownloading = downloadProvider.isDownloadingPlaylist(playlist.id);
+              final isDownloaded = downloadProvider.isPlaylistFullyDownloaded(playlist.id);
+              final dlProgress = downloadProvider.getPlaylistDownloadProgress(playlist.id);
+
               return PlaylistCard(
                 playlist: playlist,
+                isCurrentPlaylist: isCurrentPlaylist,
+                isPlaying: playerProvider.isPlaying,
+                isDownloaded: isDownloaded,
+                isDownloading: isDownloading,
+                downloadProgress: dlProgress,
                 onTap: () {
                   Navigator.push(
                     context,
@@ -212,10 +242,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
                 onPlay: () async {
+                  if (isCurrentPlaylist) {
+                    playerProvider.togglePlayPause();
+                    return;
+                  }
                   final cachedTracks = await provider.getCachedTracks(playlist.id);
                   if (cachedTracks != null && cachedTracks.isNotEmpty && context.mounted) {
-                    final playerProvider = context.read<PlayerProvider>();
-                    playerProvider.setQueue(cachedTracks, startIndex: 0);
+                    playerProvider.setQueue(cachedTracks, startIndex: 0, playlistId: playlist.id);
                     await playerProvider.playTrack(cachedTracks.first);
                   } else if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -223,13 +256,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   }
                 },
-                onDownload: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PlaylistScreen(playlist: playlist, autoDownload: true),
-                    ),
-                  );
+                onDownload: () async {
+                  if (isDownloading) {
+                    downloadProvider.cancelDownload();
+                    return;
+                  }
+                  if (isDownloaded) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Playlist is already downloaded')),
+                    );
+                    return;
+                  }
+                  final cachedTracks = await provider.getCachedTracks(playlist.id);
+                  if (cachedTracks != null && cachedTracks.isNotEmpty && context.mounted) {
+                    final fullPlaylist = Playlist(
+                      id: playlist.id,
+                      title: playlist.title,
+                      author: playlist.author,
+                      thumbnailUrl: playlist.thumbnailUrl,
+                      videoCount: cachedTracks.length,
+                      tracks: cachedTracks,
+                    );
+                    downloadProvider.downloadPlaylist(fullPlaylist);
+                  } else if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Open the playlist first to load tracks, then download')),
+                    );
+                  }
                 },
                 onDelete: () => provider.deletePlaylist(playlist.id),
               );

@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../data/datasources/local/playlist_database.dart';
 import '../data/datasources/remote/youtube_remote_datasource.dart';
 import '../domain/entities/playlist.dart';
+import '../domain/entities/video.dart';
 
 class DownloadProgress {
   final String trackId;
@@ -28,8 +29,8 @@ class DownloadProgress {
 }
 
 class DownloadService {
-  final YoutubeRemoteDataSource _remoteDataSource;
-  final PlaylistDatabase _database;
+  late final YoutubeRemoteDataSource _remoteDataSource;
+  late final PlaylistDatabase _database;
   final http.Client _client = http.Client();
 
   final _progressController = StreamController<DownloadProgress>.broadcast();
@@ -41,15 +42,53 @@ class DownloadService {
   bool _cancelled = false;
 
   DownloadService({
-    required this._remoteDataSource,
-    required this._database,
-  });
+    required YoutubeRemoteDataSource remoteDataSource,
+    required PlaylistDatabase database,
+  }) {
+    _remoteDataSource = remoteDataSource;
+    _database = database;
+  }
+
+  DownloadService.test() {
+    // Test subclasses override all methods that use these fields.
+  }
 
   Future<String> _getDownloadDir(String playlistId) async {
     final appDir = await getApplicationDocumentsDirectory();
     final dir = Directory(p.join(appDir.path, 'downloads', playlistId));
     if (!dir.existsSync()) dir.createSync(recursive: true);
     return dir.path;
+  }
+
+  Future<void> downloadTrack(Track track, String playlistId) async {
+    if (await _database.isTrackDownloaded(track.id)) return;
+    final dir = await _getDownloadDir(playlistId);
+    final filePath = p.join(dir, '${track.id}.mp4');
+
+    try {
+      final audioUrl = await _remoteDataSource.getAudioUrl(track.id);
+      final resolved = await _resolveRedirects(audioUrl);
+      await _downloadFile(resolved, filePath, track, 0, 1);
+      await _database.markTrackDownloaded(
+        track.id,
+        playlistId,
+        filePath,
+        title: track.title,
+        thumbnailUrl: track.thumbnailUrl,
+        durationSeconds: track.duration.inSeconds,
+        author: track.author,
+      );
+      _completedController.add(track.id);
+    } catch (e) {
+      _progressController.add(DownloadProgress(
+        trackId: track.id,
+        trackTitle: track.title,
+        currentBytes: 0,
+        totalBytes: 0,
+        tracksCompleted: 0,
+        totalTracks: 1,
+      ));
+    }
   }
 
   Future<void> downloadPlaylist(Playlist playlist) async {
@@ -156,6 +195,10 @@ class DownloadService {
 
   Future<Set<String>> getAllDownloadedIds() async {
     return _database.getAllDownloadedTrackIds();
+  }
+
+  Future<Set<String>> getFullyDownloadedPlaylistIds() async {
+    return _database.getFullyDownloadedPlaylistIds();
   }
 
   Future<void> deleteDownloadedPlaylist(String playlistId) async {

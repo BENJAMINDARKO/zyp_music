@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:developer' as dev;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart'
     hide Playlist, Video;
 import '../../models/playlist_model.dart';
@@ -93,15 +95,29 @@ class YoutubeRemoteDataSource {
         final bestAudio = candidates
             .reduce((a, b) => a.bitrate.compareTo(b.bitrate) < 0 ? a : b);
         return bestAudio.url.toString();
-      } on Exception catch (e) {
+      } on TimeoutException {
         attempt++;
+        dev.log('Attempt $attempt timed out for video $videoId',
+            name: 'YoutubeRemoteDataSource');
         if (attempt >= 3 || stopwatch.elapsed > const Duration(seconds: 45)) {
           rethrow;
         }
-        if (e.toString().contains('requestLimit') ||
-            e.toString().contains('429')) {
+        await Future.delayed(Duration(seconds: 2 * attempt));
+      } on Exception catch (e) {
+        attempt++;
+        final msg = e.toString();
+        if (attempt >= 3 || stopwatch.elapsed > const Duration(seconds: 45)) {
+          dev.log('All $attempt attempts failed for video $videoId: $msg',
+              name: 'YoutubeRemoteDataSource');
+          rethrow;
+        }
+        if (msg.contains('requestLimit') || msg.contains('429')) {
+          dev.log('Rate limited on attempt $attempt for video $videoId',
+              name: 'YoutubeRemoteDataSource');
           await Future.delayed(Duration(seconds: 2 * attempt));
         } else {
+          dev.log('Non-retryable error on attempt $attempt for video $videoId: $msg',
+              name: 'YoutubeRemoteDataSource');
           rethrow;
         }
       }

@@ -24,10 +24,23 @@ class PlayerProvider extends ChangeNotifier {
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   String? _error;
+  String? _currentPlaylistId;
   Timer? _pollTimer;
   StreamSubscription? _completionSubscription;
   StreamSubscription? _skipNextSubscription;
   StreamSubscription? _skipPrevSubscription;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+
+  final List<VoidCallback> _trackChangedListeners = [];
+
+  void addTrackChangedListener(VoidCallback cb) {
+    _trackChangedListeners.add(cb);
+  }
+
+  void removeTrackChangedListener(VoidCallback cb) {
+    _trackChangedListeners.remove(cb);
+  }
 
   Track? get currentTrack => _currentTrack;
   List<Track> get queue => _queue;
@@ -37,10 +50,12 @@ class PlayerProvider extends ChangeNotifier {
   Duration get position => _position;
   Duration get duration => _duration;
   String? get error => _error;
+  String? get currentPlaylistId => _currentPlaylistId;
 
-  void setQueue(List<Track> tracks, {int startIndex = 0}) {
+  void setQueue(List<Track> tracks, {int startIndex = 0, String? playlistId}) {
     _queue = tracks;
     _currentIndex = startIndex;
+    _currentPlaylistId = playlistId;
     _error = null;
     notifyListeners();
   }
@@ -59,6 +74,9 @@ class PlayerProvider extends ChangeNotifier {
       _isPlaying = true;
       _startPolling();
       _listenForCompletion();
+      for (final cb in _trackChangedListeners) {
+        cb();
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -114,18 +132,25 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      try {
-        _position = await _audioRepository.getPosition();
-        _duration = await _audioRepository.getDuration();
-        notifyListeners();
-      } catch (_) {}
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _positionSub = _audioRepository.positionStream.listen((pos) {
+      _position = pos;
+      notifyListeners();
+    });
+    _durationSub = _audioRepository.durationStream.listen((dur) {
+      _duration = dur;
+      notifyListeners();
     });
   }
 
   void _stopPolling() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    _positionSub?.cancel();
+    _positionSub = null;
+    _durationSub?.cancel();
+    _durationSub = null;
   }
 
   void _listenForCompletion() {
@@ -158,6 +183,8 @@ class PlayerProvider extends ChangeNotifier {
     _completionSubscription?.cancel();
     _skipNextSubscription?.cancel();
     _skipPrevSubscription?.cancel();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
     super.dispose();
   }
 }

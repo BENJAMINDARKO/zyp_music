@@ -14,6 +14,8 @@ abstract class AudioRepository {
   Future<Duration> getDuration();
   Future<bool> isPlaying();
   Stream<ProcessingState> get processingStateStream;
+  Stream<Duration> get positionStream;
+  Stream<Duration> get durationStream;
   bool get currentTrackCompleted;
   Stream<void> get onSkipNextRequested;
   Stream<void> get onSkipPreviousRequested;

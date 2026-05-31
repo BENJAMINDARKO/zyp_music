@@ -1,3 +1,4 @@
+import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/playlist.dart';
 import '../../domain/entities/video.dart';
@@ -62,7 +63,9 @@ class PlaylistProvider extends ChangeNotifier {
   Future<void> _reloadSilently() async {
     try {
       _playlists = await _repository.getSavedPlaylists();
-    } catch (_) {}
+    } catch (e) {
+      dev.log('Failed to reload playlists silently: $e', name: 'PlaylistProvider');
+    }
   }
 
   Future<void> loadSavedPlaylists() async {
@@ -86,13 +89,18 @@ class PlaylistProvider extends ChangeNotifier {
         _currentPlaylist = cached;
         notifyListeners();
       }
-    } catch (_) {}
+    } catch (e) {
+      dev.log('Failed to load cached playlist $playlistId: $e',
+          name: 'PlaylistProvider');
+    }
   }
 
   Future<List<Track>?> getCachedTracks(String playlistId) async {
     try {
       return _repository.getCachedTracks(playlistId);
-    } catch (_) {
+    } catch (e) {
+      dev.log('Failed to get cached tracks for $playlistId: $e',
+          name: 'PlaylistProvider');
       return null;
     }
   }

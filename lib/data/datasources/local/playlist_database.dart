@@ -187,4 +187,17 @@ class PlaylistDatabase {
     final result = await db.query('downloaded_tracks', columns: ['id']);
     return result.map((r) => r['id'] as String).toSet();
   }
+
+  Future<Set<String>> getFullyDownloadedPlaylistIds() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT p.id FROM playlists p
+      WHERE p.videoCount > 0
+        AND p.videoCount <= (
+          SELECT COUNT(*) FROM downloaded_tracks d
+          WHERE d.playlistId = p.id
+        )
+    ''');
+    return result.map((r) => r['id'] as String).toSet();
+  }
 }

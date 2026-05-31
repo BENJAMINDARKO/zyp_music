@@ -8,6 +8,8 @@ class TrackTile extends StatelessWidget {
   final bool isCurrent;
   final VoidCallback onTap;
   final bool isDownloaded;
+  final bool isDownloading;
+  final VoidCallback? onDownload;
 
   const TrackTile({
     super.key,
@@ -15,6 +17,8 @@ class TrackTile extends StatelessWidget {
     required this.isCurrent,
     required this.onTap,
     this.isDownloaded = false,
+    this.isDownloading = false,
+    this.onDownload,
   });
 
   @override
@@ -50,9 +54,22 @@ class TrackTile extends StatelessWidget {
       ),
       trailing: isCurrent
           ? const Icon(Icons.play_arrow, size: 20)
-          : isDownloaded
-              ? const Icon(Icons.download_done, size: 18, color: Colors.green)
-              : null,
+          : isDownloading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : isDownloaded
+                  ? const Icon(Icons.download_done, size: 18, color: Colors.green)
+                  : onDownload != null
+                      ? IconButton(
+                          icon: const Icon(Icons.download, size: 18),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: onDownload,
+                        )
+                      : null,
       onTap: onTap,
     );
   }

@@ -101,6 +101,11 @@ class MusicAudioHandler extends BaseAudioHandler {
   Stream<ProcessingState> get processingStateStream =>
       _player.processingStateStream;
 
+  Stream<Duration> get positionStream => _player.positionStream;
+
+  Stream<Duration> get durationStream =>
+      _player.durationStream.where((d) => d != null).cast<Duration>();
+
   int? get currentIndex => _currentIndex;
   int get queueLength => _queue.length;
 

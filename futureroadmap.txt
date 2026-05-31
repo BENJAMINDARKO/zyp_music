@@ -1,5 +1,5 @@
 === FUTURE ROADMAP ===
-Features sourced from: MusicPiped, koel/player, coflyn/Flow, sweyer, you-free-app
+Features sourced from: MusicPiped, koel/player, coflyn/Flow, sweyer, you-free-app, monochrome-music/monochrome
 
 ===== QUICK WINS =====
 - Shuffle / Repeat (loop one, loop all) modes for playback
@@ -37,3 +37,19 @@ Features sourced from: MusicPiped, koel/player, coflyn/Flow, sweyer, you-free-ap
 - Multi-language support (i18n)
 - Third-party login besides Google (e.g. anonymous mode)
 - Desktop platform support (Windows/macOS/Linux)
+
+===== MONOCHROME-INSPIRED =====
+- Animated album cover art on player screen
+- Audio visualizer (customizable presets)
+- Lyrics display with Genius integration + karaoke/synced mode
+- Account system for cross-device sync (library, history, playlists)
+- Customizable user profiles
+- Real-time listening parties (synced playback with friends)
+- ArtistGrid integration for unreleased/leaked music
+- Keyboard shortcuts + command palette (Ctrl+K)
+- Infinite recommendation radio (auto-play related tracks)
+- Explore page showing hot/new releases
+- Public playlists with social sharing
+- Automatic metadata embedding for downloaded tracks
+- Multiple API instance support with failover
+- OAuth support beyond Google (Discord, GitHub, Spotify)
