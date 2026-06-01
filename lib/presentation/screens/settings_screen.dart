@@ -35,60 +35,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
-      body: Consumer<SettingsProvider>(
-        builder: (context, settings, _) {
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildSectionHeader('Playback'),
-              const SizedBox(height: 8),
-              _buildPrebufferSlider(settings),
-              const SizedBox(height: 24),
-              _buildQualitySelector(settings),
-              const SizedBox(height: 32),
-              _buildSectionHeader('YouTube Login'),
-              const SizedBox(height: 8),
-              _buildLoginStatus(),
-              const SizedBox(height: 24),
-              _buildLoginButton(),
-              if (_hasCookies) ...[
-                const SizedBox(height: 12),
-                _buildLogoutButton(),
+      body: SafeArea(
+        child: Consumer<SettingsProvider>(
+          builder: (context, settings, _) {
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              children: [
+                _buildPageHeader(context),
+                const SizedBox(height: 28),
+                _SettingsPanel(
+                  title: 'Playback',
+                  icon: Icons.tune_rounded,
+                  children: [
+                    _buildPrebufferSlider(settings),
+                    const SizedBox(height: 22),
+                    _buildQualitySelector(settings),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _SettingsPanel(
+                  title: 'YouTube Login',
+                  icon: Icons.account_circle_rounded,
+                  children: [
+                    _buildLoginStatus(),
+                    const SizedBox(height: 16),
+                    _buildLoginButton(),
+                    if (_hasCookies) ...[
+                      const SizedBox(height: 12),
+                      _buildLogoutButton(),
+                    ],
+                    const SizedBox(height: 12),
+                    Text(
+                      'Login cookies are saved to your device.',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _SettingsPanel(
+                  title: 'Import / Export',
+                  icon: Icons.import_export_rounded,
+                  children: [_buildImportExportSection()],
+                ),
+                const SizedBox(height: 18),
+                _SettingsPanel(
+                  title: 'Storage',
+                  icon: Icons.storage_rounded,
+                  children: [_buildStorageSection()],
+                ),
+                const SizedBox(height: 18),
+                _buildInfoButton(),
               ],
-              const SizedBox(height: 24),
-              Text(
-                'Login cookies are saved to your device.',
-                style: TextStyle(color: Colors.grey[400], fontSize: 13),
-              ),
-              const SizedBox(height: 32),
-              _buildSectionHeader('Import / Export'),
-              const SizedBox(height: 8),
-              _buildImportExportSection(),
-              const SizedBox(height: 32),
-              _buildSectionHeader('Storage'),
-              const SizedBox(height: 8),
-              _buildStorageSection(),
-              const SizedBox(height: 32),
-              _buildInfoButton(),
-              const SizedBox(height: 32),
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-      ),
+  Widget _buildPageHeader(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 40,
+          height: 40,
+          child: IconButton(
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFF191919),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        const SizedBox(width: 16),
+        const Text(
+          'Settings',
+          style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+        ),
+      ],
+    );
+  }
+
+  ButtonStyle _softButtonStyle({Color? foregroundColor}) {
+    return OutlinedButton.styleFrom(
+      foregroundColor: foregroundColor ?? Colors.white,
+      side: BorderSide(color: Colors.white.withAlpha(18)),
+      backgroundColor: Colors.white.withAlpha(10),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     );
   }
 
@@ -137,24 +174,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(fontSize: 14, color: Colors.white70),
         ),
         const SizedBox(height: 8),
-        ...AudioQuality.values.map((quality) {
-          final isSelected = settings.audioQuality == quality;
-          return RadioListTile<AudioQuality>(
-            value: quality,
-            groupValue: settings.audioQuality,
-            title: Text(_qualityLabel(quality)),
-            subtitle: Text(
-              _qualityDescription(quality),
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
-            ),
-            selected: isSelected,
-            onChanged: (v) {
-              if (v != null) settings.setAudioQuality(v);
-            },
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-          );
-        }),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: AudioQuality.values.map((quality) {
+            final isSelected = settings.audioQuality == quality;
+            return ChoiceChip(
+              selected: isSelected,
+              label: Text(_qualityLabel(quality)),
+              selectedColor: Theme.of(context).colorScheme.primary,
+              backgroundColor: Colors.white.withAlpha(12),
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.black : Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.white.withAlpha(18),
+                ),
+              ),
+              onSelected: (_) => settings.setAudioQuality(quality),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          _qualityDescription(settings.audioQuality),
+          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+        ),
       ],
     );
   }
@@ -221,7 +271,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           foregroundColor: Colors.black87,
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
@@ -239,14 +289,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final provider = context.read<PlaylistProvider>();
       final count = await provider.importPlaylists(result.files.single.path!);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported $count playlist(s)')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Imported $count playlist(s)')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Import failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -267,7 +320,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -282,10 +338,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: _importPlaylists,
             icon: const Icon(Icons.file_download),
             label: const Text('Import playlists from file'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+            style: _softButtonStyle(),
           ),
         ),
         const SizedBox(height: 12),
@@ -295,10 +348,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () => _showExportDialog(),
             icon: const Icon(Icons.file_upload),
             label: const Text('Export playlists'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+            style: _softButtonStyle(),
           ),
         ),
       ],
@@ -312,10 +362,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Export playlists'),
         content: const Text('Choose a format:'),
         actions: [
-          TextButton(onPressed: () { Navigator.pop(ctx); _exportPlaylists('json'); }, child: const Text('JSON')),
-          TextButton(onPressed: () { Navigator.pop(ctx); _exportPlaylists('md'); }, child: const Text('Markdown')),
-          TextButton(onPressed: () { Navigator.pop(ctx); _exportPlaylists('xml'); }, child: const Text('XML')),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportPlaylists('json');
+            },
+            child: const Text('JSON'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportPlaylists('md');
+            },
+            child: const Text('Markdown'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _exportPlaylists('xml');
+            },
+            child: const Text('XML'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
         ],
       ),
     );
@@ -351,11 +422,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : null,
                 icon: const Icon(Icons.delete_sweep, size: 18),
                 label: const Text('Clear all cached downloads'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.redAccent,
-                  side: BorderSide(color: sizeBytes > 0 ? Colors.redAccent : Colors.grey[700]!),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                style: _softButtonStyle(
+                  foregroundColor: sizeBytes > 0
+                      ? Colors.redAccent
+                      : Colors.grey[700],
                 ),
               ),
             ),
@@ -370,16 +440,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear all downloads?'),
-        content: const Text('Remove all downloaded audio files from your device?'),
+        content: const Text(
+          'Remove all downloaded audio files from your device?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Clear all', style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear all', style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
     if (confirmed == true && context.mounted) {
       final provider = context.read<DownloadProvider>();
-      final allPlaylistIds = context.read<PlaylistProvider>().playlists.map((p) => p.id).toList();
+      final allPlaylistIds = context
+          .read<PlaylistProvider>()
+          .playlists
+          .map((p) => p.id)
+          .toList();
       for (final id in allPlaylistIds) {
         await provider.deleteDownloadedPlaylist(id);
       }
@@ -395,7 +477,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
@@ -410,14 +494,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             context: context,
             applicationName: AppConstants.appName,
             applicationVersion: info.version,
-            applicationLegalese: 'For personal, educational use only.\nNot affiliated with YouTube.',
+            applicationLegalese:
+                'For personal, educational use only.\nNot affiliated with YouTube.',
           );
         },
         icon: const Icon(Icons.info_outline, size: 18),
         label: const Text('About'),
-        style: TextButton.styleFrom(
-          foregroundColor: Colors.grey[400],
-        ),
+        style: TextButton.styleFrom(foregroundColor: Colors.grey[400]),
       ),
     );
   }
@@ -430,15 +513,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await _authService.clearCookies();
           await _checkCookies();
         },
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.redAccent,
-          side: const BorderSide(color: Colors.redAccent),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
+        style: _softButtonStyle(foregroundColor: Colors.redAccent),
         child: const Text('Logout'),
+      ),
+    );
+  }
+}
+
+class _SettingsPanel extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final List<Widget> children;
+
+  const _SettingsPanel({
+    required this.title,
+    required this.icon,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF171717),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withAlpha(14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ...children,
+        ],
       ),
     );
   }

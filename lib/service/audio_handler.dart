@@ -48,12 +48,14 @@ class MusicAudioHandler extends BaseAudioHandler {
     _processingSub = _player.processingStateStream.listen(_onProcessingState);
     _positionSub = _player.positionStream.listen((pos) {
       final current = playbackState.valueOrNull ?? _defaultPlaybackState;
-      playbackState.add(current.copyWith(
-        updatePosition: pos,
-        controls: _controls,
-        systemActions: _systemActions,
-        androidCompactActionIndices: [1, 0, 3],
-      ));
+      playbackState.add(
+        current.copyWith(
+          updatePosition: pos,
+          controls: _controls,
+          systemActions: _systemActions,
+          androidCompactActionIndices: [1, 0, 3],
+        ),
+      );
     });
     _durationSub = _player.durationStream.listen((dur) {
       if (dur != null) {
@@ -67,17 +69,21 @@ class MusicAudioHandler extends BaseAudioHandler {
 
   void _onPlayerState(PlayerState state) {
     final current = playbackState.valueOrNull ?? _defaultPlaybackState;
-    playbackState.add(current.copyWith(
-      playing: state.playing,
-      processingState: _convertState(state.processingState),
-      controls: _controls,
-      systemActions: _systemActions,
-      androidCompactActionIndices: [1, 0, 3],
-    ));
+    playbackState.add(
+      current.copyWith(
+        playing: state.playing,
+        processingState: _convertState(state.processingState),
+        controls: _controls,
+        systemActions: _systemActions,
+        androidCompactActionIndices: [1, 0, 3],
+      ),
+    );
   }
 
   void _onProcessingState(ProcessingState state) {
-    if (state == ProcessingState.completed && _queue.isEmpty && _currentIndex == null) {
+    if (state == ProcessingState.completed &&
+        _queue.isEmpty &&
+        _currentIndex == null) {
       stop();
     }
   }
@@ -108,6 +114,8 @@ class MusicAudioHandler extends BaseAudioHandler {
 
   Stream<Duration> get positionStream => _player.positionStream;
 
+  Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream;
+
   Stream<Duration> get durationStream =>
       _player.durationStream.where((d) => d != null).cast<Duration>();
 
@@ -122,13 +130,22 @@ class MusicAudioHandler extends BaseAudioHandler {
     if (_currentIndex == -1) _currentIndex = null;
     mediaItem.add(item);
     final client = http.Client();
-    final uri = url.startsWith('http') || url.startsWith('https')
-        ? Uri.parse(await NetworkUtils.resolveRedirects(client, url, headers: await _getHeaders()))
-        : Uri.file(url);
-    client.close();
-    await _player.setAudioSource(
-      AudioSource.uri(uri, tag: item),
-    );
+    final Uri uri;
+    try {
+      uri = url.startsWith('http') || url.startsWith('https')
+          ? Uri.parse(
+              await NetworkUtils.resolveRedirects(
+                client,
+                url,
+                headers: await _getHeaders(),
+              ),
+            )
+          : Uri.file(url);
+    } finally {
+      client.close();
+    }
+    await _player.stop();
+    await _player.setAudioSource(AudioSource.uri(uri, tag: item));
     await _player.play();
   }
 
@@ -155,11 +172,13 @@ class MusicAudioHandler extends BaseAudioHandler {
   @override
   Future<void> stop() async {
     await _player.stop();
-    playbackState.add(_defaultPlaybackState.copyWith(
-      controls: _controls,
-      systemActions: _systemActions,
-      androidCompactActionIndices: [1, 0, 3],
-    ));
+    playbackState.add(
+      _defaultPlaybackState.copyWith(
+        controls: _controls,
+        systemActions: _systemActions,
+        androidCompactActionIndices: [1, 0, 3],
+      ),
+    );
   }
 
   @override
@@ -184,7 +203,8 @@ class MusicAudioHandler extends BaseAudioHandler {
   Future<Map<String, String>> _getHeaders() async {
     final cookies = await _authService.getCookies();
     final headers = <String, String>{
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+      'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
       'Referer': 'https://www.youtube.com/',
     };

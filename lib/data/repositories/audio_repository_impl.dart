@@ -39,22 +39,15 @@ class AudioRepositoryImpl implements AudioRepository {
       duration: track.duration,
     );
 
-    final isLocal = audioUrl.startsWith('/') ||
-        audioUrl.startsWith('file://') ||
-        !audioUrl.startsWith('http');
-    final playUrl = isLocal
-        ? audioUrl
-        : await _handler.resolveRedirects(audioUrl);
-
     final queue = _handler.queue.value;
     if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
       _handler.mediaItem.add(item);
-      await _handler.playTrack(playUrl, item);
+      await _handler.playTrack(audioUrl, item);
     } else {
       final newQueue = List<MediaItem>.from(queue);
       newQueue.add(item);
       _handler.queue.add(newQueue);
-      await _handler.playTrack(playUrl, item);
+      await _handler.playTrack(audioUrl, item);
     }
   }
 
@@ -86,6 +79,10 @@ class AudioRepositoryImpl implements AudioRepository {
   Stream<Duration> get positionStream => _handler.positionStream;
 
   @override
+  Stream<Duration> get bufferedPositionStream =>
+      _handler.bufferedPositionStream;
+
+  @override
   Stream<Duration> get durationStream => _handler.durationStream;
 
   @override
@@ -102,5 +99,6 @@ class AudioRepositoryImpl implements AudioRepository {
   Stream<void> get onSkipNextRequested => _handler.skipNextRequested.stream;
 
   @override
-  Stream<void> get onSkipPreviousRequested => _handler.skipPreviousRequested.stream;
+  Stream<void> get onSkipPreviousRequested =>
+      _handler.skipPreviousRequested.stream;
 }
