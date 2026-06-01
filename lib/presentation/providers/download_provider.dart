@@ -93,16 +93,15 @@ class DownloadProvider extends ChangeNotifier {
     if (queue.isEmpty) return;
     final start = (currentIndex + 1).clamp(0, queue.length);
     final end = (start + prebufferCount).clamp(0, queue.length);
+    final futures = <Future<void>>[];
     for (var i = start; i < end; i++) {
       final track = queue[i];
       if (_downloadedTrackIds.contains(track.id)) continue;
       if (_activeDownloads.containsKey(track.id)) continue;
-      try {
-        await _downloadService.downloadTrack(track, playlistId);
-      } catch (e) {
-        dev.log('Pre-download failed for ${track.id}: $e', name: 'DownloadProvider');
-      }
+      futures.add(_downloadService.downloadTrack(track, playlistId)
+          .catchError((e) => dev.log('Pre-download failed for ${track.id}: $e', name: 'DownloadProvider')));
     }
+    await Future.wait(futures);
   }
 
   void cancelDownload() {
@@ -125,6 +124,11 @@ class DownloadProvider extends ChangeNotifier {
     await _refreshDownloadedIds();
     notifyListeners();
   }
+
+  Future<int> getTotalCacheSize() => _downloadService.getTotalCacheSize();
+
+  Future<int> getPlaylistCacheSize(String playlistId) =>
+      _downloadService.getPlaylistCacheSize(playlistId);
 
   Future<void> _refreshDownloadedIds() async {
     _downloadedTrackIds = await _downloadService.getAllDownloadedIds();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../models/playlist_model.dart';
@@ -5,10 +6,18 @@ import '../../models/video_model.dart';
 
 class PlaylistDatabase {
   static Database? _database;
+  static final Completer<void> _initCompleter = Completer<void>();
+  static bool _initStarted = false;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
+    if (!_initStarted) {
+      _initStarted = true;
+      _database = await _initDatabase();
+      _initCompleter.complete();
+    } else {
+      await _initCompleter.future;
+    }
     return _database!;
   }
 
@@ -17,7 +26,7 @@ class PlaylistDatabase {
     final path = join(dbPath, 'ytmusix.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 5,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -31,7 +40,8 @@ class PlaylistDatabase {
         description TEXT,
         thumbnailUrl TEXT,
         author TEXT,
-        videoCount INTEGER DEFAULT 0
+        videoCount INTEGER DEFAULT 0,
+        createdAt INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
       )
     ''');
     await db.execute('''
@@ -59,6 +69,20 @@ class PlaylistDatabase {
         downloadedAt INTEGER NOT NULL
       )
     ''');
+    await db.execute('''
+      CREATE INDEX idx_downloaded_tracks_playlistId
+      ON downloaded_tracks(playlistId)
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS favorite_tracks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        thumbnailUrl TEXT,
+        durationSeconds INTEGER DEFAULT 0,
+        author TEXT,
+        favoritedAt INTEGER NOT NULL
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -76,12 +100,77 @@ class PlaylistDatabase {
         )
       ''');
     }
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_downloaded_tracks_playlistId
+        ON downloaded_tracks(playlistId)
+      ''');
+    }
+    if (oldVersion < 4) {
+      await db.execute('''
+        ALTER TABLE playlists ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0
+      ''');
+      await db.execute('''
+        UPDATE playlists SET createdAt = (strftime('%s','now') * 1000)
+      ''');
+    }
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS favorite_tracks (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          thumbnailUrl TEXT,
+          durationSeconds INTEGER DEFAULT 0,
+          author TEXT,
+          favoritedAt INTEGER NOT NULL
+        )
+      ''');
+    }
   }
 
   Future<void> insertPlaylist(PlaylistModel playlist) async {
     final db = await database;
-    await db.insert('playlists', playlist.toMap(),
+    final map = playlist.toMap();
+    if (playlist.createdAt == 0) {
+      map['createdAt'] = DateTime.now().millisecondsSinceEpoch;
+    }
+    await db.insert('playlists', map,
         conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updatePlaylistTitle(String id, String newTitle) async {
+    final db = await database;
+    await db.update('playlists', {'title': newTitle},
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> removeTrack(String playlistId, String trackId) async {
+    final db = await database;
+    await db.delete('tracks',
+        where: 'id = ? AND playlistId = ?', whereArgs: [trackId, playlistId]);
+    final remaining = await db.query('tracks',
+        where: 'playlistId = ?', whereArgs: [playlistId], orderBy: 'idx ASC');
+    final batch = db.batch();
+    for (var i = 0; i < remaining.length; i++) {
+      batch.update('tracks', {'idx': i},
+          where: 'id = ? AND playlistId = ?',
+          whereArgs: [remaining[i]['id'], playlistId]);
+    }
+    await batch.commit(noResult: true);
+    await db.update('playlists', {'videoCount': remaining.length},
+        where: 'id = ?', whereArgs: [playlistId]);
+  }
+
+  Future<void> reorderTracks(
+      String playlistId, List<String> trackIdsInOrder) async {
+    final db = await database;
+    final batch = db.batch();
+    for (var i = 0; i < trackIdsInOrder.length; i++) {
+      batch.update('tracks', {'idx': i},
+          where: 'id = ? AND playlistId = ?',
+          whereArgs: [trackIdsInOrder[i], playlistId]);
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<void> deletePlaylist(String id) async {
@@ -92,7 +181,7 @@ class PlaylistDatabase {
 
   Future<List<PlaylistModel>> getAllPlaylists() async {
     final db = await database;
-    final maps = await db.query('playlists', orderBy: 'title ASC');
+    final maps = await db.query('playlists', orderBy: 'createdAt DESC');
     return maps.map((m) => PlaylistModel.fromMap(m)).toList();
   }
 
@@ -199,5 +288,53 @@ class PlaylistDatabase {
         )
     ''');
     return result.map((r) => r['id'] as String).toSet();
+  }
+
+  Future<void> toggleFavoriteTrack(TrackModel track) async {
+    final db = await database;
+    final existing = await db.query('favorite_tracks',
+        where: 'id = ?', whereArgs: [track.id], limit: 1);
+    if (existing.isNotEmpty) {
+      await db.delete('favorite_tracks', where: 'id = ?', whereArgs: [track.id]);
+    } else {
+      await db.insert('favorite_tracks', {
+        'id': track.id,
+        'title': track.title,
+        'thumbnailUrl': track.thumbnailUrl,
+        'durationSeconds': track.durationSeconds,
+        'author': track.author,
+        'favoritedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+    }
+  }
+
+  Future<bool> isTrackFavorite(String trackId) async {
+    final db = await database;
+    final result = await db.query('favorite_tracks',
+        where: 'id = ?', whereArgs: [trackId], limit: 1);
+    return result.isNotEmpty;
+  }
+
+  Future<Set<String>> getFavoriteTrackIds() async {
+    final db = await database;
+    final result = await db.query('favorite_tracks', columns: ['id']);
+    return result.map((r) => r['id'] as String).toSet();
+  }
+
+  Future<List<TrackModel>> getFavoriteTracks() async {
+    final db = await database;
+    final maps = await db.query('favorite_tracks', orderBy: 'favoritedAt DESC');
+    final tracks = maps.map((m) => TrackModel.fromMap(m)).toList();
+    for (var i = 0; i < tracks.length; i++) {
+      tracks[i] = TrackModel(
+        id: tracks[i].id,
+        title: tracks[i].title,
+        thumbnailUrl: tracks[i].thumbnailUrl,
+        durationSeconds: tracks[i].durationSeconds,
+        author: tracks[i].author,
+        index: i,
+      );
+    }
+    return tracks;
   }
 }

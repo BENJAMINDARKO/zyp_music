@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../core/utils/format_duration.dart';
 import '../providers/player_provider.dart';
+import '../providers/playlist_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/queue_sheet.dart';
 
@@ -12,8 +13,8 @@ class PlayerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<PlayerProvider, SettingsProvider>(
-      builder: (context, player, settings, _) {
+    return Consumer3<PlayerProvider, SettingsProvider, PlaylistProvider>(
+      builder: (context, player, settings, playlistProvider, _) {
         if (player.currentTrack == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Player')),
@@ -25,11 +26,20 @@ class PlayerScreen extends StatelessWidget {
         final progress = player.duration.inMilliseconds > 0
             ? player.position.inMilliseconds / player.duration.inMilliseconds
             : 0.0;
+        final isFav = playlistProvider.isFavorite(track.id);
 
         return Scaffold(
           appBar: AppBar(
             title: const Text('Now Playing'),
             actions: [
+              IconButton(
+                icon: Icon(
+                  isFav ? Icons.star : Icons.star_border,
+                  color: isFav ? Colors.amber : null,
+                ),
+                tooltip: isFav ? 'Remove from favorites' : 'Add to favorites',
+                onPressed: () => playlistProvider.toggleFavorite(track),
+              ),
               if (player.isSleepTimerActive)
                 TextButton(
                   onPressed: () => _showSleepTimerDialog(context, player),

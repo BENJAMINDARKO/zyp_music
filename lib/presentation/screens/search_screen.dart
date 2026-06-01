@@ -43,11 +43,13 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _playTrack(Track track) {
+  Future<void> _playTrack(Track track) async {
     final player = context.read<PlayerProvider>();
     final quality = context.read<SettingsProvider>().audioQuality;
     player.setQueue([track], startIndex: 0);
     player.playTrack(track, quality: quality);
+    await context.read<PlaylistProvider>().saveSingleTrack(track);
+    if (!mounted) return;
     Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
   }
 
@@ -139,6 +141,8 @@ class _SearchScreenState extends State<SearchScreen> {
         itemCount: _results.length,
         itemBuilder: (context, index) {
           final track = _results[index];
+          final playlistProvider = context.watch<PlaylistProvider>();
+          final isFav = playlistProvider.isFavorite(track.id);
           return ListTile(
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(4),
@@ -157,14 +161,29 @@ class _SearchScreenState extends State<SearchScreen> {
             title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text('${track.author ?? "Unknown"} · ${formatDuration(track.duration)}',
                 maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'play') _playTrack(track);
-                if (value == 'queue') _playTrackNext(track);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'play', child: ListTile(leading: Icon(Icons.play_arrow), title: Text('Play now'))),
-                const PopupMenuItem(value: 'queue', child: ListTile(leading: Icon(Icons.queue_music), title: Text('Play next'))),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    isFav ? Icons.star : Icons.star_border,
+                    size: 18,
+                    color: isFav ? Colors.amber : null,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => playlistProvider.toggleFavorite(track),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'play') _playTrack(track);
+                    if (value == 'queue') _playTrackNext(track);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'play', child: ListTile(leading: Icon(Icons.play_arrow), title: Text('Play now'))),
+                    const PopupMenuItem(value: 'queue', child: ListTile(leading: Icon(Icons.queue_music), title: Text('Play next'))),
+                  ],
+                ),
               ],
             ),
             onTap: () => _playTrack(track),

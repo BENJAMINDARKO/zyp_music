@@ -18,6 +18,7 @@ class PlaylistProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   PlaylistSortMode _sortMode = PlaylistSortMode.dateAdded;
+  Set<String> _favoriteIds = {};
 
   PlaylistSortMode get sortMode => _sortMode;
 
@@ -121,6 +122,56 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
+  Set<String> get favoriteIds => _favoriteIds;
+
+  bool isFavorite(String trackId) => _favoriteIds.contains(trackId);
+
+  Future<void> loadFavoriteIds() async {
+    try {
+      _favoriteIds = await _repository.getFavoriteIds();
+      notifyListeners();
+    } catch (e) {
+      dev.log('Failed to load favorite IDs: $e', name: 'PlaylistProvider');
+    }
+  }
+
+  Future<void> toggleFavorite(Track track) async {
+    final wasFavorite = _favoriteIds.contains(track.id);
+    if (wasFavorite) {
+      _favoriteIds.remove(track.id);
+    } else {
+      _favoriteIds.add(track.id);
+    }
+    notifyListeners();
+    try {
+      await _repository.toggleFavorite(track);
+    } catch (e) {
+      if (wasFavorite) {
+        _favoriteIds.add(track.id);
+      } else {
+        _favoriteIds.remove(track.id);
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<Playlist?> getFavoritesPlaylist() async {
+    try {
+      final tracks = await _repository.getFavoriteTracks();
+      if (tracks.isEmpty) return null;
+      return Playlist(
+        id: '__favorites__',
+        title: 'Favorites',
+        thumbnailUrl: tracks.first.thumbnailUrl,
+        videoCount: tracks.length,
+        tracks: tracks,
+      );
+    } catch (e) {
+      dev.log('Failed to get favorites playlist: $e', name: 'PlaylistProvider');
+      return null;
+    }
+  }
+
   Future<List<Track>?> getCachedTracks(String playlistId) async {
     try {
       return _repository.getCachedTracks(playlistId);
@@ -128,6 +179,84 @@ class PlaylistProvider extends ChangeNotifier {
       dev.log('Failed to get cached tracks for $playlistId: $e',
           name: 'PlaylistProvider');
       return null;
+    }
+  }
+
+  Future<void> saveSingleTrack(Track track) async {
+    final playlist = Playlist(
+      id: track.id,
+      title: track.title,
+      author: track.author,
+      thumbnailUrl: track.thumbnailUrl,
+      videoCount: 1,
+      tracks: [track],
+    );
+    await _repository.savePlaylist(playlist);
+    await _reloadSilently();
+    notifyListeners();
+  }
+
+  Future<void> renamePlaylist(String id, String newTitle) async {
+    final index = _playlists.indexWhere((p) => p.id == id);
+    if (index == -1) return;
+    try {
+      await _repository.updatePlaylistTitle(id, newTitle);
+      _playlists[index] = Playlist(
+        id: _playlists[index].id,
+        title: newTitle,
+        description: _playlists[index].description,
+        thumbnailUrl: _playlists[index].thumbnailUrl,
+        author: _playlists[index].author,
+        videoCount: _playlists[index].videoCount,
+        tracks: _playlists[index].tracks,
+      );
+      if (_currentPlaylist?.id == id) {
+        _currentPlaylist = Playlist(
+          id: _currentPlaylist!.id,
+          title: newTitle,
+          description: _currentPlaylist!.description,
+          thumbnailUrl: _currentPlaylist!.thumbnailUrl,
+          author: _currentPlaylist!.author,
+          videoCount: _currentPlaylist!.videoCount,
+          tracks: _currentPlaylist!.tracks,
+        );
+      }
+      notifyListeners();
+    } catch (e) {
+      dev.log('Failed to rename playlist $id: $e', name: 'PlaylistProvider');
+    }
+  }
+
+  Future<void> removeTrackFromPlaylist(
+      String playlistId, String trackId) async {
+    if (_currentPlaylist?.id == playlistId) {
+      _currentPlaylist = Playlist(
+        id: _currentPlaylist!.id,
+        title: _currentPlaylist!.title,
+        description: _currentPlaylist!.description,
+        thumbnailUrl: _currentPlaylist!.thumbnailUrl,
+        author: _currentPlaylist!.author,
+        videoCount: _currentPlaylist!.videoCount - 1,
+        tracks:
+            _currentPlaylist!.tracks.where((t) => t.id != trackId).toList(),
+      );
+      notifyListeners();
+    }
+    try {
+      await _repository.removeTrack(playlistId, trackId);
+    } catch (e) {
+      dev.log('Failed to remove track $trackId from $playlistId: $e',
+          name: 'PlaylistProvider');
+    }
+  }
+
+  Future<void> reorderTracks(
+      String playlistId, List<String> trackIdsInOrder) async {
+    try {
+      await _repository.reorderTracks(playlistId, trackIdsInOrder);
+    } catch (e) {
+      dev.log('Failed to reorder tracks in $playlistId: $e',
+          name: 'PlaylistProvider');
     }
   }
 

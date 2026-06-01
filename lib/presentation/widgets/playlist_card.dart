@@ -63,8 +63,18 @@ class PlaylistCard extends StatelessWidget {
         color: Colors.red,
         child: const Icon(Icons.delete, color: Colors.white),
       ),
-      child: Card(
+      child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: isCurrentPlaylist
+              ? const Border(
+                  left: BorderSide(color: Color(0xFF1DB954), width: 4),
+                )
+              : null,
+        ),
+        child: Card(
+        margin: EdgeInsets.zero,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -133,6 +143,7 @@ class PlaylistCard extends StatelessWidget {
               ),
           ],
         ),
+      ),
       ),
     );
   }

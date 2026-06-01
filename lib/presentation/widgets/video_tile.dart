@@ -10,6 +10,8 @@ class TrackTile extends StatelessWidget {
   final bool isDownloaded;
   final bool isDownloading;
   final VoidCallback? onDownload;
+  final bool isFavorite;
+  final VoidCallback? onToggleFavorite;
 
   const TrackTile({
     super.key,
@@ -19,6 +21,8 @@ class TrackTile extends StatelessWidget {
     this.isDownloaded = false,
     this.isDownloading = false,
     this.onDownload,
+    this.isFavorite = false,
+    this.onToggleFavorite,
   });
 
   @override
@@ -52,24 +56,39 @@ class TrackTile extends StatelessWidget {
         '${track.author ?? 'Unknown'} · ${formatDuration(track.duration)}',
         style: const TextStyle(fontSize: 12),
       ),
-      trailing: isCurrent
-          ? const Icon(Icons.play_arrow, size: 20)
-          : isDownloading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : isDownloaded
-                  ? const Icon(Icons.download_done, size: 18, color: Colors.green)
-                  : onDownload != null
-                      ? IconButton(
-                          icon: const Icon(Icons.download, size: 18),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: onDownload,
-                        )
-                      : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onToggleFavorite != null)
+            IconButton(
+              icon: Icon(
+                isFavorite ? Icons.star : Icons.star_border,
+                size: 18,
+                color: isFavorite ? Colors.amber : null,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: onToggleFavorite,
+            ),
+          if (isCurrent)
+            const Icon(Icons.play_arrow, size: 20)
+          else if (isDownloading)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (isDownloaded)
+            const Icon(Icons.download_done, size: 18, color: Colors.green)
+          else if (onDownload != null)
+            IconButton(
+              icon: const Icon(Icons.download, size: 18),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: onDownload,
+            ),
+        ],
+      ),
       onTap: onTap,
     );
   }

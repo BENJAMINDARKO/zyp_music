@@ -24,32 +24,76 @@ class YoutubeRemoteDataSource {
   }
 
   Future<PlaylistModel> getPlaylist(String playlistId) async {
-    final ytPlaylist = await _yt.playlists.get(playlistId);
-    final videos = await _yt.playlists.getVideos(playlistId).toList();
+    var attempt = 0;
+    final stopwatch = Stopwatch()..start();
 
-    final tracks = <TrackModel>[];
-    for (var i = 0; i < videos.length; i++) {
-      final video = videos[i];
-      tracks.add(TrackModel(
-        id: video.id.value,
-        title: video.title,
-        author: video.author,
-        durationSeconds: video.duration?.inSeconds ?? 0,
-        thumbnailUrl: video.thumbnails.mediumResUrl,
-        index: i,
-      ));
+    while (true) {
+      attempt++;
+      try {
+        final ytPlaylist = await _yt.playlists
+            .get(playlistId)
+            .timeout(_timeout);
+
+        final title = ytPlaylist.title;
+        final author = ytPlaylist.author;
+
+        final videos = await () async {
+          try {
+            return await _yt.playlists
+                .getVideos(playlistId)
+                .toList()
+                .timeout(_timeout);
+          } catch (e) {
+            dev.log('Playlist videos fetch failed for $playlistId (attempt $attempt): $e',
+                name: 'YoutubeRemoteDataSource');
+            return <dynamic>[];
+          }
+        }();
+
+        if (videos.isEmpty) {
+          throw Exception('No videos found for playlist/mix $playlistId');
+        }
+
+        final tracks = <TrackModel>[];
+        for (var i = 0; i < videos.length; i++) {
+          final video = videos[i];
+          tracks.add(TrackModel(
+            id: video.id.value,
+            title: video.title,
+            author: video.author,
+            durationSeconds: video.duration?.inSeconds ?? 0,
+            thumbnailUrl: video.thumbnails.mediumResUrl,
+            index: i,
+          ));
+        }
+
+        final thumbnailUrl = tracks.isNotEmpty ? tracks.first.thumbnailUrl : null;
+
+        return PlaylistModel(
+          id: playlistId,
+          title: title,
+          author: author,
+          thumbnailUrl: thumbnailUrl,
+          videoCount: tracks.length,
+          tracks: tracks,
+        );
+      } on TimeoutException {
+        dev.log('Attempt $attempt timed out for playlist $playlistId',
+            name: 'YoutubeRemoteDataSource');
+        if (attempt >= 3 || stopwatch.elapsed > const Duration(seconds: 45)) {
+          rethrow;
+        }
+        await Future.delayed(Duration(seconds: 2 * attempt));
+      } on Exception catch (e) {
+        final msg = e.toString();
+        dev.log('Playlist fetch attempt $attempt failed for $playlistId: $msg',
+            name: 'YoutubeRemoteDataSource');
+        if (attempt >= 3 || stopwatch.elapsed > const Duration(seconds: 45)) {
+          rethrow;
+        }
+        await Future.delayed(Duration(seconds: 2 * attempt));
+      }
     }
-
-    final thumbnailUrl = tracks.isNotEmpty ? tracks.first.thumbnailUrl : null;
-
-    return PlaylistModel(
-      id: playlistId,
-      title: ytPlaylist.title,
-      author: ytPlaylist.author,
-      thumbnailUrl: thumbnailUrl,
-      videoCount: tracks.length,
-      tracks: tracks,
-    );
   }
 
   Future<TrackModel> getVideo(String videoId) async {

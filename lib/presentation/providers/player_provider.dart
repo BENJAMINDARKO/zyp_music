@@ -34,7 +34,6 @@ class PlayerProvider extends ChangeNotifier {
   Duration _duration = Duration.zero;
   String? _error;
   String? _currentPlaylistId;
-  Timer? _pollTimer;
   StreamSubscription? _completionSubscription;
   StreamSubscription? _skipNextSubscription;
   StreamSubscription? _skipPrevSubscription;
@@ -299,19 +298,15 @@ class PlayerProvider extends ChangeNotifier {
     _durationSub?.cancel();
     _positionSub = _audioRepository.positionStream.listen((pos) {
       _position = pos;
+      notifyListeners();
     });
     _durationSub = _audioRepository.durationStream.listen((dur) {
       _duration = dur;
-    });
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
       notifyListeners();
     });
   }
 
   void _stopPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
     _positionSub?.cancel();
     _positionSub = null;
     _durationSub?.cancel();

@@ -7,26 +7,38 @@ A Flutter mobile app that streams audio from public YouTube playlists, single vi
 ### Playback
 - **Offline-first** — plays from local files when downloaded, streams only when unavailable; no redundant redirect resolution
 - **Play/pause state indicators** — toggle icon reflects playback status on home screen, playlist screen, player bar, and expanded player
-- **Queue management** — play, pause, skip, previous, auto-advance on track completion
-- **Pre-download ahead** — silently downloads the next 3 tracks in the queue so there's no delay between songs
+- **Queue management** — play, pause, skip, previous, shuffle, repeat, auto-advance on track completion
+- **Sleep timer** — 15m/30m/60m/custom timer to auto-stop playback
 - **Lockscreen & notification controls** — Android media notification with play/pause/skip buttons
 
 ### Import & Search
-- **Collapsible search bar** — search icon expands into the full URL input field, retracts after submission
-- **YouTube URL import** — paste a video, playlist, or mix URL (RD mixes included)
+- **YouTube search** — search YouTube directly from the app, play results instantly
+- **URL import** — paste a video, playlist, or mix URL to add to your library
+- **Auto-save to library** — searched and played tracks are automatically saved to your homescreen as single-track playlists
 
-### Downloads
+### Downloads & Cache
 - **Per-track download** — download individual tracks directly from the playlist list
 - **Playlist download** — bulk download with per-track progress, percentage, and cancel support
 - **Download status colors** — green icon when fully downloaded, orange while downloading, spinner for in-progress tracks
 - **Home screen download** — download playlists directly from the home screen card (with cached tracks)
+- **Cache management** — view total cache size in settings; clear per-playlist or all cached downloads
+- **Pre-download ahead** — silently downloads the next tracks in the queue so there's no delay between songs
+
+### Playlist Management
+- **Sort playlists** — by title, date added, or track count
+- **Import/Export** — backup and restore your library as JSON, XML, or Markdown
+- **Swipe to delete** — remove playlists with a swipe
+- **Rename playlists** — edit playlist title inline
+- **Reorder tracks** — long-press drag to reorder tracks within a playlist
+- **Remove individual tracks** — swipe-to-delete on any track
+- **Star / Favorites** — star/unstar tracks anywhere (playlist, player, search); dedicated "Favorites" playlist card on home screen
 
 ### UI
 - **Now-playing card** — home screen shows current track with thumbnail, controls, progress bar; tap for expanded player
 - **Expanded player** — full-screen with album art, seek slider, large playback controls
 - **Mini player** — persistent bar at the bottom of the playlist screen
+- **Recently played** — horizontal scrolling list of recently played tracks
 - **Dark theme** — Spotify-inspired dark UI with custom pixel-art logo
-- **Playlist management** — swipe to delete, play/pause from card, auto-download flag
 
 ## Tech Stack
 
@@ -84,7 +96,9 @@ flutter run
 flutter build apk --release
 ```
 
-Output: `build/app/outputs/flutter-apk/app-release.apk` (~55MB)
+Output: `build/app/outputs/flutter-apk/app-release.apk` (~57MB)
+
+A prebuilt release APK is also available at the project root as [`ytmusix.apk`](ytmusix.apk).
 
 ## Project Structure
 
@@ -155,21 +169,13 @@ lib/
 flutter test
 ```
 
-39 tests covering models, providers, utilities, services, and widgets.
+_(No tests currently — test directory removed during refactoring.)_
 
 ## Known Issues
 
 ### App
 - **Pub cache patch** — overwritten when `flutter pub upgrade` runs; must be re-applied manually.
-- **YouTube mixes** — may still not load depending on mix metadata structure (tracked in `futureroadmap.txt`).
 - **Samsung GPU `BufferQueue` timeout** — harmless Adreno driver spam in logcat on Exynos devices; does not affect playback.
-
-### Code Quality (tracked in `errorandFeatureRequest.txt`)
-- **300ms polling** — `PlayerProvider` fires `notifyListeners()` every 300ms via `Timer.periodic` plus stream listeners. Causes ~3 forced rebuilds/sec.
-- **HTTP client leak** — `MusicAudioHandler.resolveRedirects()` creates `http.Client()` without closing it.
-- **DB race on init** — `PlaylistDatabase._database` can double-init under concurrent access.
-- **No index on `downloaded_tracks.playlistId`** — full table scans at scale.
-- **Sequential pre-downloads** — `preDownloadUpcoming` awaits each track sequentially instead of batching.
 
 ## Roadmap
 

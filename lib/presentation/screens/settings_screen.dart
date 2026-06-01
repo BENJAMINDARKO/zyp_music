@@ -6,6 +6,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/constants/audio_quality.dart';
 import '../providers/settings_provider.dart';
 import '../providers/playlist_provider.dart';
+import '../providers/download_provider.dart';
 import '../../service/auth_service.dart';
 import 'login_screen.dart';
 
@@ -66,6 +67,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSectionHeader('Import / Export'),
               const SizedBox(height: 8),
               _buildImportExportSection(),
+              const SizedBox(height: 32),
+              _buildSectionHeader('Storage'),
+              const SizedBox(height: 8),
+              _buildStorageSection(),
               const SizedBox(height: 32),
               _buildInfoButton(),
               const SizedBox(height: 32),
@@ -314,6 +319,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildStorageSection() {
+    return FutureBuilder<int>(
+      future: context.read<DownloadProvider>().getTotalCacheSize(),
+      builder: (context, snapshot) {
+        final sizeBytes = snapshot.data ?? 0;
+        final sizeText = sizeBytes > 0
+            ? _formatBytes(sizeBytes)
+            : 'No cached data';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.storage, size: 18, color: Colors.white70),
+                const SizedBox(width: 8),
+                Text(
+                  'Cached downloads: $sizeText',
+                  style: const TextStyle(fontSize: 14, color: Colors.white70),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: sizeBytes > 0
+                    ? () => _clearAllDownloads(context)
+                    : null,
+                icon: const Icon(Icons.delete_sweep, size: 18),
+                label: const Text('Clear all cached downloads'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: BorderSide(color: sizeBytes > 0 ? Colors.redAccent : Colors.grey[700]!),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _clearAllDownloads(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear all downloads?'),
+        content: const Text('Remove all downloaded audio files from your device?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Clear all', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      final provider = context.read<DownloadProvider>();
+      final allPlaylistIds = context.read<PlaylistProvider>().playlists.map((p) => p.id).toList();
+      for (final id in allPlaylistIds) {
+        await provider.deleteDownloadedPlaylist(id);
+      }
+      setState(() {});
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All cached downloads cleared')),
+        );
+      }
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   Widget _buildInfoButton() {

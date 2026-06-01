@@ -28,8 +28,67 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PlaylistProvider>().loadSavedPlaylists();
+      context.read<PlaylistProvider>().loadFavoriteIds();
       context.read<PlayerProvider>().loadRecentlyPlayed();
     });
+  }
+
+  Future<void> _showLinkDialog(BuildContext context) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Paste YouTube link'),
+        content: TextField(
+          autofocus: true,
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Video, playlist, or mix link',
+            prefixIcon: Icon(Icons.link),
+          ),
+          onSubmitted: (value) => Navigator.of(ctx).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    final text = result?.trim();
+    if (text == null || text.isEmpty) return;
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Loading $text...'), duration: const Duration(seconds: 2)),
+    );
+
+    final provider = context.read<PlaylistProvider>();
+    final playlist = await provider.fetchFromUrl(text);
+
+    if (playlist != null && mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PlaylistScreen(playlist: playlist),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.error ?? 'Failed to load link'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -87,6 +146,11 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.sort),
               tooltip: 'Sort playlists',
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.link),
+            tooltip: 'Paste YouTube link',
+            onPressed: () => _showLinkDialog(context),
           ),
           IconButton(
             icon: const Icon(Icons.search),
@@ -263,7 +327,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (provider.playlists.isEmpty) {
+        if (provider.playlists.isEmpty && provider.favoriteIds.isEmpty) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -292,9 +356,42 @@ class _HomeScreenState extends State<HomeScreen> {
           onRefresh: () => provider.loadSavedPlaylists(),
           child: ListView.builder(
             padding: const EdgeInsets.only(bottom: 8),
-            itemCount: provider.playlists.length,
+            itemCount: provider.playlists.length + (provider.favoriteIds.isNotEmpty ? 1 : 0),
             itemBuilder: (context, index) {
-              final playlist = provider.playlists[index];
+              if (provider.favoriteIds.isNotEmpty && index == 0) {
+                return FutureBuilder<Playlist?>(
+                  future: provider.getFavoritesPlaylist(),
+                  builder: (context, snapshot) {
+                    final favPlaylist = snapshot.data;
+                    if (favPlaylist == null) return const SizedBox.shrink();
+                    return PlaylistCard(
+                      playlist: favPlaylist,
+                      isCurrentPlaylist: playerProvider.currentPlaylistId == '__favorites__',
+                      isPlaying: playerProvider.isPlaying,
+                      isDownloaded: false,
+                      isDownloading: false,
+                      downloadProgress: null,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PlaylistScreen(playlist: favPlaylist),
+                          ),
+                        );
+                      },
+                      onPlay: () async {
+                        final quality = context.read<SettingsProvider>().audioQuality;
+                        playerProvider.setQueue(favPlaylist.tracks, startIndex: 0, playlistId: '__favorites__');
+                        playerProvider.playTrack(favPlaylist.tracks.first, quality: quality);
+                      },
+                      onDownload: null,
+                      onDelete: null,
+                    );
+                  },
+                );
+              }
+              final playlistIndex = provider.favoriteIds.isNotEmpty ? index - 1 : index;
+              final playlist = provider.playlists[playlistIndex];
               final isCurrentPlaylist = playerProvider.currentPlaylistId == playlist.id;
               final isDownloading = downloadProvider.isDownloadingPlaylist(playlist.id);
               final isDownloaded = downloadProvider.isPlaylistFullyDownloaded(playlist.id);

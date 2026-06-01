@@ -196,8 +196,14 @@ class MusicAudioHandler extends BaseAudioHandler {
 
   Future<Map<String, String>> getHeaders() => _getHeaders();
 
-  Future<String> resolveRedirects(String url) =>
-      NetworkUtils.resolveRedirects(http.Client(), url, headers: null);
+  Future<String> resolveRedirects(String url) async {
+    final client = http.Client();
+    try {
+      return await NetworkUtils.resolveRedirects(client, url, headers: null);
+    } finally {
+      client.close();
+    }
+  }
 
   void dispose() {
     _playerStateSub?.cancel();

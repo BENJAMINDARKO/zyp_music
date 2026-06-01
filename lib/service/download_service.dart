@@ -199,6 +199,31 @@ class DownloadService {
     await _database.removeDownloadedPlaylist(playlistId);
   }
 
+  Future<int> getTotalCacheSize() async {
+    final tracks = await _database.getAllDownloadedTrackIds();
+    var total = 0;
+    for (final id in tracks) {
+      final path = await _database.getDownloadedFilePath(id);
+      if (path != null) {
+        try {
+          total += File(path).lengthSync();
+        } catch (_) {}
+      }
+    }
+    return total;
+  }
+
+  Future<int> getPlaylistCacheSize(String playlistId) async {
+    final paths = await _database.getDownloadedFilePaths(playlistId);
+    var total = 0;
+    for (final path in paths) {
+      try {
+        total += File(path).lengthSync();
+      } catch (_) {}
+    }
+    return total;
+  }
+
   void dispose() {
     _client.close();
     _progressController.close();

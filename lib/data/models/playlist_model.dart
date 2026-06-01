@@ -8,6 +8,7 @@ class PlaylistModel {
   final String? thumbnailUrl;
   final String? author;
   final int videoCount;
+  final int createdAt;
   final List<TrackModel> tracks;
 
   PlaylistModel({
@@ -17,6 +18,7 @@ class PlaylistModel {
     this.thumbnailUrl,
     this.author,
     this.videoCount = 0,
+    this.createdAt = 0,
     this.tracks = const [],
   });
 
@@ -28,6 +30,7 @@ class PlaylistModel {
       thumbnailUrl: map['thumbnailUrl'] as String?,
       author: map['author'] as String?,
       videoCount: map['videoCount'] as int? ?? 0,
+      createdAt: map['createdAt'] as int? ?? 0,
       tracks: (map['tracks'] as List?)
               ?.map((t) => TrackModel.fromMap(t as Map<String, dynamic>))
               .toList() ??
@@ -43,6 +46,7 @@ class PlaylistModel {
       'thumbnailUrl': thumbnailUrl,
       'author': author,
       'videoCount': videoCount,
+      'createdAt': createdAt,
     };
   }
 

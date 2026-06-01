@@ -143,6 +143,50 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   }
 
   @override
+  Future<void> updatePlaylistTitle(String id, String newTitle) async {
+    await localDatabase.updatePlaylistTitle(id, newTitle);
+  }
+
+  @override
+  Future<void> removeTrack(String playlistId, String trackId) async {
+    await localDatabase.removeTrack(playlistId, trackId);
+  }
+
+  @override
+  Future<void> reorderTracks(
+      String playlistId, List<String> trackIdsInOrder) async {
+    await localDatabase.reorderTracks(playlistId, trackIdsInOrder);
+  }
+
+  @override
+  Future<void> toggleFavorite(Track track) async {
+    await localDatabase.toggleFavoriteTrack(TrackModel(
+      id: track.id,
+      title: track.title,
+      thumbnailUrl: track.thumbnailUrl,
+      durationSeconds: track.duration.inSeconds,
+      author: track.author,
+      index: track.index,
+    ));
+  }
+
+  @override
+  Future<bool> isFavorite(String trackId) async {
+    return localDatabase.isTrackFavorite(trackId);
+  }
+
+  @override
+  Future<Set<String>> getFavoriteIds() async {
+    return localDatabase.getFavoriteTrackIds();
+  }
+
+  @override
+  Future<List<Track>> getFavoriteTracks() async {
+    final models = await localDatabase.getFavoriteTracks();
+    return models.map((m) => m.toEntity()).toList();
+  }
+
+  @override
   Future<List<Track>> search(String query) async {
     final models = await remoteDataSource.search(query);
     return models.map((m) => m.toEntity()).toList();
