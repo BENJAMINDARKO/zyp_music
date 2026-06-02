@@ -17,7 +17,9 @@ class PlayerProvider extends ChangeNotifier {
     _skipNextSubscription = _audioRepository.onSkipNextRequested.listen((_) {
       next();
     });
-    _skipPrevSubscription = _audioRepository.onSkipPreviousRequested.listen((_) {
+    _skipPrevSubscription = _audioRepository.onSkipPreviousRequested.listen((
+      _,
+    ) {
       previous();
     });
   }
@@ -32,6 +34,7 @@ class PlayerProvider extends ChangeNotifier {
   repeat.PlaybackRepeatMode _repeatMode = repeat.PlaybackRepeatMode.none;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  Duration _bufferedPosition = Duration.zero;
   String? _error;
   String? _currentPlaylistId;
   StreamSubscription? _completionSubscription;
@@ -39,6 +42,7 @@ class PlayerProvider extends ChangeNotifier {
   StreamSubscription? _skipPrevSubscription;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<Duration>? _bufferedPositionSub;
 
   Timer? _sleepTimer;
   Timer? _sleepTimerTick;
@@ -86,13 +90,19 @@ class PlayerProvider extends ChangeNotifier {
       _recentlyPlayed = _recentlyPlayed.sublist(0, _maxRecent);
     }
     final prefs = await SharedPreferences.getInstance();
-    final json = jsonEncode(_recentlyPlayed.map((t) => {
-      'id': t.id,
-      'title': t.title,
-      'author': t.author,
-      'thumbnailUrl': t.thumbnailUrl,
-      'durationSeconds': t.duration.inSeconds,
-    }).toList());
+    final json = jsonEncode(
+      _recentlyPlayed
+          .map(
+            (t) => {
+              'id': t.id,
+              'title': t.title,
+              'author': t.author,
+              'thumbnailUrl': t.thumbnailUrl,
+              'durationSeconds': t.duration.inSeconds,
+            },
+          )
+          .toList(),
+    );
     await prefs.setString(_recentlyPlayedKey, json);
   }
 
@@ -142,6 +152,7 @@ class PlayerProvider extends ChangeNotifier {
   repeat.PlaybackRepeatMode get repeatMode => _repeatMode;
   Duration get position => _position;
   Duration get duration => _duration;
+  Duration get bufferedPosition => _bufferedPosition;
   String? get error => _error;
   String? get currentPlaylistId => _currentPlaylistId;
   bool get isSleepTimerActive => _sleepTimer != null;
@@ -186,7 +197,9 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   void cycleRepeatMode() {
-    _repeatMode = repeat.PlaybackRepeatMode.values[(_repeatMode.index + 1) % repeat.PlaybackRepeatMode.values.length];
+    _repeatMode =
+        repeat.PlaybackRepeatMode.values[(_repeatMode.index + 1) %
+            repeat.PlaybackRepeatMode.values.length];
     notifyListeners();
   }
 
@@ -203,7 +216,8 @@ class PlayerProvider extends ChangeNotifier {
     });
     _sleepTimerTick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_sleepTimerRemaining != null && _sleepTimerRemaining!.inSeconds > 0) {
-        _sleepTimerRemaining = _sleepTimerRemaining! - const Duration(seconds: 1);
+        _sleepTimerRemaining =
+            _sleepTimerRemaining! - const Duration(seconds: 1);
         notifyListeners();
       }
     });
@@ -219,17 +233,26 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> playTrack(Track track, {AudioQuality quality = AudioQuality.low}) async {
+  Future<void> playTrack(
+    Track track, {
+    AudioQuality quality = AudioQuality.low,
+  }) async {
     _isLoading = true;
     _error = null;
+    _currentTrack = track;
+    _position = Duration.zero;
+    _duration = track.duration;
+    _bufferedPosition = Duration.zero;
     _stopPolling();
     _completionSubscription?.cancel();
     notifyListeners();
 
     try {
-      _currentTrack = track;
       _addToRecentlyPlayed(track);
-      final audioUrl = await _audioRepository.getAudioUrl(track, quality: quality.name);
+      final audioUrl = await _audioRepository.getAudioUrl(
+        track,
+        quality: quality.name,
+      );
       await _audioRepository.playTrack(track, audioUrl);
       _isPlaying = true;
       _startPolling();
@@ -245,7 +268,10 @@ class PlayerProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> playFromQueue(int index, {AudioQuality quality = AudioQuality.low}) async {
+  Future<void> playFromQueue(
+    int index, {
+    AudioQuality quality = AudioQuality.low,
+  }) async {
     if (index < 0 || index >= _queue.length) return;
     _currentIndex = index;
     await playTrack(_queue[index], quality: quality);
@@ -268,11 +294,13 @@ class PlayerProvider extends ChangeNotifier {
   }
 
   Future<void> seekTo(Duration position) async {
+    final previous = _position;
+    _position = position;
+    notifyListeners();
     try {
       await _audioRepository.seek(position);
-      _position = position;
-      notifyListeners();
     } catch (e) {
+      _position = previous;
       _error = 'Failed to seek: ${e.toString()}';
       notifyListeners();
     }
@@ -281,7 +309,8 @@ class PlayerProvider extends ChangeNotifier {
   Future<void> next() async {
     if (_currentIndex + 1 < _queue.length) {
       await playFromQueue(_currentIndex + 1);
-    } else if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
+    } else if (_repeatMode == repeat.PlaybackRepeatMode.all &&
+        _queue.isNotEmpty) {
       await playFromQueue(0);
     }
   }
@@ -296,8 +325,15 @@ class PlayerProvider extends ChangeNotifier {
   void _startPolling() {
     _positionSub?.cancel();
     _durationSub?.cancel();
+    _bufferedPositionSub?.cancel();
     _positionSub = _audioRepository.positionStream.listen((pos) {
       _position = pos;
+      notifyListeners();
+    });
+    _bufferedPositionSub = _audioRepository.bufferedPositionStream.listen((
+      pos,
+    ) {
+      _bufferedPosition = pos;
       notifyListeners();
     });
     _durationSub = _audioRepository.durationStream.listen((dur) {
@@ -311,12 +347,15 @@ class PlayerProvider extends ChangeNotifier {
     _positionSub = null;
     _durationSub?.cancel();
     _durationSub = null;
+    _bufferedPositionSub?.cancel();
+    _bufferedPositionSub = null;
   }
 
   void _listenForCompletion() {
     _completionSubscription?.cancel();
-    _completionSubscription =
-        _audioRepository.processingStateStream.listen((state) {
+    _completionSubscription = _audioRepository.processingStateStream.listen((
+      state,
+    ) {
       if (state == ProcessingState.completed && _queue.isNotEmpty) {
         if (_repeatMode == repeat.PlaybackRepeatMode.one) {
           playFromQueue(_currentIndex);
@@ -335,6 +374,7 @@ class PlayerProvider extends ChangeNotifier {
     await _audioRepository.stop();
     _isPlaying = false;
     _position = Duration.zero;
+    _bufferedPosition = Duration.zero;
     notifyListeners();
   }
 
@@ -371,6 +411,7 @@ class PlayerProvider extends ChangeNotifier {
     _skipPrevSubscription?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
+    _bufferedPositionSub?.cancel();
     super.dispose();
   }
 }

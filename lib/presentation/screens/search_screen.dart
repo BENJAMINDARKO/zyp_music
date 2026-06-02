@@ -50,65 +50,132 @@ class _SearchScreenState extends State<SearchScreen> {
     player.playTrack(track, quality: quality);
     await context.read<PlaylistProvider>().saveSingleTrack(track);
     if (!mounted) return;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PlayerScreen()),
+    );
   }
 
   void _playTrackNext(Track track) {
     final player = context.read<PlayerProvider>();
     final newQueue = List<Track>.from(player.queue);
     newQueue.insert(player.currentIndex + 1, track);
-    player.setQueue(newQueue, startIndex: player.currentIndex, playlistId: player.currentPlaylistId);
+    player.setQueue(
+      newQueue,
+      startIndex: player.currentIndex,
+      playlistId: player.currentPlaylistId,
+    );
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('"${track.title}" added to queue'), duration: const Duration(seconds: 2)),
+      SnackBar(
+        content: Text('"${track.title}" added to queue'),
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Search YouTube')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _controller,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'Search for music...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _controller.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: IconButton(
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFF191919),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 18,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Text(
+                    'Search',
+                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF171717),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white.withAlpha(14)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search_rounded, color: Colors.white54),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Search for music...',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onSubmitted: (_) => _search(),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    if (_controller.text.isNotEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
                         onPressed: () {
                           _controller.clear();
                           setState(() {});
                         },
-                      )
-                    : null,
+                      ),
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: _isSearching ? null : _search,
+                        icon: _isSearching
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.arrow_forward_rounded),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              onSubmitted: (_) => _search(),
-              onChanged: (_) => setState(() {}),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isSearching ? null : _search,
-                icon: _isSearching
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.search),
-                label: Text(_isSearching ? 'Searching...' : 'Search'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: _buildResults(),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Expanded(child: _buildResults()),
+          ],
+        ),
       ),
     );
   }
@@ -124,69 +191,110 @@ class _SearchScreenState extends State<SearchScreen> {
           children: [
             Icon(Icons.search, size: 64, color: Colors.grey[600]),
             const SizedBox(height: 16),
-            Text('Search for music on YouTube', style: TextStyle(color: Colors.grey[400])),
+            Text(
+              'Search for music on YouTube',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
           ],
         ),
       );
     }
     if (_results.isEmpty) {
       return Center(
-        child: Text('No results found', style: TextStyle(color: Colors.grey[400])),
+        child: Text(
+          'No results found',
+          style: TextStyle(color: Colors.grey[400]),
+        ),
       );
     }
     return RefreshIndicator(
       onRefresh: _search,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
         itemCount: _results.length,
         itemBuilder: (context, index) {
           final track = _results[index];
           final playlistProvider = context.watch<PlaylistProvider>();
           final isFav = playlistProvider.isFavorite(track.id);
-          return ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Image.network(
-                track.thumbnailUrl ?? '',
-                width: 48,
-                height: 48,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Container(
-                  width: 48, height: 48,
-                  color: Colors.grey[800],
-                  child: const Icon(Icons.music_note),
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF171717),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withAlpha(12)),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              leading: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  track.thumbnailUrl ?? '',
+                  width: 54,
+                  height: 54,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    width: 48,
+                    height: 48,
+                    color: Colors.grey[800],
+                    child: const Icon(Icons.music_note),
+                  ),
                 ),
               ),
-            ),
-            title: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('${track.author ?? "Unknown"} · ${formatDuration(track.duration)}',
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    isFav ? Icons.star : Icons.star_border,
-                    size: 18,
-                    color: isFav ? Colors.amber : null,
+              title: Text(
+                track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                '${track.author ?? "Unknown"} · ${formatDuration(track.duration)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      isFav
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      size: 18,
+                      color: isFav ? const Color(0xFFFF7FA4) : null,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => playlistProvider.toggleFavorite(track),
                   ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => playlistProvider.toggleFavorite(track),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'play') _playTrack(track);
-                    if (value == 'queue') _playTrackNext(track);
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'play', child: ListTile(leading: Icon(Icons.play_arrow), title: Text('Play now'))),
-                    const PopupMenuItem(value: 'queue', child: ListTile(leading: Icon(Icons.queue_music), title: Text('Play next'))),
-                  ],
-                ),
-              ],
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'play') _playTrack(track);
+                      if (value == 'queue') _playTrackNext(track);
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'play',
+                        child: ListTile(
+                          leading: Icon(Icons.play_arrow_rounded),
+                          title: Text('Play now'),
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'queue',
+                        child: ListTile(
+                          leading: Icon(Icons.queue_music_rounded),
+                          title: Text('Play next'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              onTap: () => _playTrack(track),
             ),
-            onTap: () => _playTrack(track),
           );
         },
       ),
