@@ -12,6 +12,7 @@ class TrackTile extends StatelessWidget {
   final VoidCallback? onDownload;
   final bool isFavorite;
   final VoidCallback? onToggleFavorite;
+  final VoidCallback? onMore;
 
   const TrackTile({
     super.key,
@@ -23,6 +24,7 @@ class TrackTile extends StatelessWidget {
     this.onDownload,
     this.isFavorite = false,
     this.onToggleFavorite,
+    this.onMore,
   });
 
   @override
@@ -108,6 +110,13 @@ class TrackTile extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: onDownload,
+              ),
+            if (onMore != null)
+              IconButton(
+                icon: const Icon(Icons.more_vert_rounded, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onMore,
               ),
           ],
         ),

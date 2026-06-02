@@ -48,21 +48,26 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         videoCount: 1,
         tracks: [track.toEntity()],
       );
-      await localDatabase.insertPlaylist(PlaylistModel(
-        id: playlist.id,
-        title: playlist.title,
-        thumbnailUrl: playlist.thumbnailUrl,
-        author: playlist.author,
-        videoCount: 1,
-      ));
-      await localDatabase.insertTrack(playlist.id, TrackModel(
-        id: track.id,
-        title: track.title,
-        thumbnailUrl: track.thumbnailUrl,
-        durationSeconds: track.durationSeconds,
-        author: track.author,
-        index: 0,
-      ));
+      await localDatabase.insertPlaylist(
+        PlaylistModel(
+          id: playlist.id,
+          title: playlist.title,
+          thumbnailUrl: playlist.thumbnailUrl,
+          author: playlist.author,
+          videoCount: 1,
+        ),
+      );
+      await localDatabase.insertTrack(
+        playlist.id,
+        TrackModel(
+          id: track.id,
+          title: track.title,
+          thumbnailUrl: track.thumbnailUrl,
+          durationSeconds: track.durationSeconds,
+          author: track.author,
+          index: 0,
+        ),
+      );
       return playlist;
     }
 
@@ -99,29 +104,50 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   @override
   Future<List<Playlist>> getSavedPlaylists() async {
     final models = await localDatabase.getAllPlaylists();
-    return models.map((m) => m.toEntity()).toList();
+    final playlists = <Playlist>[];
+    for (final model in models) {
+      final tracks = await getCachedTracks(model.id);
+      playlists.add(
+        Playlist(
+          id: model.id,
+          title: model.title,
+          description: model.description,
+          thumbnailUrl: model.thumbnailUrl,
+          author: model.author,
+          videoCount: model.videoCount,
+          tracks: tracks,
+        ),
+      );
+    }
+    return playlists;
   }
 
   @override
   Future<void> savePlaylist(Playlist playlist) async {
-    await localDatabase.insertPlaylist(PlaylistModel(
-      id: playlist.id,
-      title: playlist.title,
-      description: playlist.description,
-      thumbnailUrl: playlist.thumbnailUrl,
-      author: playlist.author,
-      videoCount: playlist.tracks.length,
-    ));
+    await localDatabase.insertPlaylist(
+      PlaylistModel(
+        id: playlist.id,
+        title: playlist.title,
+        description: playlist.description,
+        thumbnailUrl: playlist.thumbnailUrl,
+        author: playlist.author,
+        videoCount: playlist.tracks.length,
+      ),
+    );
     await localDatabase.insertTracks(
       playlist.id,
-      playlist.tracks.map((t) => TrackModel(
-        id: t.id,
-        title: t.title,
-        thumbnailUrl: t.thumbnailUrl,
-        durationSeconds: t.duration.inSeconds,
-        author: t.author,
-        index: t.index,
-      )).toList(),
+      playlist.tracks
+          .map(
+            (t) => TrackModel(
+              id: t.id,
+              title: t.title,
+              thumbnailUrl: t.thumbnailUrl,
+              durationSeconds: t.duration.inSeconds,
+              author: t.author,
+              index: t.index,
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -132,14 +158,17 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<void> saveTrack(String playlistId, Track track) async {
-    await localDatabase.insertTrack(playlistId, TrackModel(
-      id: track.id,
-      title: track.title,
-      thumbnailUrl: track.thumbnailUrl,
-      durationSeconds: track.duration.inSeconds,
-      author: track.author,
-      index: track.index,
-    ));
+    await localDatabase.insertTrack(
+      playlistId,
+      TrackModel(
+        id: track.id,
+        title: track.title,
+        thumbnailUrl: track.thumbnailUrl,
+        durationSeconds: track.duration.inSeconds,
+        author: track.author,
+        index: track.index,
+      ),
+    );
   }
 
   @override
@@ -154,20 +183,24 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<void> reorderTracks(
-      String playlistId, List<String> trackIdsInOrder) async {
+    String playlistId,
+    List<String> trackIdsInOrder,
+  ) async {
     await localDatabase.reorderTracks(playlistId, trackIdsInOrder);
   }
 
   @override
   Future<void> toggleFavorite(Track track) async {
-    await localDatabase.toggleFavoriteTrack(TrackModel(
-      id: track.id,
-      title: track.title,
-      thumbnailUrl: track.thumbnailUrl,
-      durationSeconds: track.duration.inSeconds,
-      author: track.author,
-      index: track.index,
-    ));
+    await localDatabase.toggleFavoriteTrack(
+      TrackModel(
+        id: track.id,
+        title: track.title,
+        thumbnailUrl: track.thumbnailUrl,
+        durationSeconds: track.duration.inSeconds,
+        author: track.author,
+        index: track.index,
+      ),
+    );
   }
 
   @override

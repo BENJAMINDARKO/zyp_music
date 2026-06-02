@@ -19,6 +19,8 @@ class PlaylistProvider extends ChangeNotifier {
   String? _error;
   PlaylistSortMode _sortMode = PlaylistSortMode.dateAdded;
   Set<String> _favoriteIds = {};
+  final Map<String, List<Track>> _homeFeeds = {};
+  final Set<String> _loadingHomeFeeds = {};
 
   PlaylistSortMode get sortMode => _sortMode;
 
@@ -26,7 +28,9 @@ class PlaylistProvider extends ChangeNotifier {
     final sorted = List<Playlist>.from(_playlists);
     switch (_sortMode) {
       case PlaylistSortMode.title:
-        sorted.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        sorted.sort(
+          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+        );
         break;
       case PlaylistSortMode.trackCount:
         sorted.sort((a, b) => b.videoCount.compareTo(a.videoCount));
@@ -45,6 +49,8 @@ class PlaylistProvider extends ChangeNotifier {
   Playlist? get currentPlaylist => _currentPlaylist;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  List<Track> homeFeed(String key) => _homeFeeds[key] ?? const [];
+  bool isHomeFeedLoading(String key) => _loadingHomeFeeds.contains(key);
 
   Future<Playlist?> fetchPlaylist(String input) async {
     _isLoading = true;
@@ -91,7 +97,10 @@ class PlaylistProvider extends ChangeNotifier {
     try {
       _playlists = await _repository.getSavedPlaylists();
     } catch (e) {
-      dev.log('Failed to reload playlists silently: $e', name: 'PlaylistProvider');
+      dev.log(
+        'Failed to reload playlists silently: $e',
+        name: 'PlaylistProvider',
+      );
     }
   }
 
@@ -117,8 +126,10 @@ class PlaylistProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      dev.log('Failed to load cached playlist $playlistId: $e',
-          name: 'PlaylistProvider');
+      dev.log(
+        'Failed to load cached playlist $playlistId: $e',
+        name: 'PlaylistProvider',
+      );
     }
   }
 
@@ -176,8 +187,10 @@ class PlaylistProvider extends ChangeNotifier {
     try {
       return _repository.getCachedTracks(playlistId);
     } catch (e) {
-      dev.log('Failed to get cached tracks for $playlistId: $e',
-          name: 'PlaylistProvider');
+      dev.log(
+        'Failed to get cached tracks for $playlistId: $e',
+        name: 'PlaylistProvider',
+      );
       return null;
     }
   }
@@ -228,7 +241,9 @@ class PlaylistProvider extends ChangeNotifier {
   }
 
   Future<void> removeTrackFromPlaylist(
-      String playlistId, String trackId) async {
+    String playlistId,
+    String trackId,
+  ) async {
     if (_currentPlaylist?.id == playlistId) {
       _currentPlaylist = Playlist(
         id: _currentPlaylist!.id,
@@ -237,26 +252,31 @@ class PlaylistProvider extends ChangeNotifier {
         thumbnailUrl: _currentPlaylist!.thumbnailUrl,
         author: _currentPlaylist!.author,
         videoCount: _currentPlaylist!.videoCount - 1,
-        tracks:
-            _currentPlaylist!.tracks.where((t) => t.id != trackId).toList(),
+        tracks: _currentPlaylist!.tracks.where((t) => t.id != trackId).toList(),
       );
       notifyListeners();
     }
     try {
       await _repository.removeTrack(playlistId, trackId);
     } catch (e) {
-      dev.log('Failed to remove track $trackId from $playlistId: $e',
-          name: 'PlaylistProvider');
+      dev.log(
+        'Failed to remove track $trackId from $playlistId: $e',
+        name: 'PlaylistProvider',
+      );
     }
   }
 
   Future<void> reorderTracks(
-      String playlistId, List<String> trackIdsInOrder) async {
+    String playlistId,
+    List<String> trackIdsInOrder,
+  ) async {
     try {
       await _repository.reorderTracks(playlistId, trackIdsInOrder);
     } catch (e) {
-      dev.log('Failed to reorder tracks in $playlistId: $e',
-          name: 'PlaylistProvider');
+      dev.log(
+        'Failed to reorder tracks in $playlistId: $e',
+        name: 'PlaylistProvider',
+      );
     }
   }
 
@@ -291,13 +311,17 @@ class PlaylistProvider extends ChangeNotifier {
         'author': p.author,
         'thumbnailUrl': p.thumbnailUrl,
         'videoCount': p.videoCount,
-        'tracks': tracks.map((t) => {
-          'id': t.id,
-          'title': t.title,
-          'author': t.author,
-          'durationSeconds': t.duration.inSeconds,
-          'thumbnailUrl': t.thumbnailUrl,
-        }).toList(),
+        'tracks': tracks
+            .map(
+              (t) => {
+                'id': t.id,
+                'title': t.title,
+                'author': t.author,
+                'durationSeconds': t.duration.inSeconds,
+                'thumbnailUrl': t.thumbnailUrl,
+              },
+            )
+            .toList(),
       });
     }
     final export = {
@@ -374,7 +398,9 @@ class PlaylistProvider extends ChangeNotifier {
 
   String _toXml(Map<String, dynamic> data) {
     final buf = StringBuffer('<?xml version="1.0" encoding="UTF-8"?>\n');
-    buf.writeln('<ytmusix version="${data['version']}" exportedAt="${data['exportedAt']}">');
+    buf.writeln(
+      '<ytmusix version="${data['version']}" exportedAt="${data['exportedAt']}">',
+    );
     for (final p in data['playlists'] as List<dynamic>) {
       buf.writeln('  <playlist>');
       buf.writeln('    <id>${p['id']}</id>');
@@ -398,13 +424,19 @@ class PlaylistProvider extends ChangeNotifier {
     return buf.toString();
   }
 
-  String _xmlEscape(String s) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+  String _xmlEscape(String s) => s
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;');
 
   String _toMarkdown(List<Playlist> playlists) {
     final buf = StringBuffer('# YTMusix Export\n\n');
     buf.writeln('Exported on ${DateTime.now().toLocal()}\n');
     for (final p in playlists) {
-      buf.writeln('- [${p.title}](${"https://www.youtube.com/playlist?list=${p.id}"})');
+      buf.writeln(
+        '- [${p.title}](${"https://www.youtube.com/playlist?list=${p.id}"})',
+      );
     }
     return buf.toString();
   }
@@ -416,6 +448,36 @@ class PlaylistProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
       return [];
+    }
+  }
+
+  Future<void> loadHomeFeed(String key, {bool force = false}) async {
+    if (!force && _homeFeeds.containsKey(key)) return;
+    if (_loadingHomeFeeds.contains(key)) return;
+
+    _loadingHomeFeeds.add(key);
+    _error = null;
+    notifyListeners();
+
+    try {
+      final query = switch (key) {
+        'new' => 'new Ghana music releases 2026 official audio',
+        'trend' => 'trending Ghana music 2026 official audio',
+        'podcasts' => 'Ghana podcasts latest episodes',
+        _ => key,
+      };
+      final tracks = await _repository.search(query);
+      final seen = <String>{};
+      _homeFeeds[key] = [
+        for (final track in tracks)
+          if (seen.add(track.id)) track,
+      ].take(18).toList();
+    } catch (e) {
+      _error = e.toString();
+      _homeFeeds[key] = const [];
+    } finally {
+      _loadingHomeFeeds.remove(key);
+      notifyListeners();
     }
   }
 

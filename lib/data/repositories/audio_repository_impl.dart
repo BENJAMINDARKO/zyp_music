@@ -24,6 +24,9 @@ class AudioRepositoryImpl implements AudioRepository {
     if (localPath != null && File(localPath).existsSync()) {
       return localPath;
     }
+    if (localPath != null) {
+      await _database.removeDownloadedTrack(track.id);
+    }
     return remoteDataSource.getAudioUrl(track.id, quality: quality);
   }
 

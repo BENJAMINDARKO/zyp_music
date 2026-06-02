@@ -6,7 +6,9 @@ class SettingsProvider extends ChangeNotifier {
   static const _keyPrebufferCount = 'prebufferCount';
   static const _keyAudioQuality = 'audioQuality';
 
-  int _prebufferCount = 3;
+  static const defaultPrebufferCount = 2;
+
+  int _prebufferCount = defaultPrebufferCount;
   AudioQuality _audioQuality = AudioQuality.low;
 
   int get prebufferCount => _prebufferCount;
@@ -14,11 +16,13 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    _prebufferCount = prefs.getInt(_keyPrebufferCount) ?? 3;
+    _prebufferCount = prefs.getInt(_keyPrebufferCount) ?? defaultPrebufferCount;
     final qualityStr = prefs.getString(_keyAudioQuality);
     _audioQuality = qualityStr != null
-        ? AudioQuality.values.firstWhere((q) => q.name == qualityStr,
-            orElse: () => AudioQuality.low)
+        ? AudioQuality.values.firstWhere(
+            (q) => q.name == qualityStr,
+            orElse: () => AudioQuality.low,
+          )
         : AudioQuality.low;
     notifyListeners();
   }

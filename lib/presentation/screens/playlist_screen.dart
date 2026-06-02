@@ -7,6 +7,7 @@ import '../providers/player_provider.dart';
 import '../providers/download_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/player_bar.dart';
+import '../widgets/track_action_sheet.dart';
 import '../widgets/video_tile.dart';
 import 'player_screen.dart';
 
@@ -43,6 +44,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           player.currentIndex,
           widget.playlist.id,
           prebufferCount: settings.prebufferCount,
+          quality: settings.audioQuality.name,
         );
       };
       player.addTrackChangedListener(_trackChangedHandler!);
@@ -88,8 +90,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   _autoDownloadStarted = true;
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted) {
+                      final quality = context
+                          .read<SettingsProvider>()
+                          .audioQuality;
                       context.read<DownloadProvider>().downloadPlaylist(
                         playlist,
+                        quality: quality.name,
                       );
                     }
                   });
@@ -214,13 +220,30 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                           downloadProvider.downloadedTrackIds
                                               .contains(track.id)
                                           ? null
-                                          : () =>
-                                                downloadProvider.downloadTrack(
-                                                  track,
-                                                  widget.playlist.id,
-                                                ),
+                                          : () {
+                                              final quality = context
+                                                  .read<SettingsProvider>()
+                                                  .audioQuality;
+                                              downloadProvider.downloadTrack(
+                                                track,
+                                                widget.playlist.id,
+                                                quality: quality.name,
+                                              );
+                                            },
                                       onToggleFavorite: () => playlistProvider
                                           .toggleFavorite(track),
+                                      onMore: () => showTrackActionSheet(
+                                        context,
+                                        track: track,
+                                        queue: tracks,
+                                        index: index,
+                                        playlistId: widget.playlist.id,
+                                        onRemove: () => playlistProvider
+                                            .removeTrackFromPlaylist(
+                                              widget.playlist.id,
+                                              track.id,
+                                            ),
+                                      ),
                                       onTap: () {
                                         final quality = context
                                             .read<SettingsProvider>()
@@ -469,7 +492,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                   color: isFullyDownloaded ? Colors.greenAccent : null,
                   onPressed: tracks.isEmpty || isFullyDownloaded
                       ? null
-                      : () => downloadProvider.downloadPlaylist(playlist),
+                      : () {
+                          final quality = context
+                              .read<SettingsProvider>()
+                              .audioQuality;
+                          downloadProvider.downloadPlaylist(
+                            playlist,
+                            quality: quality.name,
+                          );
+                        },
                 ),
             ],
           ),
