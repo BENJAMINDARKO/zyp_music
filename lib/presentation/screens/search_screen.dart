@@ -5,6 +5,7 @@ import '../../domain/entities/video.dart';
 import '../providers/player_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/track_action_sheet.dart';
 import 'player_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -53,23 +54,6 @@ class _SearchScreenState extends State<SearchScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const PlayerScreen()),
-    );
-  }
-
-  void _playTrackNext(Track track) {
-    final player = context.read<PlayerProvider>();
-    final newQueue = List<Track>.from(player.queue);
-    newQueue.insert(player.currentIndex + 1, track);
-    player.setQueue(
-      newQueue,
-      startIndex: player.currentIndex,
-      playlistId: player.currentPlaylistId,
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('"${track.title}" added to queue'),
-        duration: const Duration(seconds: 2),
-      ),
     );
   }
 
@@ -269,27 +253,15 @@ class _SearchScreenState extends State<SearchScreen> {
                     constraints: const BoxConstraints(),
                     onPressed: () => playlistProvider.toggleFavorite(track),
                   ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'play') _playTrack(track);
-                      if (value == 'queue') _playTrackNext(track);
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'play',
-                        child: ListTile(
-                          leading: Icon(Icons.play_arrow_rounded),
-                          title: Text('Play now'),
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'queue',
-                        child: ListTile(
-                          leading: Icon(Icons.queue_music_rounded),
-                          title: Text('Play next'),
-                        ),
-                      ),
-                    ],
+                  IconButton(
+                    icon: const Icon(Icons.more_vert_rounded),
+                    onPressed: () => showTrackActionSheet(
+                      context,
+                      track: track,
+                      queue: _results,
+                      index: index,
+                      playlistId: '__search__',
+                    ),
                   ),
                 ],
               ),

@@ -38,11 +38,16 @@ class DownloadProvider extends ChangeNotifier {
 
   Future<void> init() async {
     _downloadedTrackIds = await _downloadService.getAllDownloadedIds();
-    _downloadedPlaylists.addAll(await _downloadService.getFullyDownloadedPlaylistIds());
+    _downloadedPlaylists.addAll(
+      await _downloadService.getFullyDownloadedPlaylistIds(),
+    );
     notifyListeners();
   }
 
-  Future<void> downloadPlaylist(Playlist playlist, {String quality = 'medium'}) async {
+  Future<void> downloadPlaylist(
+    Playlist playlist, {
+    String quality = 'medium',
+  }) async {
     if (_downloadingPlaylists.contains(playlist.id)) return;
 
     _downloadingPlaylists.add(playlist.id);
@@ -56,7 +61,8 @@ class DownloadProvider extends ChangeNotifier {
       _activeDownloads[progress.trackId] = progress;
       if (progress.totalTracks > 0) {
         _playlistDownloadProgress[playlist.id] =
-            (progress.tracksCompleted + progress.fraction) / progress.totalTracks;
+            (progress.tracksCompleted + progress.fraction) /
+            progress.totalTracks;
       }
       notifyListeners();
     });
@@ -71,8 +77,11 @@ class DownloadProvider extends ChangeNotifier {
 
     _downloadingPlaylists.remove(playlist.id);
     _playlistDownloadProgress.remove(playlist.id);
-    final allDownloaded =
-        playlist.tracks.every((t) => _downloadedTrackIds.contains(t.id));
+    await _refreshDownloadedIds();
+    await _refreshDownloadedPlaylists();
+    final allDownloaded = playlist.tracks.every(
+      (t) => _downloadedTrackIds.contains(t.id),
+    );
     if (allDownloaded) {
       _downloadedPlaylists.add(playlist.id);
     }
@@ -82,14 +91,36 @@ class DownloadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
+  Future<void> downloadTrack(
+    Track track,
+    String playlistId, {
+    String quality = 'medium',
+  }) async {
     if (_downloadedTrackIds.contains(track.id)) return;
     if (_activeDownloads.containsKey(track.id)) return;
+    _activeDownloads[track.id] = DownloadProgress(
+      trackId: track.id,
+      trackTitle: track.title,
+      currentBytes: 0,
+      totalBytes: 0,
+      tracksCompleted: 0,
+      totalTracks: 1,
+    );
+    notifyListeners();
     await _downloadService.downloadTrack(track, playlistId, quality: quality);
+    _activeDownloads.remove(track.id);
+    await _refreshDownloadedIds();
+    await _refreshDownloadedPlaylists();
+    notifyListeners();
   }
 
-  Future<void> preDownloadUpcoming(List<Track> queue, int currentIndex, String playlistId,
-      {int prebufferCount = 3}) async {
+  Future<void> preDownloadUpcoming(
+    List<Track> queue,
+    int currentIndex,
+    String playlistId, {
+    int prebufferCount = 2,
+    String quality = 'low',
+  }) async {
     if (queue.isEmpty) return;
     final start = (currentIndex + 1).clamp(0, queue.length);
     final end = (start + prebufferCount).clamp(0, queue.length);
@@ -98,16 +129,30 @@ class DownloadProvider extends ChangeNotifier {
       final track = queue[i];
       if (_downloadedTrackIds.contains(track.id)) continue;
       if (_activeDownloads.containsKey(track.id)) continue;
-      futures.add(_downloadService.downloadTrack(track, playlistId)
-          .catchError((e) => dev.log('Pre-download failed for ${track.id}: $e', name: 'DownloadProvider')));
+      futures.add(
+        _downloadService
+            .downloadTrack(track, playlistId, quality: quality)
+            .then((_) {
+              _downloadedTrackIds.add(track.id);
+            })
+            .catchError((e) {
+              dev.log(
+                'Pre-download failed for ${track.id}: $e',
+                name: 'DownloadProvider',
+              );
+            }),
+      );
     }
     await Future.wait(futures);
+    await _refreshDownloadedPlaylists();
+    notifyListeners();
   }
 
   void cancelDownload() {
     _downloadService.cancelDownload();
     _downloadingPlaylists.clear();
     _activeDownloads.clear();
+    _playlistDownloadProgress.clear();
     notifyListeners();
   }
 
@@ -122,6 +167,7 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> deleteDownloadedPlaylist(String playlistId) async {
     await _downloadService.deleteDownloadedPlaylist(playlistId);
     await _refreshDownloadedIds();
+    await _refreshDownloadedPlaylists();
     notifyListeners();
   }
 
@@ -132,6 +178,12 @@ class DownloadProvider extends ChangeNotifier {
 
   Future<void> _refreshDownloadedIds() async {
     _downloadedTrackIds = await _downloadService.getAllDownloadedIds();
+  }
+
+  Future<void> _refreshDownloadedPlaylists() async {
+    _downloadedPlaylists
+      ..clear()
+      ..addAll(await _downloadService.getFullyDownloadedPlaylistIds());
   }
 
   @override

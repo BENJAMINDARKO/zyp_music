@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/constants/audio_quality.dart';
 import '../providers/settings_provider.dart';
 import '../providers/playlist_provider.dart';
 import '../providers/download_provider.dart';
 import '../../service/auth_service.dart';
+import 'about_screen.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -488,14 +487,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       width: double.infinity,
       child: TextButton.icon(
         onPressed: () async {
-          final info = await PackageInfo.fromPlatform();
-          if (!mounted) return;
-          showAboutDialog(
-            context: context,
-            applicationName: AppConstants.appName,
-            applicationVersion: info.version,
-            applicationLegalese:
-                'For personal, educational use only.\nNot affiliated with YouTube.',
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AboutScreen()),
           );
         },
         icon: const Icon(Icons.info_outline, size: 18),

@@ -16,7 +16,6 @@ class PlayerBar extends StatelessWidget {
       builder: (context, player, _) {
         if (player.currentTrack == null) return const SizedBox.shrink();
 
-        final hasPrev = player.queue.isNotEmpty && player.currentIndex > 0;
         final hasNext =
             player.queue.isNotEmpty &&
             player.currentIndex + 1 < player.queue.length;
@@ -146,9 +145,7 @@ class PlayerBar extends StatelessWidget {
                           else ...[
                             IconButton(
                               icon: const Icon(Icons.skip_previous_rounded),
-                              onPressed: hasPrev
-                                  ? () => player.previous()
-                                  : null,
+                              onPressed: player.previous,
                               iconSize: 20,
                             ),
                             IconButton(

@@ -319,6 +319,8 @@ class PlayerProvider extends ChangeNotifier {
     if (_currentIndex > 0) {
       _currentIndex--;
       await playTrack(_queue[_currentIndex]);
+    } else {
+      await seekTo(Duration.zero);
     }
   }
 

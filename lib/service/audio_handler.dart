@@ -146,7 +146,7 @@ class MusicAudioHandler extends BaseAudioHandler {
     }
     await _player.stop();
     await _player.setAudioSource(AudioSource.uri(uri, tag: item));
-    await _player.play();
+    unawaited(_player.play());
   }
 
   Future<void> setQueue(List<MediaItem> items, {int startIndex = 0}) async {
@@ -161,7 +161,9 @@ class MusicAudioHandler extends BaseAudioHandler {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    unawaited(_player.play());
+  }
 
   @override
   Future<void> pause() => _player.pause();

@@ -7,9 +7,9 @@ import '../providers/playlist_provider.dart';
 import '../providers/player_provider.dart';
 import '../providers/download_provider.dart';
 import '../providers/settings_provider.dart';
-import '../widgets/playlist_card.dart';
 import '../widgets/pixel_logo.dart';
 import '../widgets/now_playing_card.dart';
+import '../widgets/track_action_sheet.dart';
 import 'playlist_screen.dart';
 import 'player_screen.dart';
 import 'search_screen.dart';
@@ -23,6 +23,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const _tabs = ['Recent', 'New', 'Trend', 'Podcasts', 'Favourites'];
+  int _homeTab = 0;
+
+  String? get _activeFeedKey {
+    if (_homeTab == 1) return 'new';
+    if (_homeTab == 2) return 'trend';
+    if (_homeTab == 3) return 'podcasts';
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +41,14 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<PlaylistProvider>().loadFavoriteIds();
       context.read<PlayerProvider>().loadRecentlyPlayed();
     });
+  }
+
+  void _selectHomeTab(int index) {
+    setState(() => _homeTab = index);
+    final key = _activeFeedKey;
+    if (key != null) {
+      context.read<PlaylistProvider>().loadHomeFeed(key);
+    }
   }
 
   Future<void> _showLinkDialog(BuildContext context) async {
@@ -124,27 +142,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const Spacer(),
           Consumer<PlaylistProvider>(
-            builder: (context, provider, _) =>
-                PopupMenuButton<PlaylistSortMode>(
-                  onSelected: provider.setSortMode,
-                  initialValue: provider.sortMode,
-                  color: const Color(0xFF242424),
-                  itemBuilder: (context) => [
-                    _sortItem(
-                      provider,
-                      PlaylistSortMode.dateAdded,
-                      'Date added',
-                    ),
-                    _sortItem(provider, PlaylistSortMode.title, 'Title'),
-                    _sortItem(
-                      provider,
-                      PlaylistSortMode.trackCount,
-                      'Track count',
-                    ),
-                  ],
-                  icon: const Icon(Icons.tune_rounded, size: 20),
-                  tooltip: 'Sort playlists',
-                ),
+            builder: (context, provider, _) => _roundIconButton(
+              icon: Icons.tune_rounded,
+              tooltip: 'Sort playlists',
+              onPressed: () => _showSortSheet(context, provider),
+            ),
           ),
           const SizedBox(width: 8),
           _roundIconButton(
@@ -166,19 +168,69 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  PopupMenuItem<PlaylistSortMode> _sortItem(
-    PlaylistProvider provider,
-    PlaylistSortMode mode,
-    String label,
-  ) {
-    return PopupMenuItem(
-      value: mode,
-      child: Row(
-        children: [
-          if (provider.sortMode == mode) const Icon(Icons.check, size: 18),
-          SizedBox(width: provider.sortMode == mode ? 8 : 26),
-          Text(label),
-        ],
+  void _showSortSheet(BuildContext context, PlaylistProvider provider) {
+    final options = [
+      (PlaylistSortMode.dateAdded, 'Date added', Icons.schedule_rounded),
+      (PlaylistSortMode.title, 'Title', Icons.sort_by_alpha_rounded),
+      (PlaylistSortMode.trackCount, 'Track count', Icons.queue_music_rounded),
+    ];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(14),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF171717),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withAlpha(14)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sort playlists',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 12),
+              ...options.map((option) {
+                final selected = provider.sortMode == option.$1;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.white.withAlpha(12),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(
+                      option.$3,
+                      color: selected ? Colors.black : Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    option.$2,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  trailing: selected
+                      ? const Icon(Icons.check_circle_rounded)
+                      : null,
+                  onTap: () {
+                    provider.setSortMode(option.$1);
+                    Navigator.pop(ctx);
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -254,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
           position: player.position,
           duration: player.duration,
           onPlayPause: player.togglePlayPause,
-          onPrevious: player.currentIndex > 0 ? player.previous : null,
+          onPrevious: player.previous,
           onNext: player.currentIndex + 1 < player.queue.length
               ? player.next
               : null,
@@ -270,11 +322,20 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildContent(BuildContext context) {
     return Consumer3<PlaylistProvider, PlayerProvider, DownloadProvider>(
       builder: (context, provider, playerProvider, downloadProvider, _) {
-        if (provider.isLoading) {
+        final feedKey = _activeFeedKey;
+        final feedTracks = feedKey == null
+            ? const <Track>[]
+            : provider.homeFeed(feedKey);
+        final isFeedLoading =
+            feedKey != null && provider.isHomeFeedLoading(feedKey);
+
+        if (provider.isLoading && feedKey == null) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (provider.playlists.isEmpty && provider.favoriteIds.isEmpty) {
+        if (provider.playlists.isEmpty &&
+            provider.favoriteIds.isEmpty &&
+            feedKey == null) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -300,7 +361,13 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         return RefreshIndicator(
-          onRefresh: () => provider.loadSavedPlaylists(),
+          onRefresh: () {
+            final key = _activeFeedKey;
+            if (key != null) {
+              return provider.loadHomeFeed(key, force: true);
+            }
+            return provider.loadSavedPlaylists();
+          },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
             children: [
@@ -311,18 +378,29 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
               _buildCategoryTabs(),
               const SizedBox(height: 22),
-              _buildPlaylistShelf(
-                context,
-                provider,
-                playerProvider,
-                downloadProvider,
-              ),
+              if (feedKey != null)
+                _buildTrackShelf(
+                  context,
+                  feedTracks,
+                  isFeedLoading,
+                  playerProvider,
+                  feedKey,
+                )
+              else
+                _buildPlaylistShelf(
+                  context,
+                  _filteredPlaylists(provider),
+                  playerProvider,
+                  downloadProvider,
+                ),
               const SizedBox(height: 28),
-              _buildTopHits(context, provider, playerProvider),
-              if (provider.favoriteIds.isNotEmpty) ...[
-                const SizedBox(height: 28),
-                _buildFavoritesTile(context, provider, playerProvider),
-              ],
+              _buildTopHits(
+                context,
+                _filteredPlaylists(provider),
+                feedTracks,
+                playerProvider,
+                _homeTab == 4 ? provider.favoriteIds : null,
+              ),
             ],
           ),
         );
@@ -331,23 +409,90 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCategoryTabs() {
-    final labels = ['Popular', 'New', 'Trend', 'Podcasts', 'Favourites'];
     return SizedBox(
       height: 28,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: labels.length,
+        itemCount: _tabs.length,
         separatorBuilder: (_, _) => const SizedBox(width: 18),
         itemBuilder: (context, index) {
-          final active = index == 0;
-          return Center(
-            child: Text(
-              labels[index],
-              style: TextStyle(
-                color: active ? Colors.white : Colors.white38,
-                fontSize: 14,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+          final active = index == _homeTab;
+          return GestureDetector(
+            onTap: () => _selectHomeTab(index),
+            child: Center(
+              child: Text(
+                _tabs[index],
+                style: TextStyle(
+                  color: active ? Colors.white : Colors.white38,
+                  fontSize: 14,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
               ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTrackShelf(
+    BuildContext context,
+    List<Track> tracks,
+    bool isLoading,
+    PlayerProvider playerProvider,
+    String feedKey,
+  ) {
+    if (isLoading && tracks.isEmpty) {
+      return const SizedBox(
+        height: 184,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (tracks.isEmpty) {
+      return _EmptyShelf(tabLabel: _tabs[_homeTab]);
+    }
+    return SizedBox(
+      height: 184,
+      child: ListView.separated(
+        clipBehavior: Clip.none,
+        scrollDirection: Axis.horizontal,
+        itemCount: tracks.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 14),
+        itemBuilder: (context, index) {
+          final track = tracks[index];
+          final isCurrent = playerProvider.currentTrack?.id == track.id;
+          return SizedBox(
+            width: 138,
+            child: _HomeTrackCard(
+              track: track,
+              isCurrent: isCurrent,
+              isPlaying: isCurrent && playerProvider.isPlaying,
+              onTap: () {
+                final quality = context.read<SettingsProvider>().audioQuality;
+                playerProvider.setQueue(
+                  tracks,
+                  startIndex: index,
+                  playlistId: '__feed_$feedKey',
+                );
+                playerProvider.playTrack(track, quality: quality);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PlayerScreen()),
+                );
+              },
+              onPlay: () {
+                if (isCurrent) {
+                  playerProvider.togglePlayPause();
+                  return;
+                }
+                final quality = context.read<SettingsProvider>().audioQuality;
+                playerProvider.setQueue(
+                  tracks,
+                  startIndex: index,
+                  playlistId: '__feed_$feedKey',
+                );
+                playerProvider.playTrack(track, quality: quality);
+              },
             ),
           );
         },
@@ -357,19 +502,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildPlaylistShelf(
     BuildContext context,
-    PlaylistProvider provider,
+    List<Playlist> playlists,
     PlayerProvider playerProvider,
     DownloadProvider downloadProvider,
   ) {
+    if (playlists.isEmpty) {
+      return _EmptyShelf(tabLabel: _tabs[_homeTab]);
+    }
     return SizedBox(
       height: 184,
       child: ListView.separated(
         clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
-        itemCount: provider.playlists.length,
+        itemCount: playlists.length,
         separatorBuilder: (_, _) => const SizedBox(width: 14),
         itemBuilder: (context, index) {
-          final playlist = provider.playlists[index];
+          final playlist = playlists[index];
           final isCurrent = playerProvider.currentPlaylistId == playlist.id;
           final isDownloading = downloadProvider.isDownloadingPlaylist(
             playlist.id,
@@ -396,6 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   playerProvider.togglePlayPause();
                   return;
                 }
+                final provider = context.read<PlaylistProvider>();
                 final cachedTracks = await provider.getCachedTracks(
                   playlist.id,
                 );
@@ -433,6 +582,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                   return;
                 }
+                final provider = context.read<PlaylistProvider>();
                 final cachedTracks = await provider.getCachedTracks(
                   playlist.id,
                 );
@@ -462,7 +612,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
               },
-              onDelete: () => provider.deletePlaylist(playlist.id),
+              onDelete: () =>
+                  context.read<PlaylistProvider>().deletePlaylist(playlist.id),
             ),
           );
         },
@@ -472,25 +623,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTopHits(
     BuildContext context,
-    PlaylistProvider provider,
+    List<Playlist> playlists,
+    List<Track> feedTracks,
     PlayerProvider playerProvider,
+    Set<String>? favoriteIds,
   ) {
     final tracks = <String, Track>{};
-    for (final track in playerProvider.recentlyPlayed) {
-      tracks[track.id] = track;
-    }
-    for (final playlist in provider.playlists) {
-      for (final track in playlist.tracks) {
+    if (feedTracks.isNotEmpty) {
+      for (final track in feedTracks) {
         tracks[track.id] = track;
+      }
+    } else {
+      for (final track in playerProvider.recentlyPlayed) {
+        if (favoriteIds == null || favoriteIds.contains(track.id)) {
+          tracks[track.id] = track;
+        }
+      }
+      for (final playlist in playlists) {
+        for (final track in playlist.tracks) {
+          if (favoriteIds == null || favoriteIds.contains(track.id)) {
+            tracks[track.id] = track;
+          }
+        }
       }
     }
     final topTracks = tracks.values.take(6).toList();
+    final title = switch (_homeTab) {
+      1 => 'New from YouTube',
+      2 => 'Trending on YouTube',
+      3 => 'Ghana podcasts',
+      4 => 'Favourite tracks',
+      _ => 'Recent plays',
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Top hits 2026',
+        Text(
+          title,
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 14),
@@ -502,13 +672,17 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: Colors.white.withAlpha(14)),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.music_note_rounded, color: Colors.white54),
-                SizedBox(width: 12),
+                const Icon(Icons.music_note_rounded, color: Colors.white54),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Open a playlist or play a track to fill your chart.',
+                    _homeTab == 4
+                        ? 'Star tracks to fill your favourites chart.'
+                        : _activeFeedKey != null
+                        ? 'Pull to refresh YouTube results.'
+                        : 'Open a playlist or play a track to fill your chart.',
                     style: TextStyle(color: Colors.white54),
                   ),
                 ),
@@ -522,9 +696,24 @@ class _HomeScreenState extends State<HomeScreen> {
             return _TopHitTile(
               rank: index + 1,
               track: track,
+              onMore: () => showTrackActionSheet(
+                context,
+                track: track,
+                queue: topTracks,
+                index: index,
+                playlistId: _activeFeedKey == null
+                    ? null
+                    : '__feed_${_activeFeedKey!}',
+              ),
               onTap: () {
                 final settings = context.read<SettingsProvider>();
-                playerProvider.setQueue(topTracks, startIndex: index);
+                playerProvider.setQueue(
+                  topTracks,
+                  startIndex: index,
+                  playlistId: _activeFeedKey == null
+                      ? null
+                      : '__feed_${_activeFeedKey!}',
+                );
                 playerProvider.playTrack(track, quality: settings.audioQuality);
                 Navigator.push(
                   context,
@@ -537,44 +726,154 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFavoritesTile(
-    BuildContext context,
-    PlaylistProvider provider,
-    PlayerProvider playerProvider,
-  ) {
-    return FutureBuilder<Playlist?>(
-      future: provider.getFavoritesPlaylist(),
-      builder: (context, snapshot) {
-        final playlist = snapshot.data;
-        if (playlist == null) return const SizedBox.shrink();
-        return PlaylistCard(
-          playlist: playlist,
-          isCurrentPlaylist:
-              playerProvider.currentPlaylistId == '__favorites__',
-          isPlaying: playerProvider.isPlaying,
-          isDownloaded: false,
-          isDownloading: false,
-          downloadProgress: null,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PlaylistScreen(playlist: playlist),
+  List<Playlist> _filteredPlaylists(PlaylistProvider provider) {
+    final playlists = List<Playlist>.from(provider.playlists);
+    switch (_homeTab) {
+      case 1:
+      case 2:
+      case 3:
+        return playlists;
+      case 4:
+        final favoriteIds = provider.favoriteIds;
+        return playlists
+            .where(
+              (playlist) => playlist.tracks.any(
+                (track) => favoriteIds.contains(track.id),
+              ),
+            )
+            .map(
+              (playlist) => Playlist(
+                id: playlist.id,
+                title: playlist.title,
+                description: playlist.description,
+                thumbnailUrl: playlist.thumbnailUrl,
+                author: playlist.author,
+                videoCount: playlist.tracks
+                    .where((track) => favoriteIds.contains(track.id))
+                    .length,
+                tracks: playlist.tracks
+                    .where((track) => favoriteIds.contains(track.id))
+                    .toList(),
+              ),
+            )
+            .toList();
+      default:
+        return playlists;
+    }
+  }
+}
+
+class _EmptyShelf extends StatelessWidget {
+  final String tabLabel;
+
+  const _EmptyShelf({required this.tabLabel});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 144,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF171717),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withAlpha(14)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.library_music_rounded, color: Colors.white54),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'No $tabLabel items yet.',
+              style: const TextStyle(color: Colors.white54),
             ),
           ),
-          onPlay: () {
-            if (playlist.tracks.isEmpty) return;
-            final quality = context.read<SettingsProvider>().audioQuality;
-            playerProvider.setQueue(
-              playlist.tracks,
-              startIndex: 0,
-              playlistId: '__favorites__',
-            );
-            playerProvider.playTrack(playlist.tracks.first, quality: quality);
-          },
-          onDownload: null,
-          onDelete: null,
-        );
-      },
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeTrackCard extends StatelessWidget {
+  final Track track;
+  final bool isCurrent;
+  final bool isPlaying;
+  final VoidCallback onTap;
+  final VoidCallback onPlay;
+
+  const _HomeTrackCard({
+    required this.track,
+    required this.isCurrent,
+    required this.isPlaying,
+    required this.onTap,
+    required this.onPlay,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SizedBox(
+                  width: 138,
+                  height: 138,
+                  child: Image.network(
+                    track.thumbnailUrl ?? '',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Container(
+                      color: const Color(0xFF252525),
+                      child: const Icon(
+                        Icons.music_note_rounded,
+                        color: Colors.white38,
+                        size: 42,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: _MiniAction(
+                  icon: isCurrent && isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  onPressed: onPlay,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            track.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: isCurrent ? Theme.of(context).colorScheme.primary : null,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            track.author ?? 'YouTube',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -712,11 +1011,13 @@ class _TopHitTile extends StatelessWidget {
   final int rank;
   final Track track;
   final VoidCallback onTap;
+  final VoidCallback onMore;
 
   const _TopHitTile({
     required this.rank,
     required this.track,
     required this.onTap,
+    required this.onMore,
   });
 
   @override
@@ -756,7 +1057,7 @@ class _TopHitTile extends StatelessWidget {
       ),
       trailing: IconButton(
         icon: const Icon(Icons.more_vert_rounded, color: Colors.white38),
-        onPressed: () {},
+        onPressed: onMore,
       ),
       onTap: onTap,
     );
