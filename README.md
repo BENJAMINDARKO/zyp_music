@@ -1,11 +1,13 @@
-# ytmusix — YouTube Music Streamer
+# ytmusix - YouTube Music Streamer
 
-A Flutter mobile app that streams audio from public YouTube playlists, single videos, and mixes. No backend, no ads.
+A Flutter mobile app that streams audio from public YouTube playlists, single videos, and mixes. No backend, no ads. Built for Android and iOS with a modern dark music-player interface.
 
 ## Features
 
 ### Playback
 - **Offline-first** — plays from local files when downloaded, streams only when unavailable; no redundant redirect resolution
+- **Faster stream startup** — resolves playback redirects once and shows the selected track immediately while audio loads
+- **Smooth seek and buffer UI** — optimistic seeking plus buffered progress in the full player waveform and mini player
 - **Play/pause state indicators** — toggle icon reflects playback status on home screen, playlist screen, player bar, and expanded player
 - **Queue management** — play, pause, skip, previous, shuffle, repeat, auto-advance on track completion
 - **Sleep timer** — 15m/30m/60m/custom timer to auto-stop playback
@@ -34,11 +36,11 @@ A Flutter mobile app that streams audio from public YouTube playlists, single vi
 - **Star / Favorites** — star/unstar tracks anywhere (playlist, player, search); dedicated "Favorites" playlist card on home screen
 
 ### UI
-- **Now-playing card** — home screen shows current track with thumbnail, controls, progress bar; tap for expanded player
-- **Expanded player** — full-screen with album art, seek slider, large playback controls
-- **Mini player** — persistent bar at the bottom of the playlist screen
-- **Recently played** — horizontal scrolling list of recently played tracks
-- **Dark theme** — Spotify-inspired dark UI with custom pixel-art logo
+- **Modern Browse home** — large-title browse screen with rounded controls, category tabs, horizontal playlist artwork, and ranked top hits
+- **Expanded player** — full-screen now-playing view with large artwork, gradient background, waveform seek control, favorite action, and compact transport controls
+- **Modern secondary screens** — Search, Playlist, Settings, Login, track rows, and mini player share the same rounded dark visual language
+- **Mini player** — floating bottom player with artwork, queue access, transport controls, active progress, and buffered progress
+- **Dark theme** — music-app-inspired dark UI with custom pixel-art logo and green brand accent
 
 ## Tech Stack
 
@@ -54,11 +56,13 @@ A Flutter mobile app that streams audio from public YouTube playlists, single vi
 | Secure storage | flutter_secure_storage |
 | Downloads | path_provider + http |
 | Auth | WebView cookie extraction |
+| Platforms | Android + iOS |
 
 ## Prerequisites
 
 - Flutter SDK ^3.12.0
-- Android device or emulator
+- Android device/emulator for Android builds
+- Xcode and an iOS Simulator for iOS simulator builds
 
 ## Setup
 
@@ -90,19 +94,50 @@ Without this patch, the browse API returns empty `contents` and mix playlists fa
 flutter run
 ```
 
-### Build Release APK
+### Android
+
+Run on an Android device or emulator:
+
+```bash
+flutter run -d <android-device-id>
+```
+
+Build a release APK:
 
 ```bash
 flutter build apk --release
 ```
 
-Output: `build/app/outputs/flutter-apk/app-release.apk` (~57MB)
+Output: `build/app/outputs/flutter-apk/app-release.apk` (~60MB)
 
 A prebuilt release APK is also available at the project root as [`ytmusix.apk`](ytmusix.apk).
+
+### iOS Simulator
+
+Launch a simulator:
+
+```bash
+flutter emulators --launch apple_ios_simulator
+```
+
+Build for the iOS simulator:
+
+```bash
+flutter build ios --simulator
+```
+
+Run on a booted simulator:
+
+```bash
+flutter run -d <ios-simulator-id>
+```
+
+Output: `build/ios/iphonesimulator/Runner.app`
 
 ## Project Structure
 
 ```
+ios/                               # Flutter iOS host project
 lib/
 ├── app.dart                        # App entry point + theme
 ├── main.dart                       # DI + AudioService.init
@@ -139,11 +174,11 @@ lib/
 │       └── playlist_repository_impl.dart
 ├── presentation/
 │   ├── screens/
-│   │   ├── home_screen.dart
-│   │   ├── player_screen.dart      # Full-screen player
-│   │   ├── playlist_screen.dart
-│   │   ├── search_screen.dart
-│   │   ├── settings_screen.dart
+│   │   ├── home_screen.dart        # Browse layout + playlist shelf
+│   │   ├── player_screen.dart      # Full-screen waveform player
+│   │   ├── playlist_screen.dart    # Modern playlist detail
+│   │   ├── search_screen.dart      # YouTube search
+│   │   ├── settings_screen.dart    # Playback/login/storage settings
 │   │   └── login_screen.dart       # WebView Google auth
 │   ├── providers/
 │   │   ├── player_provider.dart
@@ -175,6 +210,8 @@ _(No tests currently — test directory removed during refactoring.)_
 
 ### App
 - **Pub cache patch** — overwritten when `flutter pub upgrade` runs; must be re-applied manually.
+- **iOS Swift Package Manager notice** — Flutter currently warns that `flutter_secure_storage` does not support Swift Package Manager for iOS yet. This is a future-warning, not a current build blocker.
+- **Android Kotlin Gradle Plugin notice** — Flutter currently warns that app/plugin Kotlin Gradle Plugin usage should migrate to Built-in Kotlin for future Flutter versions. This is a future-warning, not a current build blocker.
 - **Samsung GPU `BufferQueue` timeout** — harmless Adreno driver spam in logcat on Exynos devices; does not affect playback.
 
 ## Roadmap
