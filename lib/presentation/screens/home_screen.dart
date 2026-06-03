@@ -132,6 +132,8 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
         children: [
+          const PixelLogo(size: 40),
+          const Spacer(),
           _roundIconButton(
             icon: Icons.search,
             tooltip: 'Search YouTube',
@@ -140,19 +142,19 @@ class _HomeScreenState extends State<HomeScreen> {
               MaterialPageRoute(builder: (_) => const SearchScreen()),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
+          _roundIconButton(
+            icon: Icons.link_rounded,
+            tooltip: 'Paste YouTube link',
+            onPressed: () => _showLinkDialog(context),
+          ),
+          const SizedBox(width: 8),
           Consumer<PlaylistProvider>(
             builder: (context, provider, _) => _roundIconButton(
               icon: Icons.tune_rounded,
               tooltip: 'Sort playlists',
               onPressed: () => _showSortSheet(context, provider),
             ),
-          ),
-          const SizedBox(width: 8),
-          _roundIconButton(
-            icon: Icons.link_rounded,
-            tooltip: 'Paste YouTube link',
-            onPressed: () => _showLinkDialog(context),
           ),
           const SizedBox(width: 8),
           _roundIconButton(

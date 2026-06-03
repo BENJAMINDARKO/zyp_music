@@ -17,6 +17,7 @@ abstract class AudioRepository {
   Stream<Duration> get positionStream;
   Stream<Duration> get bufferedPositionStream;
   Stream<Duration> get durationStream;
+  Future<List<Track>> getRelatedVideos(Track track);
   bool get currentTrackCompleted;
   Stream<void> get onSkipNextRequested;
   Stream<void> get onSkipPreviousRequested;

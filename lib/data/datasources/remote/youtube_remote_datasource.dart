@@ -180,6 +180,26 @@ class YoutubeRemoteDataSource {
     }
   }
 
+  Future<List<TrackModel>> getRelatedVideos(String videoId,
+      {int maxResults = 20}) async {
+    final video = await _yt.videos.get(videoId);
+    final related = await _yt.videos.getRelatedVideos(video);
+    final videos = related?.take(maxResults).toList() ?? [];
+    final tracks = <TrackModel>[];
+    for (var i = 0; i < videos.length; i++) {
+      final v = videos[i];
+      tracks.add(TrackModel(
+        id: v.id.value,
+        title: v.title,
+        author: v.author,
+        durationSeconds: v.duration?.inSeconds ?? 0,
+        thumbnailUrl: v.thumbnails.mediumResUrl,
+        index: i,
+      ));
+    }
+    return tracks;
+  }
+
   Future<List<TrackModel>> search(String query) async {
     final results = await _yt.search.search(query);
     final tracks = <TrackModel>[];

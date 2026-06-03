@@ -9,11 +9,19 @@ import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../../service/audio_handler.dart';
+import 'download_provider.dart';
+import 'settings_provider.dart';
 
 class PlayerProvider extends ChangeNotifier {
   final AudioRepository _audioRepository;
+  final DownloadProvider? _downloadProvider;
+  final SettingsProvider? _settingsProvider;
 
-  PlayerProvider(this._audioRepository) {
+  PlayerProvider(
+    this._audioRepository, {
+    this._downloadProvider,
+    this._settingsProvider,
+  }) {
     _skipNextSubscription = _audioRepository.onSkipNextRequested.listen((_) {
       next();
     });
@@ -31,6 +39,7 @@ class PlayerProvider extends ChangeNotifier {
   bool _isPlaying = false;
   bool _isLoading = false;
   bool _shuffleMode = false;
+  bool _isAutoplaying = false;
   repeat.PlaybackRepeatMode _repeatMode = repeat.PlaybackRepeatMode.none;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -148,6 +157,7 @@ class PlayerProvider extends ChangeNotifier {
   int get currentIndex => _currentIndex;
   bool get isPlaying => _isPlaying;
   bool get isLoading => _isLoading;
+  bool get isAutoplaying => _isAutoplaying;
   bool get shuffleMode => _shuffleMode;
   repeat.PlaybackRepeatMode get repeatMode => _repeatMode;
   Duration get position => _position;
@@ -312,6 +322,8 @@ class PlayerProvider extends ChangeNotifier {
     } else if (_repeatMode == repeat.PlaybackRepeatMode.all &&
         _queue.isNotEmpty) {
       await playFromQueue(0);
+    } else if (_currentTrack != null) {
+      await _fetchAutoplayRecommendations();
     }
   }
 
@@ -358,16 +370,52 @@ class PlayerProvider extends ChangeNotifier {
     _completionSubscription = _audioRepository.processingStateStream.listen((
       state,
     ) {
-      if (state == ProcessingState.completed && _queue.isNotEmpty) {
+      if (state == ProcessingState.completed) {
         if (_repeatMode == repeat.PlaybackRepeatMode.one) {
           playFromQueue(_currentIndex);
         } else if (_currentIndex + 1 < _queue.length) {
           next();
-        } else if (_repeatMode == repeat.PlaybackRepeatMode.all) {
+        } else if (_repeatMode == repeat.PlaybackRepeatMode.all &&
+            _queue.isNotEmpty) {
           playFromQueue(0);
+        } else if (_currentTrack != null) {
+          _fetchAutoplayRecommendations();
         }
       }
     });
+  }
+
+  Future<void> _fetchAutoplayRecommendations() async {
+    if (_currentTrack == null) return;
+    _isAutoplaying = true;
+    notifyListeners();
+    try {
+      final related = await _audioRepository.getRelatedVideos(_currentTrack!);
+      final newTracks =
+          related.where((t) => !_queue.any((q) => q.id == t.id)).toList();
+      if (newTracks.isEmpty) return;
+      _queue.addAll(newTracks);
+      notifyListeners();
+      await playFromQueue(_currentIndex + 1);
+      _preDownloadAutoplay();
+    } catch (_) {
+    } finally {
+      _isAutoplaying = false;
+      notifyListeners();
+    }
+  }
+
+  void _preDownloadAutoplay() {
+    final dl = _downloadProvider;
+    final settings = _settingsProvider;
+    if (dl == null || settings == null) return;
+    dl.preDownloadUpcoming(
+      _queue,
+      _currentIndex,
+      '__autoplay__',
+      prebufferCount: settings.prebufferCount,
+      quality: settings.audioQuality.name,
+    );
   }
 
   Future<void> stop() async {
