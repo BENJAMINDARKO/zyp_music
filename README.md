@@ -9,11 +9,6 @@
 The app is built on top of and inspired by several open-source audio players and streaming utilities:
 - **Primary Codebase & Architecture**: Sourced and inspired from **ytmusix** by niiabe ([niiabe/ytmusix-flowos](https://github.com/niiabe/ytmusix-flowos)).
 - **Feature Roadmap & Enhancements**: Sourced from:
-  - **MusicPiped** (related video recommendations and autoplay design)
-  - **koel/player**
-  - **coflyn/Flow** (accents, equalizer presets, and dynamic theme color extraction from album art)
-  - **sweyer**
-  - **you-free-app**
   - **monochrome-music/monochrome** (animated album cover art, customized audio visualizer, Genius integration for synced karaoke lyrics, real-time listening parties, and account sync)
 
 A detailed future feature roadmap can be found in [docs/futureroadmap.txt](file:///Users/mmm/zyp_music/docs/futureroadmap.txt).
