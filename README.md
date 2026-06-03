@@ -4,7 +4,9 @@
 
 ## Inspiration & Sourced Features
 
-`zyp_music` is built on top of and inspired by several open-source audio players and streaming utilities:
+`zyp_music` is heavily inspired by **[Monochrome.tf](https://monochrome.tf)** for its overall design aesthetic and audio experiences.
+
+The app is built on top of and inspired by several open-source audio players and streaming utilities:
 - **Primary Codebase & Architecture**: Sourced and inspired from **ytmusix** by niiabe ([niiabe/ytmusix-flowos](https://github.com/niiabe/ytmusix-flowos)).
 - **Feature Roadmap & Enhancements**: Sourced from:
   - **MusicPiped** (related video recommendations and autoplay design)
@@ -112,71 +114,99 @@ flutter run
 flutter build apk --release
 ```
 
-Output: `build/app/outputs/flutter-apk/app-release.apk` (~57MB)
-
-A prebuilt release APK is also available at the project root as `ytmusix.apk`.
+Output: `build/app/outputs/flutter-apk/app-release.apk` (<75MB)
 
 ## Project Structure
 
 ```
 lib/
-├── app.dart                        # App entry point + theme
-├── main.dart                       # DI + AudioService.init
+├── app.dart                            # App widget and theme setup
+├── main.dart                           # Entry point, initializes DI and AudioService
 ├── core/
 │   ├── constants/
 │   │   ├── app_constants.dart
 │   │   ├── audio_quality.dart
 │   │   ├── playlist_sort_mode.dart
 │   │   └── repeat_mode.dart
+│   ├── navigation/
+│   │   └── navigator_key.dart          # Global key for context-less navigation
+│   ├── services/
+│   │   └── audio_cache_service.dart    # Manages local audio download/playback caching
 │   ├── theme/
-│   │   └── app_theme.dart          # Dark Spotify-inspired theme
+│   │   └── app_theme.dart              # Main application styling and themes
 │   └── utils/
+│       ├── app_logger.dart
 │       ├── format_duration.dart
-│       └── network_utils.dart      # Redirect resolution
-├── domain/
-│   ├── entities/
-│   │   ├── playlist.dart
-│   │   └── video.dart              # Track entity
-│   └── repositories/
-│       ├── audio_repository.dart
-│       └── playlist_repository.dart
+│       ├── network_utils.dart
+│       └── normalise.dart
 ├── data/
 │   ├── datasources/
-│   │   ├── remote/
-│   │   │   ├── youtube_remote_datasource.dart
-│   │   │   └── authenticated_client.dart
-│   │   └── local/
-│   │       └── playlist_database.dart  # SQLite
+│   │   ├── local/
+│   │   │   └── playlist_database.dart  # SQLite database implementation
+│   │   └── remote/
+│   │       ├── authenticated_client.dart
+│   │       ├── charts_remote_datasource.dart
+│   │       ├── lyrics_remote_datasource.dart
+│   │       ├── tidal_remote_datasource.dart
+│   │       ├── youtube_audio_extractor.dart
+│   │       └── youtube_remote_datasource.dart
 │   ├── models/
 │   │   ├── playlist_model.dart
 │   │   └── video_model.dart
 │   └── repositories/
 │       ├── audio_repository_impl.dart
+│       ├── charts_repository_impl.dart
 │       └── playlist_repository_impl.dart
+├── domain/
+│   ├── entities/
+│   │   ├── album.dart
+│   │   ├── artist.dart
+│   │   ├── lyric_line.dart
+│   │   ├── playlist.dart
+│   │   └── video.dart
+│   └── repositories/
+│       ├── audio_repository.dart
+│       └── playlist_repository.dart
 ├── presentation/
-│   ├── screens/
-│   │   ├── home_screen.dart
-│   │   ├── player_screen.dart      # Full-screen player
-│   │   ├── playlist_screen.dart
-│   │   ├── search_screen.dart
-│   │   ├── settings_screen.dart
-│   │   └── login_screen.dart       # WebView Google auth
-│   ├── providers/
-│   │   ├── player_provider.dart
-│   │   ├── playlist_provider.dart
-│   │   ├── download_provider.dart
-│   │   └── settings_provider.dart
-│   └── widgets/
-│       ├── player_bar.dart
-│       ├── video_tile.dart
-│       ├── playlist_card.dart
-│       ├── now_playing_card.dart
-│       ├── queue_sheet.dart
-│       └── pixel_logo.dart
-└── service/
-    ├── audio_handler.dart          # MusicAudioHandler (audio_service bridge)
-    ├── auth_service.dart           # flutter_secure_storage cookies
-    └── download_service.dart       # Offline downloads with progress
+│   └── providers/
+│       ├── charts_provider.dart
+│       ├── download_provider.dart
+│       ├── miniplayer_visibility_provider.dart
+│       ├── player_provider.dart
+│       ├── playlist_provider.dart
+│       └── settings_provider.dart
+├── service/
+│   ├── audio_handler.dart              # Bridge between audio_service and player
+│   ├── auth_service.dart
+│   ├── download_service.dart
+│   └── oauth_service.dart
+├── services/
+│   ├── playback_session.dart
+│   └── youtube_service.dart
+└── ui/
+    ├── layout/
+    │   └── main_layout.dart
+    ├── screens/
+    │   ├── album_screen.dart
+    │   ├── artist_screen.dart
+    │   ├── home_screen.dart
+    │   ├── library_screen.dart
+    │   ├── playing_screen.dart
+    │   ├── playlist_screen.dart
+    │   ├── settings_screen.dart
+    │   ├── search_screen.dart
+    │   └── youtube_login_webview.dart
+    └── widgets/
+        ├── add_to_playlist_modal.dart
+        ├── audio_visualizer.dart
+        ├── bottom_player.dart
+        ├── custom_audio_seekbar.dart
+        ├── custom_lyrics_modal.dart
+        ├── glass_sidebar.dart
+        ├── global_background.dart
+        ├── playlist_picker_dialog.dart
+        ├── synced_lyrics_widget.dart
+        └── track_context_menu.dart
 ```
 
 ## Testing
@@ -187,9 +217,12 @@ flutter test
 
 _(No tests currently — test directory removed during refactoring.)_
 
-## Known Issues
+## Known Issues / Bugs
 
-### App
+- **Playlist**: Currently broken and does not load/play correctly.
+- **Offline playing**: Playing downloaded/cached files offline is currently broken.
+- **Caching**: Audio caching is not functional.
+- **System theme**: The system theme is broken and does not apply correctly.
 - **Pub cache patch** — overwritten when `flutter pub upgrade` runs; must be re-applied manually.
 - **Samsung GPU `BufferQueue` timeout** — harmless Adreno driver spam in logcat on Exynos devices; does not affect playback.
 
