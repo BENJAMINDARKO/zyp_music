@@ -1,0 +1,59 @@
+
+
+
+## Remaining Issues
+| Issue | Severity | Impact | Status |
+|---|---|---|---|
+| YouTube mixes may fail to load | Medium | Occasional mix playback failure | ✅ Fixed |
+| Pub cache patch overwritten on upgrade | Low | Requires manual re-application | |
+| Samsung GPU BufferQueue timeout | Low | Harmless logcat spam | |
+
+## Feature Candidates (from futureroadmap.txt)
+- Auto-play recommended videos after track ends — MusicPiped-style infinite radio
+- ~~Favorites / liked tracks (star system) — Done~~
+
+
+- ~~Playlist editing — rename, reorder tracks, remove individual tracks — Done~~
+- Volume normalization across tracks
+- ~~Cached playlist management — view cache size, clear per playlist — Done~~
+- Equalizer with presets (Flow-style)
+- Crossfade between tracks (0-3000ms adjustable)
+- Dynamic theme colors from album art
+- Lyrics display (synced LRC support)
+
+---
+
+## Technical Review (2026-06-01) — 129 issues found
+
+### Critical (22)
+| # | Issue | File | Line |
+|---|-------|------|------|
+| 1 | Memory leak — `DownloadProvider.dispose()` never called | `app.dart` | 40 |
+| 2 | Memory leak — `MusicAudioHandler.dispose()` never invoked | `audio_handler.dart` | 208 |
+| 3 | Unawaited `playTrack()` futures (6 locations) | Various | — |
+| 4 | UI blocked — `export/importPlaylists` on main thread | `playlist_provider.dart` | 283-329 |
+| 5 | No pagination for large playlists (all videos loaded at once) | `youtube_remote_datasource.dart` | 40 |
+| 6 | WebView `JavaScriptMode.unrestricted` security risk | `login_screen.dart` | 22 |
+| 7 | `DownloadProvider.dispose()` never triggered by Provider | `app.dart` | 31-43 |
+| 8 | `onSkipNextRequested`/`onSkipPreviousRequested` streams leak | `player_provider.dart` | 17-23 |
+| 9 | Unhandled JSON decode error for recently played tracks | `player_provider.dart` | 79 |
+| 10 | `isTrackFavorite` queries DB on every player screen rebuild | — | — |
+| 11 | Favorites `FutureBuilder` inside `ListView.builder` rebuilds on every notify | `home_screen.dart` | 362-391 |
+| 12 | No reactive favorites cache — DB queried per rebuild | `home_screen.dart` | 362-391 |
+| 13 | Uninitialized `_audioHandler` — null safety bypass (`?.`) | `player_provider.dart` | 341-351 |
+| 14 | `setState()` after async without mounted check | `settings_screen.dart` | 386 |
+| 15 | N+1 queries in `getFullyDownloadedPlaylistIds` | `playlist_database.dart` | 280-291 |
+| 16 | Export playlists: N+1 queries for track data | `playlist_provider.dart` | 283-302 |
+| 17 | `_downloadFile` file sink leak on stream error | `download_service.dart` | 148-166 |
+| 18 | `Random()` re-seeded on every shuffle toggle (predictable) | `player_provider.dart` | 176 |
+| 19 | `onReorderItem` calls async methods synchronously | `playlist_screen.dart` | 94-100 |
+| 20 | Import playlists blocks UI — sequential API calls | `playlist_provider.dart` | 330-373 |
+| 21 | Position stream rebuilds entire player UI 60+ fps | `player_provider.dart` | 299-306 |
+| 22 | `JavaScriptMode.unrestricted` cookie exfiltration risk | `login_screen.dart` | 47-54 |
+
+### Directives
+- Fix critical memory leaks first
+- Add pagination for playlists >200 tracks
+- Move heavy operations off main isolate
+- Use `ChangeNotifierProvider(create:)` instead of `.value`
+- Throttle position stream updates

@@ -1,0 +1,39 @@
+import '../entities/playlist.dart';
+import '../entities/video.dart';
+import '../entities/album.dart';
+import '../entities/artist.dart';
+
+abstract class PlaylistRepository {
+  Future<Playlist> getPlaylist(String playlistId);
+  Future<Playlist> getFromUrl(String input);
+  Future<List<Playlist>> getSavedPlaylists();
+  Future<void> savePlaylist(Playlist playlist);
+  Future<void> deletePlaylist(String playlistId);
+  Future<void> saveTrack(String playlistId, Track track);
+  Future<List<Track>> getCachedTracks(String playlistId);
+  Future<Playlist?> getCachedPlaylist(String playlistId);
+  Future<List<Track>> search(String query);
+  Future<List<Track>> searchTracks(String query);
+  Future<List<Album>> searchAlbums(String query);
+  Future<List<Artist>> searchArtists(String query);
+  Future<List<Playlist>> searchPlaylists(String query);
+  Future<Album> getAlbum(String albumId);
+  Future<Artist> getArtist(String artistId);
+  Future<List<Track>> getEditorsPicks();
+  Future<void> toggleFavorite(Track track);
+  Future<bool> isFavorite(String trackId);
+  Future<Set<String>> getFavoriteIds();
+  Future<List<Track>> getFavoriteTracks();
+
+  Future<void> toggleFavoriteAlbum(Album album);
+  Future<bool> isAlbumFavorite(String albumId);
+  Future<List<Album>> getFavoriteAlbums();
+
+  Future<void> toggleFavoriteArtist(Artist artist);
+  Future<bool> isArtistFavorite(String artistId);
+  Future<List<Artist>> getFavoriteArtists();
+
+  Future<void> updatePlaylistTitle(String id, String newTitle);
+  Future<void> removeTrack(String playlistId, String trackId);
+  Future<void> reorderTracks(String playlistId, List<String> trackIdsInOrder);
+}

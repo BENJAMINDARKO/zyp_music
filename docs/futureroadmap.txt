@@ -1,0 +1,55 @@
+=== FUTURE ROADMAP ===
+Features sourced from: MusicPiped, koel/player, coflyn/Flow, sweyer, you-free-app, monochrome-music/monochrome
+
+===== QUICK WINS =====
+- Shuffle / Repeat (loop one, loop all) modes for playback [DONE]
+- Sleep timer (15m/30m/60m/custom) to auto-stop playback [DONE]
+- Search YouTube directly within the app (not just paste links) [DONE]
+- Import/Export playlists to/from file (backup/restore) [DONE]
+- Aspect: show track count on playlist cards [DONE]
+- Download progress indicator while loading tracks [DONE]
+- Sort playlists by title, date added, track count [DONE]
+- Pull-to-refresh on playlist detail screen [DONE]
+
+===== CORE ENHANCEMENTS =====
+- Background playback with notification/lockscreen controls [DONE]
+- Proper queue management (reorder, view upcoming, remove from queue) [DONE]
+- Recently played / history tracking [DONE]
+- Auto-play recommended videos after track ends (MusicPiped style)
+- Volume normalization across tracks
+- Playlist editing: rename, reorder tracks, remove individual tracks
+- Favorites / liked tracks (star system)
+- Cached playlist management (view cache size, clear per playlist)
+- Handle YouTube mixes and auto-generated playlists (current limitation)
+- Equalizer with presets (Flow-style) 
+
+===== ADVANCED FEATURES =====
+- Crossfade between tracks (0-3000ms adjustable)
+- Dynamic theme colors extracted from album art (Flow's palette_generator)
+- Custom accent color presets (Spotify green, Apple red, etc.)
+- Lyrics display (synced LRC support)
+- Gapless playback
+- Android Auto / Wear OS support
+- Chromecast / casting support
+- Offline mode: download audio for offline listening
+- scrobbling (Last.fm / ListenBrainz)
+- Podcast support
+- Multi-language support (i18n)
+- Third-party login besides Google (e.g. anonymous mode)
+- Desktop platform support (Windows/macOS/Linux)
+
+===== MONOCHROME-INSPIRED =====
+- Animated album cover art on player screen
+- Audio visualizer (customizable presets)
+- Lyrics display with Genius integration + karaoke/synced mode
+- Account system for cross-device sync (library, history, playlists)
+- Customizable user profiles
+- Real-time listening parties (synced playback with friends)
+- ArtistGrid integration for unreleased/leaked music
+- Keyboard shortcuts + command palette (Ctrl+K)
+- Infinite recommendation radio (auto-play related tracks)
+- Explore page showing hot/new releases
+- Public playlists with social sharing
+- Automatic metadata embedding for downloaded tracks
+- Multiple API instance support with failover
+- OAuth support beyond Google (Discord, GitHub, Spotify)
