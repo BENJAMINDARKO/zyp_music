@@ -12,6 +12,8 @@ import '../widgets/track_context_menu.dart';
 import 'playlist_screen.dart';
 import 'album_screen.dart';
 import 'artist_screen.dart';
+import '../../presentation/providers/download_provider.dart';
+import '../widgets/track_download_icon.dart';
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
@@ -104,9 +106,22 @@ class LibraryScreen extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: IconButton(
-                icon: const Icon(Icons.more_vert, color: Colors.white54),
-                onPressed: () => TrackContextMenu.show(context, track),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.favorite, color: Color(0xFFEAB308)),
+                    onPressed: () {
+                      final dl = context.read<DownloadProvider>();
+                      provider.toggleFavorite(track, downloadProvider: dl);
+                    },
+                  ),
+                  TrackDownloadIcon(track: track, size: 20),
+                  IconButton(
+                    icon: const Icon(Icons.more_vert, color: Colors.white54),
+                    onPressed: () => TrackContextMenu.show(context, track),
+                  ),
+                ],
               ),
               onTap: () {
                 final player = context.read<PlayerProvider>();
@@ -162,6 +177,13 @@ class LibraryScreen extends StatelessWidget {
               ),
               title: Text(album.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text('${album.artistName ?? 'Unknown'} • ${album.year ?? ''}', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: IconButton(
+                icon: const Icon(Icons.favorite, color: Colors.red),
+                onPressed: () {
+                  final dl = context.read<DownloadProvider>();
+                  provider.toggleFavoriteAlbum(album, downloadProvider: dl);
+                },
+              ),
               onTap: () {
                 Navigator.push(
                   context,
@@ -217,6 +239,12 @@ class LibraryScreen extends StatelessWidget {
                       ),
               ),
               title: Text(artist.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: IconButton(
+                icon: const Icon(Icons.favorite, color: Colors.red),
+                onPressed: () {
+                  provider.toggleFavoriteArtist(artist);
+                },
+              ),
               onTap: () {
                 Navigator.push(
                   context,

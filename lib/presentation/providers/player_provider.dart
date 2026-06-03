@@ -65,6 +65,8 @@ class PlayerProvider extends ChangeNotifier {
   bool _isLoadingLyrics = false;
   
   Color? _dominantColor;
+  bool _autoScroll = true;
+  bool _isKaraokeMode = false;
 
   final List<VoidCallback> _trackChangedListeners = [];
 
@@ -129,22 +131,30 @@ class PlayerProvider extends ChangeNotifier {
 
   void removeFromQueue(int index) {
     if (index < 0 || index >= _queue.length) return;
+    final bool wasPlayingCurrent = (index == _currentIndex && _isPlaying);
+    
     if (index == _currentIndex) {
       if (_queue.length > 1) {
         final newIdx = index < _queue.length - 1 ? index : index - 1;
         _queue.removeAt(index);
         _currentIndex = newIdx.clamp(0, _queue.length - 1);
-        _currentTrack = _queue.isNotEmpty ? _queue[_currentIndex] : null;
+        if (wasPlayingCurrent) {
+          playFromQueue(_currentIndex);
+        } else {
+          _currentTrack = _queue[_currentIndex];
+          _position = Duration.zero;
+          _bufferedPosition = Duration.zero;
+          notifyListeners();
+        }
       } else {
         _queue.removeAt(index);
-        _currentTrack = null;
-        _currentIndex = 0;
+        stop();
       }
     } else {
       _queue.removeAt(index);
       if (index < _currentIndex) _currentIndex--;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
@@ -184,6 +194,19 @@ class PlayerProvider extends ChangeNotifier {
   bool get isLoadingLyrics => _isLoadingLyrics;
   Color? get dominantColor => _dominantColor;
 
+  bool get autoScroll => _autoScroll;
+  bool get isKaraokeMode => _isKaraokeMode;
+
+  void setAutoScroll(bool value) {
+    _autoScroll = value;
+    notifyListeners();
+  }
+
+  void setKaraokeMode(bool value) {
+    _isKaraokeMode = value;
+    notifyListeners();
+  }
+
   Future<void> _fetchLyricsForCurrentTrack() async {
     final track = _currentTrack;
     if (track == null) {
@@ -200,6 +223,23 @@ class PlayerProvider extends ChangeNotifier {
     final result = await _audioRepository.getLyrics(track);
     
     // Only update if the track hasn't changed while we were fetching
+    if (_currentTrack?.id == track.id) {
+      _lyrics = result;
+      _isLoadingLyrics = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshLyrics() async {
+    final track = _currentTrack;
+    if (track == null) return;
+
+    _isLoadingLyrics = true;
+    _lyrics = null;
+    notifyListeners();
+
+    final result = await _audioRepository.refreshLyrics(track);
+
     if (_currentTrack?.id == track.id) {
       _lyrics = result;
       _isLoadingLyrics = false;
@@ -312,8 +352,13 @@ class PlayerProvider extends ChangeNotifier {
       _bufferedPosition = Duration.zero;
       _addToRecentlyPlayed(track);
       
-      // Kick off lyrics and color fetch immediately without awaiting
-      _fetchLyricsForCurrentTrack();
+      // Fetch lyrics with timeout to avoid blocking playback indefinitely on slow networks
+      try {
+        await _fetchLyricsForCurrentTrack().timeout(const Duration(milliseconds: 1500));
+      } catch (_) {
+        // Proceed on timeout or fetch failure
+      }
+      
       _extractDominantColor(track.thumbnailUrl);
       
       final sourceRef = await PlaybackSession().resolve(track, _fallbackEngine);
@@ -329,6 +374,11 @@ class PlayerProvider extends ChangeNotifier {
 
       if (sourceRef != null) {
         _currentTrack = track.copyWith(activeSource: sourceRef);
+      }
+
+      // Delay audio startup a little bit if lyrics are active so they sync properly
+      if (_lyrics != null && _lyrics!.isNotEmpty) {
+        await Future.delayed(const Duration(milliseconds: 1400));
       }
 
       await _audioRepository.playTrack(track, audioUrl);
@@ -367,6 +417,7 @@ class PlayerProvider extends ChangeNotifier {
       if (_isPlaying) {
         await _audioRepository.pause();
         _isPlaying = false;
+        _autoScroll = false;
       } else {
         await _audioRepository.resume();
         _isPlaying = true;
@@ -374,6 +425,18 @@ class PlayerProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = 'Failed to toggle playback: ${e.toString()}';
+      notifyListeners();
+    }
+  }
+
+  Future<void> pause() async {
+    try {
+      await _audioRepository.pause();
+      _isPlaying = false;
+      _autoScroll = false;
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to pause: ${e.toString()}';
       notifyListeners();
     }
   }

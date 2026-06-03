@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../../domain/entities/lyric_line.dart';
@@ -7,22 +6,39 @@ class SyncedLyricsWidget extends StatefulWidget {
   final String lyricsText;
   final Duration position;
   final Color activeColor;
+  final bool karaokeMode;
+  final bool autoScroll;
+  final bool isLoading;
 
   const SyncedLyricsWidget({
     super.key,
     required this.lyricsText,
     required this.position,
     required this.activeColor,
+    this.karaokeMode = false,
+    this.autoScroll = true,
+    this.isLoading = false,
   });
 
   @override
   State<SyncedLyricsWidget> createState() => _SyncedLyricsWidgetState();
 }
 
-class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> {
+class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProviderStateMixin {
   final ItemScrollController _scrollController = ItemScrollController();
   final ScrollOffsetController _scrollOffsetController = ScrollOffsetController();
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
+
+  late AnimationController _entranceController;
+  late AnimationController _pulseController;
+
+  late Animation<double> _dot1OpacityAnimation;
+  late Animation<double> _dot2OpacityAnimation;
+  late Animation<double> _dot3OpacityAnimation;
+  late Animation<double> _dotsFadeOutAnimation;
+  late Animation<double> _dotsTranslateAnimation;
+  late Animation<double> _lyricsFadeInAnimation;
+  late Animation<double> _lyricsTranslateAnimation;
 
   List<LyricLine> _lyrics = [];
   bool _isSynced = false;
@@ -31,17 +47,124 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> {
   @override
   void initState() {
     super.initState();
+    
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _pulseController.repeat(reverse: true);
+
+    // Timeline mapping:
+    // Dot 1 fades in from 0 to 200ms (0.0 to 0.1)
+    _dot1OpacityAnimation = Tween<double>(begin: 0.0, end: 0.6).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.0, 0.1, curve: Curves.easeIn),
+      ),
+    );
+
+    // Dot 2 fades in from 400ms to 600ms (0.2 to 0.3)
+    _dot2OpacityAnimation = Tween<double>(begin: 0.0, end: 0.6).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.2, 0.3, curve: Curves.easeIn),
+      ),
+    );
+
+    // Dot 3 fades in from 800ms to 1000ms (0.4 to 0.5)
+    _dot3OpacityAnimation = Tween<double>(begin: 0.0, end: 0.6).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.4, 0.5, curve: Curves.easeIn),
+      ),
+    );
+
+    // Dots scroll up and fade out from 1400ms to 2000ms (0.7 to 1.0)
+    _dotsFadeOutAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.7, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    _dotsTranslateAnimation = Tween<double>(begin: 0.0, end: -40.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.7, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    // Lyric first line arrives from 1600ms to 2000ms (0.8 to 1.0)
+    _lyricsFadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.8, 1.0, curve: Curves.easeIn),
+      ),
+    );
+
+    _lyricsTranslateAnimation = Tween<double>(begin: 30.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _entranceController,
+        curve: const Interval(0.8, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    _entranceController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        if (_currentIndex != -1) {
+          _scrollToIndex(_currentIndex);
+        }
+      }
+    });
+
     _parseLyrics();
+
+    if (widget.isLoading) {
+      _entranceController.animateTo(0.6, duration: const Duration(milliseconds: 1200));
+    } else {
+      _entranceController.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _entranceController.dispose();
+    _pulseController.dispose();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant SyncedLyricsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    
     if (oldWidget.lyricsText != widget.lyricsText) {
       _parseLyrics();
+      if (!widget.isLoading) {
+        _entranceController.forward(from: 0.0);
+      }
     }
+
+    if (oldWidget.isLoading && !widget.isLoading) {
+      // Finished loading: transition from dots to lyrics
+      if (_entranceController.value < 0.6) {
+        _entranceController.animateTo(1.0);
+      } else {
+        _entranceController.forward();
+      }
+    } else if (!widget.isLoading && oldWidget.isLoading != widget.isLoading) {
+      // Re-trigger if transitioned in a different state
+      _entranceController.forward(from: 0.0);
+    }
+
     if (_isSynced && oldWidget.position != widget.position) {
       _updateCurrentIndex();
+    } else if (widget.autoScroll && !oldWidget.autoScroll && _currentIndex != -1) {
+      _scrollToIndex(_currentIndex);
     }
   }
 
@@ -59,7 +182,6 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> {
         final minutes = int.parse(match.group(1)!);
         final seconds = int.parse(match.group(2)!);
         
-        // Handle both .xx and .xxx milliseconds formats safely
         String msStr = match.group(3)!;
         if (msStr.length == 2) msStr += '0';
         final milliseconds = int.parse(msStr);
@@ -77,7 +199,6 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> {
       }
     }
     
-    // If we didn't find any timestamps, just create one big line or split by newline
     if (!_isSynced) {
       for (var line in lines) {
         if (line.trim().isNotEmpty) {
@@ -103,60 +224,168 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> {
       setState(() {
         _currentIndex = newIndex;
       });
-      _scrollToIndex(newIndex);
+      if (widget.autoScroll) {
+        _scrollToIndex(newIndex);
+      }
     }
   }
 
   void _scrollToIndex(int index) {
-    if (_scrollController.isAttached) {
+    if (widget.autoScroll && _entranceController.value >= 1.0 && _scrollController.isAttached) {
       _scrollController.scrollTo(
-        index: max(0, index - 2), // Keep active line roughly in the middle
+        index: index,
+        alignment: index == 0 ? 0.0 : 0.25,
         duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+        curve: Curves.easeInOut,
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isLoading) {
+      return _buildDotsEntrance();
+    }
+
     if (_lyrics.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'No lyrics available',
-          style: TextStyle(color: Colors.white54, fontSize: 18),
+          'Lyrics not available',
+          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 18),
         ),
       );
     }
 
     if (!_isSynced) {
-      return SingleChildScrollView(
-        child: Text(
-          widget.lyricsText,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            height: 1.8,
-            fontWeight: FontWeight.w600,
+      return AnimatedBuilder(
+        animation: _entranceController,
+        builder: (context, child) {
+          if (_entranceController.value < 0.8) return _buildDotsEntrance();
+          final opacity = _lyricsFadeInAnimation.value;
+          return Opacity(
+            opacity: opacity,
+            child: Transform.translate(
+              offset: Offset(0, _lyricsTranslateAnimation.value),
+              child: child,
+            ),
+          );
+        },
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 200, top: 8),
+          child: Text(
+            widget.lyricsText,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              height: 1.8,
+              fontWeight: FontWeight.normal,
+            ),
+            textAlign: TextAlign.start,
           ),
-          textAlign: TextAlign.start,
         ),
       );
     }
 
+    return Stack(
+      children: [
+        // Dots entrance layer
+        AnimatedBuilder(
+          animation: _entranceController,
+          builder: (context, child) {
+            if (_entranceController.value >= 1.0) return const SizedBox.shrink();
+            return _buildDotsEntrance();
+          },
+        ),
+        
+        // Lyrics layer
+        AnimatedBuilder(
+          animation: _entranceController,
+          builder: (context, child) {
+            if (_entranceController.value < 0.8) return const SizedBox.shrink();
+            final opacity = _lyricsFadeInAnimation.value;
+            return Opacity(
+              opacity: opacity,
+              child: Transform.translate(
+                offset: Offset(0, _lyricsTranslateAnimation.value),
+                child: child,
+              ),
+            );
+          },
+          child: widget.karaokeMode ? _buildKaraoke() : _buildLyricsList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDotsEntrance() {
+    return AnimatedBuilder(
+      animation: _entranceController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _dotsTranslateAnimation.value),
+          child: child,
+        );
+      },
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildDot(_dot1OpacityAnimation),
+            const SizedBox(height: 12),
+            _buildDot(_dot2OpacityAnimation),
+            const SizedBox(height: 12),
+            _buildDot(_dot3OpacityAnimation),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDot(Animation<double> opacityAnimation) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([opacityAnimation, _pulseController]),
+      builder: (context, child) {
+        final opacity = opacityAnimation.value * _dotsFadeOutAnimation.value;
+        if (opacity <= 0.0) return const SizedBox.shrink();
+        final scale = 1.0 + 0.2 * _pulseController.value;
+        return Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: Transform.scale(
+            scale: scale,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLyricsList() {
     return ScrollablePositionedList.builder(
       itemCount: _lyrics.length,
       itemScrollController: _scrollController,
       scrollOffsetController: _scrollOffsetController,
       itemPositionsListener: _itemPositionsListener,
-      padding: const EdgeInsets.only(bottom: 200, top: 40),
+      padding: const EdgeInsets.only(bottom: 350, top: 8),
       itemBuilder: (context, index) {
         final line = _lyrics[index];
         final isActive = index == _currentIndex;
         final isPassed = index < _currentIndex;
-        
+
         if (line.words.isEmpty) {
           return const SizedBox(height: 24);
         }
+
+        // Color and weight styling rules:
+        final double opacity = isActive ? 1.0 : (isPassed ? 0.25 : 0.4);
+        final FontWeight weight = isActive ? FontWeight.bold : FontWeight.normal;
+        final double fontSize = isActive ? 22.0 : 18.0;
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
@@ -164,17 +393,45 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> {
           child: Text(
             line.words,
             style: TextStyle(
-              color: isActive
-                  ? widget.activeColor
-                  : (isPassed ? Colors.white.withOpacity(0.4) : Colors.white24),
-              fontSize: isActive ? 26 : 22,
-              fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+              color: Colors.white.withOpacity(opacity),
+              fontSize: fontSize,
+              fontWeight: weight,
               height: 1.4,
             ),
             textAlign: TextAlign.start,
           ),
         );
       },
+    );
+  }
+
+  Widget _buildKaraoke() {
+    final currentLine = _currentIndex >= 0 && _currentIndex < _lyrics.length
+        ? _lyrics[_currentIndex].words
+        : '';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 400),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(anim), child: child),
+          ),
+          child: Text(
+            currentLine,
+            key: ValueKey(currentLine),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

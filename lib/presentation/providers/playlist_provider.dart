@@ -11,6 +11,7 @@ import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
 import '../../domain/entities/artist.dart';
 import '../../domain/repositories/playlist_repository.dart';
+import 'download_provider.dart';
 
 class PlaylistProvider extends ChangeNotifier {
   final PlaylistRepository _repository;
@@ -180,14 +181,24 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleFavorite(Track track) async {
+  Future<void> toggleFavorite(Track track, {DownloadProvider? downloadProvider}) async {
     final wasFavorite = _favoriteIds.contains(track.id);
     if (wasFavorite) {
       _favoriteIds.remove(track.id);
       _favoriteTracks.removeWhere((t) => t.id == track.id);
+      if (downloadProvider != null) {
+        try {
+          await downloadProvider.deleteDownloadedTrack(track.id);
+        } catch (_) {}
+      }
     } else {
       _favoriteIds.add(track.id);
       _favoriteTracks.insert(0, track);
+      if (downloadProvider != null) {
+        try {
+          await downloadProvider.downloadTrack(track, 'favorite');
+        } catch (_) {}
+      }
     }
     notifyListeners();
     try {
@@ -196,9 +207,19 @@ class PlaylistProvider extends ChangeNotifier {
       if (wasFavorite) {
         _favoriteIds.add(track.id);
         _favoriteTracks.insert(0, track);
+        if (downloadProvider != null) {
+          try {
+            await downloadProvider.downloadTrack(track, 'favorite');
+          } catch (_) {}
+        }
       } else {
         _favoriteIds.remove(track.id);
         _favoriteTracks.removeWhere((t) => t.id == track.id);
+        if (downloadProvider != null) {
+          try {
+            await downloadProvider.deleteDownloadedTrack(track.id);
+          } catch (_) {}
+        }
       }
       notifyListeners();
     }
@@ -206,14 +227,26 @@ class PlaylistProvider extends ChangeNotifier {
 
   bool isAlbumFavorite(String albumId) => _favoriteAlbumIds.contains(albumId);
 
-  Future<void> toggleFavoriteAlbum(Album album) async {
+  Future<void> toggleFavoriteAlbum(Album album, {DownloadProvider? downloadProvider}) async {
     final wasFavorite = _favoriteAlbumIds.contains(album.id);
     if (wasFavorite) {
       _favoriteAlbumIds.remove(album.id);
       _favoriteAlbums.removeWhere((a) => a.id == album.id);
+      if (downloadProvider != null) {
+        try {
+          for (final track in album.tracks) {
+            await downloadProvider.deleteDownloadedTrack(track.id);
+          }
+        } catch (_) {}
+      }
     } else {
       _favoriteAlbumIds.add(album.id);
       _favoriteAlbums.insert(0, album);
+      if (downloadProvider != null) {
+        try {
+          await downloadProvider.downloadAlbum(album, this);
+        } catch (_) {}
+      }
     }
     notifyListeners();
     try {
@@ -222,9 +255,21 @@ class PlaylistProvider extends ChangeNotifier {
       if (wasFavorite) {
         _favoriteAlbumIds.add(album.id);
         _favoriteAlbums.insert(0, album);
+        if (downloadProvider != null) {
+          try {
+            await downloadProvider.downloadAlbum(album, this);
+          } catch (_) {}
+        }
       } else {
         _favoriteAlbumIds.remove(album.id);
         _favoriteAlbums.removeWhere((a) => a.id == album.id);
+        if (downloadProvider != null) {
+          try {
+            for (final track in album.tracks) {
+              await downloadProvider.deleteDownloadedTrack(track.id);
+            }
+          } catch (_) {}
+        }
       }
       notifyListeners();
     }

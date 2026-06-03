@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:monochrome/data/datasources/remote/youtube_remote_datasource.dart';
-import 'package:monochrome/service/auth_service.dart';
+import 'package:zyp_music/data/datasources/remote/youtube_remote_datasource.dart';
+import 'package:zyp_music/service/auth_service.dart';
 
 void main() {
   test('fetch charts', () async {

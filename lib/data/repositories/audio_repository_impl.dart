@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:zyp_music/core/utils/app_logger.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../domain/entities/video.dart';
@@ -244,6 +245,35 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<String?> getLyrics(Track track) async {
+    // 1. Try to read from local file first
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/${track.title}-lyrics.lrc');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        if (content.isNotEmpty) {
+          return content;
+        }
+      }
+    } catch (e) {
+      AppLogger.log('Error reading local lyrics file: $e', name: 'AudioRepository');
+    }
+
+    // 2. Fallback to network fetch
+    final lyrics = await _fetchLyricsFromNetwork(track);
+    if (lyrics != null && lyrics.isNotEmpty) {
+      try {
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/${track.title}-lyrics.lrc');
+        await file.writeAsString(lyrics);
+      } catch (e) {
+        AppLogger.log('Error caching fetched lyrics: $e', name: 'AudioRepository');
+      }
+    }
+    return lyrics;
+  }
+
+  Future<String?> _fetchLyricsFromNetwork(Track track) async {
     // Attempt to fetch synced lyrics from LrcLib
     final lrclibLyrics = await lyricsDataSource.getSyncedLyrics(track.title, track.author ?? '');
     if (lrclibLyrics != null) {
@@ -266,6 +296,21 @@ class AudioRepositoryImpl implements AudioRepository {
     }
     
     return null;
+  }
+
+  @override
+  Future<String?> refreshLyrics(Track track) async {
+    final lyrics = await _fetchLyricsFromNetwork(track);
+    if (lyrics != null) {
+      try {
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/${track.title}-lyrics.lrc');
+        await file.writeAsString(lyrics);
+      } catch (e) {
+        AppLogger.log('Error saving lyrics file on refresh: $e', name: 'AudioRepository');
+      }
+    }
+    return lyrics;
   }
 
   @override

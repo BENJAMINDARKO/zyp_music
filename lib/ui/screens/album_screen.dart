@@ -6,7 +6,10 @@ import '../../presentation/providers/player_provider.dart';
 import '../../domain/entities/album.dart';
 import '../../core/utils/format_duration.dart';
 import '../widgets/track_context_menu.dart';
+import '../widgets/track_download_icon.dart';
+import '../widgets/album_download_icon.dart';
 import '../widgets/bottom_player.dart';
+import '../../presentation/providers/download_provider.dart';
 
 class AlbumScreen extends StatefulWidget {
   final String albumId;
@@ -150,15 +153,39 @@ class _AlbumScreenState extends State<AlbumScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _playAll,
-                          icon: const Icon(Icons.play_arrow, color: Colors.black),
-                          label: const Text("Play", style: TextStyle(color: Colors.black)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFEAB308),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                          ),
+                        Row(
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _playAll,
+                              icon: const Icon(Icons.play_arrow, color: Colors.black),
+                              label: const Text("Play", style: TextStyle(color: Colors.black)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFEAB308),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Favorite album button
+                            Consumer<PlaylistProvider>(
+                              builder: (context, pp, _) {
+                                final isFav = pp.favoriteAlbums.any((a) => a.id == _album!.id);
+                                return IconButton(
+                                  icon: Icon(
+                                    isFav ? Icons.favorite : Icons.favorite_border,
+                                    color: isFav ? Colors.red : Colors.white70,
+                                    size: 28,
+                                  ),
+                                  onPressed: () => pp.toggleFavoriteAlbum(
+                                    _album!,
+                                    downloadProvider: context.read<DownloadProvider>(),
+                                  ),
+                                );
+                              },
+                            ),
+                            // Download album button
+                            AlbumDownloadIcon(album: _album!, size: 28),
+                          ],
                         ),
                       ],
                     ),
@@ -199,9 +226,37 @@ class _AlbumScreenState extends State<AlbumScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    trailing: Text(
-                      formatDuration(track.duration),
-                      style: const TextStyle(color: Colors.white54),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Consumer<PlaylistProvider>(
+                          builder: (context, playlistProvider, _) {
+                            final isFav = playlistProvider.isFavorite(track.id);
+                            return IconButton(
+                              icon: Icon(
+                                isFav ? Icons.favorite : Icons.favorite_border,
+                                color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                playlistProvider.toggleFavorite(
+                                  track,
+                                  downloadProvider: context.read<DownloadProvider>(),
+                                );
+                              },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        TrackDownloadIcon(track: track, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          formatDuration(track.duration),
+                          style: const TextStyle(color: Colors.white54),
+                        ),
+                      ],
                     ),
                     onTap: () => _playTrack(index),
                     onLongPress: () => TrackContextMenu.show(context, track),

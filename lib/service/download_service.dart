@@ -74,6 +74,14 @@ class DownloadService {
     return dir.path;
   }
 
+  Future<void> _cacheLyrics(Track track) async {
+    try {
+      await _audioRepository.getLyrics(track);
+    } catch (_) {
+      // Don't crash the download process if lyric caching fails
+    }
+  }
+
   Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
     if (await _database.isTrackDownloaded(track.id)) return;
     final dir = await _getDownloadDir(playlistId);
@@ -88,6 +96,10 @@ class DownloadService {
       );
       final resolved = await _resolveRedirects(audioUrl);
       await _downloadFile(resolved, filePath, track, 0, 1);
+      
+      // Cache lyrics with it
+      await _cacheLyrics(track);
+
       await _database.markTrackDownloaded(
         track.id,
         playlistId,
@@ -133,6 +145,10 @@ class DownloadService {
         );
         final resolved = await _resolveRedirects(audioUrl);
         await _downloadFile(resolved, filePath, track, i, total);
+        
+        // Cache lyrics with it
+        await _cacheLyrics(track);
+
         await _database.markTrackDownloaded(
           track.id,
           playlist.id,
@@ -218,6 +234,19 @@ class DownloadService {
       } catch (_) {}
     }
     await _database.removeDownloadedPlaylist(playlistId);
+  }
+
+  Future<void> deleteDownloadedTrack(String trackId) async {
+    final path = await _database.getDownloadedFilePath(trackId);
+    if (path != null) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+    await _database.removeDownloadedTrack(trackId);
   }
 
   Future<int> getTotalCacheSize() async {

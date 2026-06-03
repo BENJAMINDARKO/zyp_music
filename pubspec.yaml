@@ -1,7 +1,7 @@
 name: zyp_music
 description: Monochrome - Native Audio Streamer
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+1
 
 environment:
   sdk: ^3.12.0
@@ -58,3 +58,5 @@ flutter_native_splash:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo.png

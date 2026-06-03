@@ -7,6 +7,8 @@ import '../../domain/entities/playlist.dart';
 import '../../core/utils/format_duration.dart';
 import '../widgets/track_context_menu.dart';
 import '../widgets/bottom_player.dart';
+import '../widgets/track_download_icon.dart';
+import '../../presentation/providers/download_provider.dart';
 
 class PlaylistScreen extends StatefulWidget {
   final String playlistId;
@@ -199,9 +201,37 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    trailing: Text(
-                      formatDuration(track.duration),
-                      style: const TextStyle(color: Colors.white54),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Consumer<PlaylistProvider>(
+                          builder: (context, playlistProvider, _) {
+                            final isFav = playlistProvider.isFavorite(track.id);
+                            return IconButton(
+                              icon: Icon(
+                                isFav ? Icons.favorite : Icons.favorite_border,
+                                color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                playlistProvider.toggleFavorite(
+                                  track,
+                                  downloadProvider: context.read<DownloadProvider>(),
+                                );
+                              },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        TrackDownloadIcon(track: track, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          formatDuration(track.duration),
+                          style: const TextStyle(color: Colors.white54),
+                        ),
+                      ],
                     ),
                     onTap: () => _playTrack(index),
                     onLongPress: () => TrackContextMenu.show(context, track),

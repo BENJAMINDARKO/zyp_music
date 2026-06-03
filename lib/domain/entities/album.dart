@@ -1,4 +1,5 @@
 import 'video.dart';
+import 'playlist.dart';
 
 class Album {
   final String id;
@@ -16,4 +17,15 @@ class Album {
     this.thumbnailUrl,
     this.tracks = const [],
   });
+
+  Playlist toPlaylist() {
+    return Playlist(
+      id: id,
+      title: title,
+      author: artistName ?? 'Unknown Artist',
+      thumbnailUrl: thumbnailUrl,
+      videoCount: tracks.length,
+      tracks: tracks,
+    );
+  }
 }

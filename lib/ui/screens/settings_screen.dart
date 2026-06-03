@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../presentation/providers/miniplayer_visibility_provider.dart';
@@ -189,14 +190,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             );
             if (confirm == true) {
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.clear();
-              await AudioCacheService().clearCache();
-              
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Cache cleared. Please restart the app to apply default settings.')),
-                );
+              if (Platform.isAndroid) {
+                try {
+                  const channel = MethodChannel('com.benjamindarko.monochrome/system');
+                  await channel.invokeMethod('clearAppData');
+                } catch (e) {
+                  // Fallback if channel invocation fails
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.clear();
+                  await AudioCacheService().clearCache();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cache cleared. Please restart the app.')),
+                    );
+                  }
+                }
+              } else {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+                await AudioCacheService().clearCache();
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cache cleared. Please restart the app to apply default settings.')),
+                  );
+                }
               }
             }
           },

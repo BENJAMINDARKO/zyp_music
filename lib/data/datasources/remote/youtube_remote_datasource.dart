@@ -29,7 +29,11 @@ class YoutubeRemoteDataSource {
     final ytHttp = YoutubeHttpClient(inner);
     _yt = YoutubeExplode(httpClient: ytHttp);
     _ytMusic = ytm.YTMusic();
-    await _ytMusic.initialize(cookies: cookies);
+    try {
+      await _ytMusic.initialize(cookies: cookies);
+    } catch (e) {
+      AppLogger.log('Failed to initialize YTMusic (possibly offline): $e', name: 'YoutubeRemoteDataSource');
+    }
   }
 
   Future<PlaylistModel> getPlaylist(String playlistId) async {

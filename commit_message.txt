@@ -1,0 +1,18 @@
+feat: sync play-lyrics delay, stopping/advancing queue, & lyrics caching
+
+- player_provider.dart:
+  - Await _fetchLyricsForCurrentTrack() with a 1.5s timeout.
+  - Delay audio startup by 1400ms if lyrics are present to sync with dot animation entrance.
+  - Advance playback index and play next track automatically in removeFromQueue(), or stop playback cleanly via stop() if the active track removed was the last.
+- audio_repository_impl.dart:
+  - Cache network-fetched lyrics locally to '${track.title}-lyrics.lrc' inside documents folder so subsequent fetches load instantly.
+- download_service.dart:
+  - Cache lyrics automatically during single track and playlist downloads.
+- synced_lyrics_widget.dart:
+  - Update typography style to fixed plain white (#FFFFFF) with opacity/bold states (1.0 active, 0.4 upcoming, 0.25 passed).
+  - Implement vertical 3-dot pulsing holding & entrance sequences.
+  - Position active lyric line at H * 0.25 (upper third) for index > 0, and 0.0 for index == 0.
+- playing_screen.dart, custom_lyrics_modal.dart, miniplayer_lyrics_view.dart:
+  - Update ShaderMask to apply a transparent gradient fade to the bottom edge only.
+- pubspec.yaml:
+  - Bump app version to 1.1.0+1.

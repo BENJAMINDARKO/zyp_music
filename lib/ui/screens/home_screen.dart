@@ -1,6 +1,9 @@
 import 'package:zyp_music/presentation/providers/playlist_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../presentation/providers/download_provider.dart';
+import '../widgets/track_download_icon.dart';
+import '../widgets/album_download_icon.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/charts_provider.dart';
@@ -391,6 +394,28 @@ class _CompactTrackTile extends StatelessWidget {
                   ],
                 ),
               ),
+              Consumer<PlaylistProvider>(
+                builder: (context, pp, _) {
+                  final isFav = pp.isFavorite(track.id);
+                  return IconButton(
+                    icon: Icon(
+                      isFav ? Icons.favorite : Icons.favorite_border,
+                      color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      pp.toggleFavorite(
+                        track,
+                        downloadProvider: context.read<DownloadProvider>(),
+                      );
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              TrackDownloadIcon(track: track, size: 20),
             ],
           ),
         ),
@@ -440,16 +465,68 @@ class _TrackCard extends StatelessWidget {
                     color: Color(0xFF1F1F1F),
                     borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
                   ),
-                  child: track.thumbnailUrl != null
-                    ? ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                        child: CachedNetworkImage(
-                          imageUrl: track.thumbnailUrl!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _fallbackIcon(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned.fill(
+                        child: track.thumbnailUrl != null
+                          ? ClipRRect(
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                              child: CachedNetworkImage(
+                                imageUrl: track.thumbnailUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _fallbackIcon(),
+                              ),
+                            )
+                          : _fallbackIcon(),
+                      ),
+                      // Favorite Overlay Icon
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Consumer<PlaylistProvider>(
+                          builder: (context, pp, _) {
+                            final isFav = pp.isFavorite(track.id);
+                            return GestureDetector(
+                              onTap: () {
+                                pp.toggleFavorite(
+                                  track,
+                                  downloadProvider: context.read<DownloadProvider>(),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white12, width: 0.5),
+                                ),
+                                child: Icon(
+                                  isFav ? Icons.favorite : Icons.favorite_border,
+                                  color: isFav ? Colors.red : Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      )
-                    : _fallbackIcon(),
+                      ),
+                      // Download Status Overlay
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white12, width: 0.5),
+                          ),
+                          child: TrackDownloadIcon(track: track, size: 14),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Padding(
@@ -525,16 +602,68 @@ class _AlbumCard extends StatelessWidget {
                     color: Color(0xFF1F1F1F),
                     borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
                   ),
-                  child: album.thumbnailUrl != null
-                    ? ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                        child: CachedNetworkImage(
-                          imageUrl: album.thumbnailUrl!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _fallbackIcon(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned.fill(
+                        child: album.thumbnailUrl != null
+                          ? ClipRRect(
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                              child: CachedNetworkImage(
+                                imageUrl: album.thumbnailUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _fallbackIcon(),
+                              ),
+                            )
+                          : _fallbackIcon(),
+                      ),
+                      // Favorite Overlay Icon
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Consumer<PlaylistProvider>(
+                          builder: (context, pp, _) {
+                            final isFav = pp.favoriteAlbums.any((a) => a.id == album.id);
+                            return GestureDetector(
+                              onTap: () {
+                                pp.toggleFavoriteAlbum(
+                                  album,
+                                  downloadProvider: context.read<DownloadProvider>(),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white12, width: 0.5),
+                                ),
+                                child: Icon(
+                                  isFav ? Icons.favorite : Icons.favorite_border,
+                                  color: isFav ? Colors.red : Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      )
-                    : _fallbackIcon(),
+                      ),
+                      // Download Status Overlay
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white12, width: 0.5),
+                          ),
+                          child: AlbumDownloadIcon(album: album, size: 14),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Padding(

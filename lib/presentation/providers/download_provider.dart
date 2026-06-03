@@ -3,6 +3,8 @@ import 'package:zyp_music/core/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/playlist.dart';
 import '../../domain/entities/video.dart';
+import '../../domain/entities/album.dart';
+import '../../presentation/providers/playlist_provider.dart';
 import '../../service/download_service.dart';
 
 class DownloadProvider extends ChangeNotifier {
@@ -31,6 +33,10 @@ class DownloadProvider extends ChangeNotifier {
   bool isPlaylistFullyDownloaded(String playlistId) =>
       _downloadedPlaylists.contains(playlistId);
 
+  bool isDownloaded(String trackId) => _downloadedTrackIds.contains(trackId);
+
+  bool isDownloading(String trackId) => _activeDownloads.containsKey(trackId);
+
   double? getPlaylistDownloadProgress(String playlistId) =>
       _playlistDownloadProgress[playlistId];
 
@@ -39,6 +45,19 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> init() async {
     _downloadedTrackIds = await _downloadService.getAllDownloadedIds();
     _downloadedPlaylists.addAll(await _downloadService.getFullyDownloadedPlaylistIds());
+    
+    // Listen globally to progress & completed streams to sync single-track states
+    _downloadService.progressStream.listen((progress) {
+      _activeDownloads[progress.trackId] = progress;
+      notifyListeners();
+    });
+
+    _downloadService.completedStream.listen((trackId) {
+      _downloadedTrackIds.add(trackId);
+      _activeDownloads.remove(trackId);
+      notifyListeners();
+    });
+
     notifyListeners();
   }
 
@@ -85,7 +104,63 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
     if (_downloadedTrackIds.contains(track.id)) return;
     if (_activeDownloads.containsKey(track.id)) return;
-    await _downloadService.downloadTrack(track, playlistId, quality: quality);
+    
+    // Show spinner immediately by inserting a placeholder progress object
+    _activeDownloads[track.id] = DownloadProgress(
+      trackId: track.id,
+      trackTitle: track.title,
+      currentBytes: 0,
+      totalBytes: 0,
+      tracksCompleted: 0,
+      totalTracks: 1,
+    );
+    notifyListeners();
+
+    try {
+      await _downloadService.downloadTrack(track, playlistId, quality: quality);
+    } catch (e) {
+      _activeDownloads.remove(track.id);
+      notifyListeners();
+    }
+  }
+
+  Future<void> downloadAlbum(Album album, PlaylistProvider playlistProvider) async {
+    if (_downloadingPlaylists.contains(album.id)) return;
+    _downloadingPlaylists.add(album.id);
+    _playlistDownloadProgress[album.id] = 0.0;
+    notifyListeners();
+
+    _progressSub?.cancel();
+    _completedSub?.cancel();
+
+    _progressSub = _downloadService.progressStream.listen((progress) {
+      _activeDownloads[progress.trackId] = progress;
+      if (progress.totalTracks > 0) {
+        _playlistDownloadProgress[album.id] =
+            (progress.tracksCompleted + progress.fraction) / progress.totalTracks;
+      }
+      notifyListeners();
+    });
+
+    _completedSub = _downloadService.completedStream.listen((trackId) {
+      _downloadedTrackIds.add(trackId);
+      _activeDownloads.remove(trackId);
+      notifyListeners();
+    });
+
+    await _downloadService.downloadPlaylist(album.toPlaylist());
+
+    _downloadingPlaylists.remove(album.id);
+    _playlistDownloadProgress.remove(album.id);
+    final allDownloaded =
+        album.tracks.every((t) => _downloadedTrackIds.contains(t.id));
+    if (allDownloaded) {
+      _downloadedPlaylists.add(album.id);
+    }
+    _activeDownloads.clear();
+    _progressSub?.cancel();
+    _completedSub?.cancel();
+    notifyListeners();
   }
 
   Future<void> preDownloadUpcoming(List<Track> queue, int currentIndex, String playlistId,
@@ -121,6 +196,12 @@ class DownloadProvider extends ChangeNotifier {
 
   Future<void> deleteDownloadedPlaylist(String playlistId) async {
     await _downloadService.deleteDownloadedPlaylist(playlistId);
+    await _refreshDownloadedIds();
+    notifyListeners();
+  }
+
+  Future<void> deleteDownloadedTrack(String trackId) async {
+    await _downloadService.deleteDownloadedTrack(trackId);
     await _refreshDownloadedIds();
     notifyListeners();
   }

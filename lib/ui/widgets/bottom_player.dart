@@ -7,6 +7,7 @@ import 'package:mini_music_visualizer/mini_music_visualizer.dart';
 import '../../domain/entities/video.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
+import '../../presentation/providers/download_provider.dart';
 import '../screens/playing_screen.dart';
 import '../screens/artist_screen.dart';
 import '../screens/album_screen.dart';
@@ -14,7 +15,9 @@ import 'playlist_picker_dialog.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../presentation/providers/settings_provider.dart';
 import 'custom_audio_seekbar.dart';
-import '../widgets/custom_lyrics_modal.dart';
+import '../widgets/miniplayer_timer_view.dart';
+import '../widgets/miniplayer_queue_view.dart';
+import '../widgets/miniplayer_lyrics_view.dart';
 import '../../core/navigation/navigator_key.dart';
 
 class BottomPlayer extends StatelessWidget {
@@ -143,7 +146,7 @@ class BottomPlayer extends StatelessWidget {
                   ],
                 ),
               ),
-              if (playerWidget != null) playerWidget,
+              playerWidget,
             ],
           );
         }
@@ -346,23 +349,26 @@ class BottomPlayer extends StatelessWidget {
               // Top Row: Art, Titles, Icons
               Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: (track.thumbnailUrl?.isNotEmpty ?? false)
-                        ? CachedNetworkImage(
-                            imageUrl: track.thumbnailUrl!,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, url, error) => Container(
+                  Hero(
+                    tag: 'now-playing-art',
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: (track.thumbnailUrl?.isNotEmpty ?? false)
+                          ? CachedNetworkImage(
+                              imageUrl: track.thumbnailUrl!,
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) => Container(
+                                width: 48, height: 48, color: Colors.grey[800],
+                                child: const Icon(Icons.music_note),
+                              ),
+                            )
+                          : Container(
                               width: 48, height: 48, color: Colors.grey[800],
                               child: const Icon(Icons.music_note),
                             ),
-                          )
-                        : Container(
-                            width: 48, height: 48, color: Colors.grey[800],
-                            child: const Icon(Icons.music_note),
-                          ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -395,7 +401,10 @@ class BottomPlayer extends StatelessWidget {
                               size: 24,
                             ),
                             onPressed: () {
-                              playlistProvider.toggleFavorite(track);
+                              playlistProvider.toggleFavorite(
+                                track,
+                                downloadProvider: context.read<DownloadProvider>(),
+                              );
                             },
                           );
                         },
@@ -421,13 +430,13 @@ class BottomPlayer extends StatelessWidget {
                       ),
                       IconButton(
                         icon: const Icon(Icons.access_time, color: Colors.white54, size: 18),
-                        onPressed: () {},
+                        onPressed: () => _showTimerFlyout(context),
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         constraints: const BoxConstraints(),
                       ),
                       IconButton(
                         icon: const Icon(Icons.format_list_bulleted, color: Colors.white54, size: 18),
-                        onPressed: () {},
+                        onPressed: () => _showQueueFlyout(context),
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         constraints: const BoxConstraints(),
                       ),
@@ -554,18 +563,36 @@ class BottomPlayer extends StatelessWidget {
     );
   }
 
-  void _showLyricsModal(BuildContext context, PlayerProvider player) {
-    showModalBottomSheet(
+  void _showFlyout(BuildContext context, Widget content) {
+    final mediaQuery = MediaQuery.of(context);
+    final screenHeight = mediaQuery.size.height;
+    final statusBarHeight = mediaQuery.padding.top;
+    final appBarHeight = kToolbarHeight;
+    final bottomPlayerHeight = 146.0 + mediaQuery.padding.bottom;
+    final flyoutHeight = screenHeight - statusBarHeight - appBarHeight - bottomPlayerHeight;
+
+    showBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true,
       builder: (context) {
-        return FractionallySizedBox(
-          heightFactor: 0.95,
-          child: const CustomLyricsModal(isFromMiniPlayer: true),
+        return SizedBox(
+          height: flyoutHeight > 0 ? flyoutHeight : 450.0,
+          child: content,
         );
       },
     );
+  }
+
+  void _showLyricsModal(BuildContext context, PlayerProvider player) {
+    _showFlyout(context, const MiniplayerLyricsView());
+  }
+
+  void _showTimerFlyout(BuildContext context) {
+    _showFlyout(context, const MiniplayerTimerView());
+  }
+
+  void _showQueueFlyout(BuildContext context) {
+    _showFlyout(context, const MiniplayerQueueView());
   }
 
 }

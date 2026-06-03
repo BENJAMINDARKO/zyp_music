@@ -32,10 +32,14 @@ class GlassSidebar extends StatelessWidget {
                 padding: const EdgeInsets.all(24.0),
                 child: Row(
                   children: [
-                    const Icon(Icons.blur_on, color: Colors.white, size: 28),
+                    Image.asset(
+                      'assets/logo.png',
+                      width: 28,
+                      height: 28,
+                    ),
                     const SizedBox(width: 12),
                     Text(
-                      'Monochrome',
+                      'ZYP MUSIC',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Colors.white,

@@ -23,6 +23,7 @@ abstract class AudioRepository {
   Stream<void> get onSkipPreviousRequested;
 
   Future<String?> getLyrics(Track track);
+  Future<String?> refreshLyrics(Track track);
   Future<List<Track>> getUpNexts(Track track);
   Future<void> preloadTrack(Track track);
 }

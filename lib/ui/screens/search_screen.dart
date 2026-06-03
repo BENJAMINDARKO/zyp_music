@@ -12,6 +12,9 @@ import '../widgets/track_context_menu.dart';
 import 'album_screen.dart';
 import 'playlist_screen.dart';
 import 'artist_screen.dart';
+import '../widgets/track_download_icon.dart';
+import '../widgets/album_download_icon.dart';
+import '../../presentation/providers/download_provider.dart';
 import '../widgets/bottom_player.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -176,7 +179,37 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
           ),
           title: Text(track.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(track.author ?? 'Unknown Artist', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: Text(formatDuration(track.duration), style: const TextStyle(color: Colors.white54)),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Consumer<PlaylistProvider>(
+                builder: (context, playlistProvider, _) {
+                  final isFav = playlistProvider.isFavorite(track.id);
+                  return IconButton(
+                    icon: Icon(
+                      isFav ? Icons.favorite : Icons.favorite_border,
+                      color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      playlistProvider.toggleFavorite(
+                        track,
+                        downloadProvider: context.read<DownloadProvider>(),
+                      );
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: TrackDownloadIcon(track: track, size: 20),
+              ),
+              Text(formatDuration(track.duration), style: const TextStyle(color: Colors.white54)),
+            ],
+          ),
           onTap: () => _playTrack(track),
           onLongPress: () => TrackContextMenu.show(context, track),
         );
@@ -214,6 +247,33 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
           ),
           title: Text(album.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text('${album.artistName ?? 'Unknown'} • ${album.year ?? ''}', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Consumer<PlaylistProvider>(
+                builder: (context, playlistProvider, _) {
+                  final isFav = playlistProvider.isAlbumFavorite(album.id);
+                  return IconButton(
+                    icon: Icon(
+                      isFav ? Icons.favorite : Icons.favorite_border,
+                      color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      playlistProvider.toggleFavoriteAlbum(
+                        album,
+                        downloadProvider: context.read<DownloadProvider>(),
+                      );
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              AlbumDownloadIcon(album: album, size: 20),
+            ],
+          ),
           onTap: () {
             Navigator.push(
               context,
@@ -264,6 +324,21 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                   ),
           ),
           title: Text(artist.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: Consumer<PlaylistProvider>(
+            builder: (context, playlistProvider, _) {
+              final isFav = playlistProvider.isArtistFavorite(artist.id);
+              return IconButton(
+                icon: Icon(
+                  isFav ? Icons.favorite : Icons.favorite_border,
+                  color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                  size: 20,
+                ),
+                onPressed: () {
+                  playlistProvider.toggleFavoriteArtist(artist);
+                },
+              );
+            },
+          ),
           onTap: () {
             Navigator.push(
               context,

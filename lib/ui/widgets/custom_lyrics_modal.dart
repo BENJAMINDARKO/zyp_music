@@ -243,38 +243,36 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
 
   Widget _buildLyricsBody(PlayerProvider provider, Color activeColor) {
     return Expanded(
-      child: provider.isLoadingLyrics
-          ? Center(child: CircularProgressIndicator(color: activeColor))
-          : provider.lyrics != null
-              ? ShaderMask(
-                  shaderCallback: (Rect bounds) {
-                    return LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.white.withOpacity(0.05),
-                        Colors.white,
-                        Colors.white,
-                        Colors.white.withOpacity(0.05),
-                        Colors.transparent,
-                      ],
-                      stops: const [0.0, 0.1, 0.4, 0.6, 0.9, 1.0],
-                    ).createShader(bounds);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: SyncedLyricsWidget(
-                    lyricsText: provider.lyrics!,
-                    position: Duration(milliseconds: provider.position.inMilliseconds + _syncOffsetMs),
-                    activeColor: activeColor,
-                  ),
-                )
-              : const Center(
-                  child: Text(
-                    'No lyrics available',
-                    style: TextStyle(color: Colors.white54, fontSize: 16),
-                  ),
-                ),
+      child: provider.isLoadingLyrics || provider.lyrics != null
+          ? ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white,
+                    Colors.white,
+                    Colors.white.withOpacity(0.05),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.75, 0.95, 1.0],
+                ).createShader(bounds);
+              },
+              blendMode: BlendMode.dstIn,
+              child: SyncedLyricsWidget(
+                lyricsText: provider.lyrics ?? '',
+                isLoading: provider.isLoadingLyrics,
+                position: Duration(milliseconds: provider.position.inMilliseconds + _syncOffsetMs),
+                activeColor: activeColor,
+                autoScroll: provider.autoScroll,
+              ),
+            )
+          : const Center(
+              child: Text(
+                'No lyrics available',
+                style: TextStyle(color: Colors.white54, fontSize: 16),
+              ),
+            ),
     );
   }
 

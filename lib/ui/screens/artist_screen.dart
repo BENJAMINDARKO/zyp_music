@@ -7,7 +7,9 @@ import '../../domain/entities/artist.dart';
 import '../../core/utils/format_duration.dart';
 import '../widgets/track_context_menu.dart';
 import 'album_screen.dart';
+import '../widgets/track_download_icon.dart';
 import '../widgets/bottom_player.dart';
+import '../../presentation/providers/download_provider.dart';
 
 class ArtistScreen extends StatefulWidget {
   final String artistId;
@@ -143,15 +145,33 @@ class _ArtistScreenState extends State<ArtistScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _playAll,
-                          icon: const Icon(Icons.play_arrow, color: Colors.black),
-                          label: const Text("Play Top Tracks", style: TextStyle(color: Colors.black)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFEAB308),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                          ),
+                        Row(
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _playAll,
+                              icon: const Icon(Icons.play_arrow, color: Colors.black),
+                              label: const Text("Play Top Tracks", style: TextStyle(color: Colors.black)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFEAB308),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Consumer<PlaylistProvider>(
+                              builder: (context, pp, _) {
+                                final isFav = pp.favoriteArtists.any((a) => a.id == _artist!.id);
+                                return IconButton(
+                                  icon: Icon(
+                                    isFav ? Icons.favorite : Icons.favorite_border,
+                                    color: isFav ? Colors.red : Colors.white70,
+                                    size: 28,
+                                  ),
+                                  onPressed: () => pp.toggleFavoriteArtist(_artist!),
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -211,9 +231,39 @@ class _ArtistScreenState extends State<ArtistScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  trailing: Text(
-                    formatDuration(track.duration),
-                    style: const TextStyle(color: Colors.white54),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Consumer<PlaylistProvider>(
+                        builder: (context, playlistProvider, _) {
+                          final isFav = playlistProvider.isFavorite(track.id);
+                          return IconButton(
+                            icon: Icon(
+                              isFav ? Icons.favorite : Icons.favorite_border,
+                              color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              playlistProvider.toggleFavorite(
+                                track,
+                                downloadProvider: context.read<DownloadProvider>(),
+                              );
+                            },
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: TrackDownloadIcon(track: track, size: 20),
+                      ),
+                      Text(
+                        formatDuration(track.duration),
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    ],
                   ),
                   onTap: () => _playTrack(index),
                   onLongPress: () => TrackContextMenu.show(context, track),
