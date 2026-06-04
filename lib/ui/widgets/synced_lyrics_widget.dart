@@ -5,7 +5,6 @@ import '../../domain/entities/lyric_line.dart';
 class SyncedLyricsWidget extends StatefulWidget {
   final String lyricsText;
   final Duration position;
-  final Color activeColor;
   final bool karaokeMode;
   final bool autoScroll;
   final bool isLoading;
@@ -14,7 +13,6 @@ class SyncedLyricsWidget extends StatefulWidget {
     super.key,
     required this.lyricsText,
     required this.position,
-    required this.activeColor,
     this.karaokeMode = false,
     this.autoScroll = true,
     this.isLoading = false,

@@ -2,6 +2,36 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.1.4.2] — 2026-06-04
+
+### Changed
+- **Default Lyrics Engine:** Migrated entirely to LrcLib as the primary and sole lyrics engine.
+- **LrcLib Reliability:** Increased LrcLib connection timeout to 15 seconds and added detailed logging to `LyricsRemoteDataSource` to assist with network debugging.
+- **Removed YouTube Music Lyrics Engine:** Deleted `YoutubeFetcher` (`youtube_fetcher.dart`) and its initialization from `main.dart`. The brittle YouTube Music lyrics engine was causing `youtubei/null/search` errors and has been fully replaced.
+
+---
+
+## [1.1.4.1] — 2026-06-04
+
+### Changed
+- **Lyric Font Color — Plain White Lock-In:** Removed the dominant-color extraction path for lyric typography in both the full-screen player and the miniplayer lyric layer. Every lyric line now renders in pure white (`#FFFFFF`) regardless of album artwork palette.
+  - Active line: white, bold, full opacity (1.0), large size.
+  - Upcoming lines: white, regular weight, 0.4 opacity, normal size.
+  - Passed lines: white, regular weight, 0.25 opacity, normal size.
+
+### Fixed
+- **Unreadable Lyrics on Bright Album Art:** When the dominant color extracted from the album artwork skewed bright (yellow, white, light blue, etc.), the active lyric line was rendered in that color against the dark blurred background and became illegible. Plain white at the three opacity tiers above reads cleanly against any dark blurred background.
+- **Blurred First Line on Lyrics Load:** The previous fade/blur entrance left the first lyric line partially transparent and clipped at the top of the visible area on initial load, making it unreadable until the entrance animation completed. Replaced with a 3-dot pulsing entrance sequence (dot 1 at t=0, dot 2 at t=400ms, dot 3 at t=800ms, dots scroll up + fade out at t=1400ms over 600ms) that hands off to a fully-visible first line arriving at the top position at t=1600ms.
+- **Active Line Centering Drift:** Active lyric lines were being scrolled to the vertical center of the container, which pushed the first line off-screen and made the upcoming context invisible. Re-aligned to the upper third (H * 0.25 from the top) with a smooth 300ms ease-in-out animation per line advance.
+- **Hard Bottom Clip on Long Lyrics:** Bottom edge of the lyric container was hard-clipping the last visible line. Added a soft gradient fade to transparent on the bottom edge only; the top edge remains unblurred and unclipped at all times.
+- **Seek-Through Lyrics Drift:** On track seek (timeline scrub), the active line did not jump to the new position and the scroll animation re-played from the wrong offset. The active line now jumps immediately to the correct synced position and the scroll animation re-runs from that new position without re-triggering the dot entrance sequence.
+- **Stuck Dot Loader on Slow Fetch:** When lyrics were still being fetched, the dot entrance either never started or froze mid-sequence. The 3-dot loader now holds open (continues pulsing) until the lyrics payload arrives, then hands off to the first line as normal.
+- **No-Lyrics Path Now Visible:** Tracks without synced lyrics previously showed a blank lyric area. Now displays "Lyrics not available" in white at 0.5 opacity, centered.
+- **Unsynced Lyric Lines Scrolled:** Unsynced lyrics (lines without timestamps) were being treated like synced lines and the scroll controller was attempting to advance against a null active index. Unsynchronized lines now render as static text with no active-line highlight and scroll is disabled.
+- **Multi-Line Wrapping Broken Scroll Count:** Lyric lines that wrapped to two or more visual rows were being counted as multiple lines by the scroll controller, causing the active position to land mid-block. Wrapped lines are now counted as a single line for scroll purposes and the bold/active state applies to the full wrapped block.
+
+---
+
 ## [1.1.5] — 2026-06-04
 
 ### Added

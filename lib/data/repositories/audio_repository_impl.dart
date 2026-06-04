@@ -281,18 +281,30 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<String?> getLyrics(Track track) async {
+    final safeTitle = track.title.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
+
     // 1. Try to read from local file first
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/${track.title}-lyrics.lrc');
+      final file = File('${directory.path}/$safeTitle-lyrics.lrc');
       if (await file.exists()) {
         final content = await file.readAsString();
+        // Only use the cached file if it has content.
+        // If the timestamp regex doesn't match at all we might have a stale
+        // file written by the old broken _formatLrcTimestamp — skip it so we
+        // fetch fresh synced lyrics from the network.
         if (content.isNotEmpty) {
-          return content;
+          final hasValidLrc = RegExp(r'\[\d{2}:\d{2}\.\d{2}').hasMatch(content);
+          final isPlainLyrics = !content.contains('[');
+          if (hasValidLrc || isPlainLyrics) {
+            return content;
+          }
+          // Stale/broken file — fall through and re-fetch.
+          AppLogger.log('Cached lyrics file appears corrupt, re-fetching', name: 'AudioRepository');
         }
       }
     } catch (e) {
-      AppLogger.log('Error reading local lyrics file: $e', name: 'AudioRepository');
+      AppLogger.log('Error reading local lyrics file: \$e', name: 'AudioRepository');
     }
 
     // 2. Fallback to network fetch
@@ -300,10 +312,10 @@ class AudioRepositoryImpl implements AudioRepository {
     if (lyrics != null && lyrics.isNotEmpty) {
       try {
         final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/${track.title}-lyrics.lrc');
+        final file = File('${directory.path}/$safeTitle-lyrics.lrc');
         await file.writeAsString(lyrics);
       } catch (e) {
-        AppLogger.log('Error caching fetched lyrics: $e', name: 'AudioRepository');
+        AppLogger.log('Error caching fetched lyrics: \$e', name: 'AudioRepository');
       }
     }
     return lyrics;
@@ -315,14 +327,15 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<String?> refreshLyrics(Track track) async {
+    final safeTitle = track.title.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
     final lyrics = await _fetchLyricsFromNetwork(track);
     if (lyrics != null) {
       try {
         final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/${track.title}-lyrics.lrc');
+        final file = File('${directory.path}/$safeTitle-lyrics.lrc');
         await file.writeAsString(lyrics);
       } catch (e) {
-        AppLogger.log('Error saving lyrics file on refresh: $e', name: 'AudioRepository');
+        AppLogger.log('Error saving lyrics file on refresh: \$e', name: 'AudioRepository');
       }
     }
     return lyrics;

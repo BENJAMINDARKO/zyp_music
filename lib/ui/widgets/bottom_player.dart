@@ -187,6 +187,7 @@ class BottomPlayer extends StatelessWidget {
                     activeColor: activeColor,
                     style: style,
                     invertColor: settings.invertSeekbarColor,
+                    isPlaying: player.isActuallyPlaying,
                     onChanged: (v) {
                       final pos = Duration(milliseconds: (v * player.duration.inMilliseconds).round());
                       player.seekTo(pos);
@@ -467,6 +468,7 @@ class BottomPlayer extends StatelessWidget {
                           activeColor: activeColor,
                           style: style,
                           invertColor: settings.invertSeekbarColor,
+                          isPlaying: player.isActuallyPlaying,
                           onChanged: (v) {
                             final pos = Duration(milliseconds: (v * player.duration.inMilliseconds).round());
                             player.seekTo(pos);

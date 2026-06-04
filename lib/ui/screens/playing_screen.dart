@@ -301,7 +301,6 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                     lyricsText: player.lyrics ?? '',
                                     isLoading: player.isLoadingLyrics,
                                     position: Duration(milliseconds: player.position.inMilliseconds + _syncOffsetMs),
-                                    activeColor: activeColor,
                                     karaokeMode: true,
                                     autoScroll: player.autoScroll,
                                   )
@@ -324,7 +323,6 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                       lyricsText: player.lyrics ?? '',
                                       isLoading: player.isLoadingLyrics,
                                       position: Duration(milliseconds: player.position.inMilliseconds + _syncOffsetMs),
-                                      activeColor: activeColor,
                                       autoScroll: player.autoScroll,
                                     ),
                                   ))
@@ -551,6 +549,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                 ? SeekbarStyle.wavy 
                                 : SeekbarStyle.minimal)),
                     invertColor: settings.invertSeekbarColor,
+                    isPlaying: player.isActuallyPlaying,
                     onChanged: (v) {
                       final pos = Duration(milliseconds: (v * player.duration.inMilliseconds).round());
                       player.seekTo(pos);

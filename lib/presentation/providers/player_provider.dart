@@ -364,16 +364,15 @@ class PlayerProvider extends ChangeNotifier {
       _position = Duration.zero;
       _bufferedPosition = Duration.zero;
       _addToRecentlyPlayed(track);
-      
-      // Fetch lyrics with timeout to avoid blocking playback indefinitely on slow networks
-      try {
-        await _fetchLyricsForCurrentTrack().timeout(const Duration(milliseconds: 1500));
-      } catch (_) {
-        // Proceed on timeout or fetch failure
-      }
-      
+
+      // Kick off lyrics & color extraction concurrently — do NOT await either
+      // here. Both are non-blocking background tasks: lyrics may take several
+      // seconds over a slow network and blocking on them was causing the
+      // provider to time them out (1500 ms) before the APIs had a chance to
+      // respond, resulting in "No lyrics available" for most tracks.
+      _fetchLyricsForCurrentTrack();
       _extractDominantColor(track.thumbnailUrl);
-      
+
       final sourceRef = await PlaybackSession().resolve(track, _fallbackEngine);
       final qualityStr = sourceRef?.quality ?? 'adaptive';
 
@@ -386,11 +385,6 @@ class PlayerProvider extends ChangeNotifier {
         _currentTrack = track.copyWith(activeSource: sourceRef);
       }
 
-      // Delay audio startup a little bit if lyrics are active so they sync properly
-      if (_lyrics != null && _lyrics!.isNotEmpty) {
-        await Future.delayed(const Duration(milliseconds: 1400));
-      }
-
       await _audioRepository.playTrack(track, audioUrl);
       _isPlaying = true;
       _startPolling();
@@ -398,7 +392,7 @@ class PlayerProvider extends ChangeNotifier {
       for (final cb in _trackChangedListeners) {
         cb();
       }
-      
+
       _preloadNextTrack();
     } catch (e) {
       _error = e.toString();

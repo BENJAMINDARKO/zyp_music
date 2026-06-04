@@ -145,13 +145,12 @@ class _MiniplayerLyricsViewState extends State<MiniplayerLyricsView> {
                 ),
 
                 Expanded(
-                  child: provider.isLoadingLyrics || provider.lyrics != null
+                      child: provider.isLoadingLyrics || provider.lyrics != null
                       ? (provider.isKaraokeMode
                           ? SyncedLyricsWidget(
                               lyricsText: provider.lyrics ?? '',
                               isLoading: provider.isLoadingLyrics,
                               position: Duration(milliseconds: provider.position.inMilliseconds + _syncOffsetMs),
-                              activeColor: activeColor,
                               karaokeMode: true,
                               autoScroll: provider.autoScroll,
                             )
@@ -174,7 +173,6 @@ class _MiniplayerLyricsViewState extends State<MiniplayerLyricsView> {
                                 lyricsText: provider.lyrics ?? '',
                                 isLoading: provider.isLoadingLyrics,
                                 position: Duration(milliseconds: provider.position.inMilliseconds + _syncOffsetMs),
-                                activeColor: activeColor,
                                 karaokeMode: false,
                                 autoScroll: provider.autoScroll,
                               ),

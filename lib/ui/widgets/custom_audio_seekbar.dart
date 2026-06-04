@@ -16,6 +16,8 @@ class CustomAudioSeekbar extends StatefulWidget {
   final Color activeColor;
   final SeekbarStyle style;
   final bool invertColor;
+  /// Whether audio is actively playing. Drives the wave phase animation.
+  final bool isPlaying;
 
   const CustomAudioSeekbar({
     super.key,
@@ -25,13 +27,53 @@ class CustomAudioSeekbar extends StatefulWidget {
     required this.activeColor,
     this.style = SeekbarStyle.minimal,
     this.invertColor = false,
+    this.isPlaying = false,
   });
 
   @override
   State<CustomAudioSeekbar> createState() => _CustomAudioSeekbarState();
 }
 
-class _CustomAudioSeekbarState extends State<CustomAudioSeekbar> {
+class _CustomAudioSeekbarState extends State<CustomAudioSeekbar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _phaseController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Loop 0→1 over 1.2 s for a natural wave speed.
+    _phaseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    if (widget.isPlaying && widget.style == SeekbarStyle.wavy) {
+      _phaseController.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CustomAudioSeekbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final shouldAnimate =
+        widget.isPlaying && widget.style == SeekbarStyle.wavy;
+    final wasAnimating =
+        oldWidget.isPlaying && oldWidget.style == SeekbarStyle.wavy;
+
+    if (shouldAnimate && !wasAnimating) {
+      _phaseController.repeat();
+    } else if (!shouldAnimate && wasAnimating) {
+      _phaseController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _phaseController.dispose();
+    super.dispose();
+  }
+
   void _handleUpdate(Offset localPosition, double width) {
     double newValue = (localPosition.dx / width).clamp(0.0, 1.0);
     widget.onChanged(newValue);
@@ -41,25 +83,35 @@ class _CustomAudioSeekbarState extends State<CustomAudioSeekbar> {
   Widget build(BuildContext context) {
     Color effectiveColor = widget.activeColor;
     if (widget.invertColor) {
-      effectiveColor = effectiveColor.computeLuminance() < 0.5 ? Colors.white : Colors.black;
+      effectiveColor =
+          effectiveColor.computeLuminance() < 0.5 ? Colors.white : Colors.black;
     }
 
     return LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
-          onHorizontalDragUpdate: (details) => _handleUpdate(details.localPosition, constraints.maxWidth),
-          onTapDown: (details) => _handleUpdate(details.localPosition, constraints.maxWidth),
+          onHorizontalDragUpdate: (details) =>
+              _handleUpdate(details.localPosition, constraints.maxWidth),
+          onTapDown: (details) =>
+              _handleUpdate(details.localPosition, constraints.maxWidth),
           child: Container(
             width: constraints.maxWidth,
             height: 24, // Touch target height
             color: Colors.transparent,
-            child: CustomPaint(
-              painter: _SeekbarPainter(
-                value: widget.value,
-                secondaryValue: widget.secondaryValue,
-                activeColor: effectiveColor,
-                style: widget.style,
-              ),
+            child: AnimatedBuilder(
+              animation: _phaseController,
+              builder: (context, _) {
+                return CustomPaint(
+                  painter: _SeekbarPainter(
+                    value: widget.value,
+                    secondaryValue: widget.secondaryValue,
+                    activeColor: effectiveColor,
+                    style: widget.style,
+                    // φ = controller.value × 2π  (full cycle per loop)
+                    wavePhaseFraction: _phaseController.value,
+                  ),
+                );
+              },
             ),
           ),
         );
@@ -73,12 +125,15 @@ class _SeekbarPainter extends CustomPainter {
   final double secondaryValue;
   final Color activeColor;
   final SeekbarStyle style;
+  /// Normalised phase in [0, 1] → mapped to [0, 2π] inside the painter.
+  final double wavePhaseFraction;
 
   _SeekbarPainter({
     required this.value,
     required this.secondaryValue,
     required this.activeColor,
     required this.style,
+    this.wavePhaseFraction = 0.0,
   });
 
   @override
@@ -103,9 +158,15 @@ class _SeekbarPainter extends CustomPainter {
   }
 
   void _paintMinimal(Canvas canvas, Size size) {
-    final trackPaint = Paint()..color = Colors.white24..strokeWidth = 2;
-    final activePaint = Paint()..color = activeColor..strokeWidth = 2;
-    final secondaryPaint = Paint()..color = Colors.white54..strokeWidth = 2;
+    final trackPaint = Paint()
+      ..color = Colors.white24
+      ..strokeWidth = 2;
+    final activePaint = Paint()
+      ..color = activeColor
+      ..strokeWidth = 2;
+    final secondaryPaint = Paint()
+      ..color = Colors.white54
+      ..strokeWidth = 2;
     final thumbPaint = Paint()..color = activeColor;
 
     final cy = size.height / 2;
@@ -123,12 +184,17 @@ class _SeekbarPainter extends CustomPainter {
     final cy = size.height / 2;
     final activeWidth = size.width * value;
 
-    final trackPaint = Paint()..color = Colors.white12..strokeWidth = 4..strokeCap = StrokeCap.round;
+    final trackPaint = Paint()
+      ..color = Colors.white12
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(0, cy), Offset(size.width, cy), trackPaint);
 
     if (activeWidth > 0) {
       final gradientPaint = Paint()
-        ..shader = LinearGradient(colors: [activeColor.withOpacity(0.3), activeColor]).createShader(Rect.fromLTWH(0, 0, activeWidth, size.height))
+        ..shader = LinearGradient(
+                colors: [activeColor.withOpacity(0.3), activeColor])
+            .createShader(Rect.fromLTWH(0, 0, activeWidth, size.height))
         ..strokeWidth = 4
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(Offset(0, cy), Offset(activeWidth, cy), gradientPaint);
@@ -139,18 +205,18 @@ class _SeekbarPainter extends CustomPainter {
   }
 
   void _paintWaveform(Canvas canvas, Size size) {
-    final barWidth = 3.0;
-    final spacing = 2.0;
+    const barWidth = 3.0;
+    const spacing = 2.0;
     final activeWidth = size.width * value;
-    
+
     // We use a fixed seed based on the screen width to keep waveform consistent
     final rand = Random(42);
-    
+
     double x = 0;
     while (x < size.width) {
       double maxH = size.height * 0.8;
       double h = (rand.nextDouble() * 0.6 + 0.2) * maxH;
-      
+
       bool isActive = x <= activeWidth;
       final p = Paint()
         ..color = isActive ? activeColor : Colors.white24
@@ -158,27 +224,37 @@ class _SeekbarPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
 
       final cy = size.height / 2;
-      canvas.drawLine(Offset(x, cy - h/2), Offset(x, cy + h/2), p);
-      
+      canvas.drawLine(Offset(x, cy - h / 2), Offset(x, cy + h / 2), p);
+
       x += barWidth + spacing;
     }
   }
 
   void _paintWavy(Canvas canvas, Size size) {
-    // ---- Hybrid dynamic progress bar (Wavy) -------------------------------
-    // Two tiers split at X_split = size.width * value:
-    //   * 0 <= x <= X_split : Y(x) = cy + A * sin(ω * x + φ)   (active wave)
-    //   * x >  X_split     : Y(x) = cy                        (flat track)
-    // Both segments share identical stroke properties — width, anti-aliasing
-    // and rounded caps — so the transition seam is clean.
-    final activeWidth = size.width * value;
+    // ---- Live Animated Hybrid Progress Bar (Wavy) --------------------------
+    //
+    // Mathematical model (per spec):
+    //
+    //   φ  = wavePhaseFraction × 2π          (shifts rightward each frame)
+    //   ω  = 2π / waveLength                 (spatial frequency)
+    //   A(x) = A_max × (X_split − x) / X_split   for 0 ≤ x ≤ X_split
+    //        = 0                                   for x > X_split
+    //
+    //   Y(x) = cy + A(x) × sin(ω × x − φ)   for 0 ≤ x ≤ X_split
+    //   Y(x) = cy                             for x > X_split
+    //
+    // The linear amplitude envelope [A_max → 0] means the wave naturally
+    // "settles" flat right at the progress thumb — no jarring seam.
+    // ---------------------------------------------------------------------------
+
+    final xSplit = size.width * value;
     final cy = size.height / 2;
 
-    const double amplitude = 4.0;            // A
-    const double waveLength = 32.0;          // pixels per sine cycle
+    const double amplitude = 4.5;         // A_max  (pixels)
+    const double waveLength = 30.0;       // pixels per full sine cycle
     final double omega = 2 * pi / waveLength;
-    const double phase = 0.0;                // φ
-    const double step = 1.0;                 // 1px sample step -> smooth wave
+    final double phi = wavePhaseFraction * 2 * pi;  // live phase offset
+    const double step = 1.0;             // 1 px sample → smooth curve
 
     final wavyPaint = Paint()
       ..color = activeColor
@@ -195,50 +271,54 @@ class _SeekbarPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
 
-    // Played segment: continuous sine wave from x=0 to x=activeWidth.
-    if (activeWidth > 0) {
-      final wavePath = Path()..moveTo(0, cy + amplitude * sin(omega * 0 + phase));
-      for (double x = step; x <= activeWidth; x += step) {
-        final y = cy + amplitude * sin(omega * x + phase);
+    // ── Played segment: damped sine wave ──────────────────────────────────
+    if (xSplit > 0) {
+      // Start exactly on the baseline at x = 0 (amplitude is A_max there if
+      // xSplit is very small, or full A_max when xSplit ≥ some threshold).
+      final y0 = cy + amplitude * sin(omega * 0 - phi);
+      final wavePath = Path()..moveTo(0, y0);
+
+      for (double x = step; x <= xSplit; x += step) {
+        // Linear damping envelope: full amplitude at x=0, zero at x=xSplit.
+        final envelope = (xSplit - x) / xSplit;
+        final y = cy + (amplitude * envelope) * sin(omega * x - phi);
         wavePath.lineTo(x, y);
       }
-      // Ensure the last sample lands exactly on the split point.
-      wavePath.lineTo(activeWidth, cy + amplitude * sin(omega * activeWidth + phase));
+      // Close exactly on the split point at baseline.
+      wavePath.lineTo(xSplit, cy);
       canvas.drawPath(wavePath, wavyPaint);
     }
 
-    // Unplayed segment: perfectly horizontal straight line from X_split to
-    // the right edge. Always drawn so the track is never stranded (including
-    // the value == 0 case, where it covers the full width).
-    if (activeWidth < size.width) {
+    // ── Unplayed segment: flat line ───────────────────────────────────────
+    if (xSplit < size.width) {
       canvas.drawLine(
-        Offset(activeWidth, cy),
+        Offset(xSplit, cy),
         Offset(size.width, cy),
         flatPaint,
       );
     }
 
-    // Thumb marker (kept from the original implementation).
+    // ── Thumb marker ─────────────────────────────────────────────────────
     final thumbPaint = Paint()..color = Colors.white;
-    canvas.drawCircle(Offset(activeWidth, cy), 4, thumbPaint);
+    canvas.drawCircle(Offset(xSplit, cy), 4, thumbPaint);
   }
 
   void _paintSegmented(Canvas canvas, Size size) {
     final activeWidth = size.width * value;
     final cy = size.height / 2;
-    
-    int segments = 40;
-    double segWidth = size.width / segments;
-    
+
+    const int segments = 40;
+    final double segWidth = size.width / segments;
+
     for (int i = 0; i < segments; i++) {
       double x = i * segWidth;
       bool isActive = x <= activeWidth;
-      
+
       final p = Paint()
         ..color = isActive ? activeColor : Colors.white24
         ..strokeWidth = 4
         ..strokeCap = StrokeCap.round;
-        
+
       canvas.drawLine(Offset(x + 1, cy), Offset(x + segWidth - 2, cy), p);
     }
   }
@@ -246,8 +326,9 @@ class _SeekbarPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SeekbarPainter oldDelegate) {
     return oldDelegate.value != value ||
-           oldDelegate.secondaryValue != secondaryValue ||
-           oldDelegate.activeColor != activeColor ||
-           oldDelegate.style != style;
+        oldDelegate.secondaryValue != secondaryValue ||
+        oldDelegate.activeColor != activeColor ||
+        oldDelegate.style != style ||
+        oldDelegate.wavePhaseFraction != wavePhaseFraction;
   }
 }

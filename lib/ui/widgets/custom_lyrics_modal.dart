@@ -263,7 +263,6 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                 lyricsText: provider.lyrics ?? '',
                 isLoading: provider.isLoadingLyrics,
                 position: Duration(milliseconds: provider.position.inMilliseconds + _syncOffsetMs),
-                activeColor: activeColor,
                 autoScroll: provider.autoScroll,
               ),
             )
