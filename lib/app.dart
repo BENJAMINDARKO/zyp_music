@@ -16,6 +16,7 @@ import 'ui/widgets/bottom_player.dart';
 import 'ui/widgets/global_background.dart';
 import 'core/navigation/navigator_key.dart';
 import 'core/services/hybrid_cache_service.dart';
+import 'core/services/connectivity_service.dart';
 
 class MonochromeApp extends StatelessWidget {
   final PlaylistRepository playlistRepository;
@@ -25,6 +26,7 @@ class MonochromeApp extends StatelessWidget {
   final SettingsProvider settingsProvider;
   final MusicAudioHandler audioHandler;
   final HybridCacheService hybridCache;
+  final ConnectivityService connectivityService;
 
   const MonochromeApp({
     super.key,
@@ -35,6 +37,7 @@ class MonochromeApp extends StatelessWidget {
     required this.settingsProvider,
     required this.audioHandler,
     required this.hybridCache,
+    required this.connectivityService,
   });
 
   @override
@@ -43,6 +46,7 @@ class MonochromeApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider.value(value: settingsProvider),
         ChangeNotifierProvider.value(value: hybridCache),
+        ChangeNotifierProvider.value(value: connectivityService),
         ChangeNotifierProvider(
           create: (_) => PlaylistProvider(playlistRepository),
         ),

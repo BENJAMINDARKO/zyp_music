@@ -34,6 +34,9 @@ class AudioRepositoryImpl implements AudioRepository {
   final HybridCacheService? _hybridCache;
   final AudioCacheService _cacheService = AudioCacheService();
 
+  bool _isOffline = false;
+  bool get isOffline => _isOffline;
+
   AudioRepositoryImpl({
     required this.remoteDataSource,
     required this.lyricsDataSource,
@@ -55,6 +58,21 @@ class AudioRepositoryImpl implements AudioRepository {
         expectedFilePath: filePath,
       );
     };
+  }
+
+  /// Toggle driven exclusively by [ConnectivityService]. The flag itself
+  /// is advisory — the existing local-cache fallback in [getAudioUrl] and
+  /// the natural failure of network calls already produce the correct
+  /// offline behaviour. The flag is exposed so future consumers (UI
+  /// badges, queue logic) can `context.watch` it without re-implementing
+  /// the connectivity probe.
+  void setOfflineMode(bool isOffline) {
+    if (_isOffline == isOffline) return;
+    _isOffline = isOffline;
+    AppLogger.log(
+      'AudioRepository offline mode -> $isOffline',
+      name: 'AudioRepository',
+    );
   }
 
   @override

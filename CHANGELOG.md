@@ -2,6 +2,29 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.1.5] — 2026-06-04
+
+### Added
+- **Global Reactive Connectivity Listener:** New `ConnectivityService` (`lib/core/services/connectivity_service.dart`) extends `ChangeNotifier`, owns a single long-lived `connectivity_plus` subscription, and exposes the current transport state as a typed `NetworkState` (`unknown` / `online` / `offline`) plus a broadcast `Stream<NetworkState>` for future consumers. Constructed once in `main.dart` after every collaborator is alive and `initialize()`d before `runApp`, so the system is locked to the right starting mode from frame one.
+- **Connectivity Bootstrap on Startup:** `ConnectivityService.initialize()` runs `Connectivity.checkConnectivity()` synchronously, pushes the result through `_handleChange(isInitialProbe: true)`, and then attaches to `onConnectivityChanged`. This replaces the old implicit "check once during init" behaviour with a reactive stream that survives the entire app lifetime.
+- **Toggle Switch on the Audio Repository:** `AudioRepositoryImpl.setOfflineMode(bool)` is the explicit boundary the spec calls out. It stores a private `_isOffline` flag with a public `isOffline` getter, is a no-op when the value is unchanged, and never touches the audio-decoding / playback / cache-lookup code paths. The interface in `lib/domain/repositories/audio_repository.dart` is left untouched.
+- **YouTube Network-Client Wake-Up:** `YoutubeRemoteDataSource.refreshNetworkClientHeaders()` closes the existing `_yt` client (swallowing double-close) and re-runs `init()` to rebuild both the `YoutubeExplode` and `YTMusic` clients against a fresh cookie read. Required dropping `late final` → `late` on `_yt` / `_ytMusic`. No audio playback is interrupted.
+- **Lyrics Retry Hook:** `LyricsRemoteDataSource.retryPendingConnections()` is the explicit contract for the listener on the LrcLib side. The data source is stateless (fresh `http.Client` per call), so the method is a no-op network-wise but logs the wake-up event for observability.
+- **`connectivity_plus` Dependency:** Added `connectivity_plus: ^6.0.0` to `pubspec.yaml` (resolved to `6.1.5` in the lock). The `connectivity_plus_platform_interface` transitive dependency is also pinned in `pubspec.lock`.
+- **`ACCESS_NETWORK_STATE` Permission:** Added to `android/app/src/main/AndroidManifest.xml` so the `connectivity_plus` Android plugin can subscribe to transport changes from a non-foreground process.
+- **Connectivity Service in `MultiProvider`:** `MonochromeApp` now accepts a `ConnectivityService` instance and exposes it via `ChangeNotifierProvider.value` alongside the other top-level notifiers, so the UI layer can `context.watch<ConnectivityService>()` for status badges without subscribing to the stream directly.
+
+### Changed
+- **`YoutubeRemoteDataSource` field mutability:** `late final YoutubeExplode _yt;` and `late final ytm.YTMusic _ytMusic;` became `late YoutubeExplode _yt;` and `late ytm.YTMusic _ytMusic;` so `refreshNetworkClientHeaders()` can reassign them after closing the previous instance. No call site changed; the existing `init()` body still performs the first assignment and `_yt.close()` is now reused inside `dispose()` and `refreshNetworkClientHeaders()`.
+- **Init Block in `main.dart`:** After the download provider is initialised, `ConnectivityService` is constructed with the existing `audioRepository`, `remoteDataSource`, and `lyricsDataSource` and `await connectivityService.initialize()` is called before `runApp`. The instance is passed into `MonochromeApp` so it can be put into the provider tree.
+- **`MonochromeApp` Constructor:** Added a required `connectivityService` parameter and a corresponding `ChangeNotifierProvider.value(value: connectivityService)` entry in the `MultiProvider` providers list, slotted right after `hybridCache`.
+
+### Fixed
+- **App Stuck Offline After Network Restoration:** If the app was launched with no active connection, `_ytMusic.initialize()` failed during `main.dart` startup (logged but not fatal), leaving the system stuck on broken network clients for the rest of the session. Even after Wi-Fi / mobile data came back, every subsequent search, stream, and metadata call would still fail and the user had to kill and relaunch the app. The new `ConnectivityService` now detects the `offline -> online` transition and explicitly wakes the network clients — `refreshNetworkClientHeaders()` rebuilds the YouTube/YTMusic clients and `retryPendingConnections()` re-arms the lyrics source — restoring online search, remote endpoints, and remote streaming without dropping current audio playback. The transition is fully automatic: no user interaction, no app reload, no UI page refresh.
+- **Initial Offline Boot No Longer Mis-Transitions:** The previous code path would have called `setOfflineMode(false)` (a no-op) and then `refreshNetworkClientHeaders()` on a healthy first launch, doing redundant work. The new `wasOffline` guard in `_handleChange` skips the wake-up path when the initial probe shows the device is already online, so the wake-up is now reserved strictly for the `offline -> online` transition.
+
+---
+
 ## [1.1.4] — 2026-06-04
 
 ### Added

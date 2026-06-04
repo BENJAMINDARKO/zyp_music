@@ -5,6 +5,21 @@ import 'package:zyp_music/core/utils/app_logger.dart';
 class LyricsRemoteDataSource {
   static const String _baseUrl = 'https://lrclib.net/api/search';
 
+  /// Signals that the upstream network is back and the next
+  /// [getSyncedLyrics] call should be allowed to hit LrcLib again.
+  ///
+  /// Called by [ConnectivityService] on an `offline -> online` transition.
+  /// The data source itself is intentionally stateless — every call
+  /// constructs a fresh `http.Client` — so there is no socket to
+  /// reconnect. This method exists as the explicit contract for the
+  /// connectivity listener and as a log hook for observability.
+  void retryPendingConnections() {
+    AppLogger.log(
+      'Retrying pending lyrics connections after connectivity restoration',
+      name: 'LyricsRemoteDataSource',
+    );
+  }
+
   Future<String?> getSyncedLyrics(String trackName, String artistName) async {
     try {
       final queryParameters = {

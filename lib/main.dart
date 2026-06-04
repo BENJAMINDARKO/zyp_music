@@ -13,6 +13,7 @@ import 'data/datasources/remote/charts_remote_datasource.dart';
 import 'data/repositories/charts_repository_impl.dart';
 import 'data/models/cache_tracker_model.dart';
 import 'core/services/hybrid_cache_service.dart';
+import 'core/services/connectivity_service.dart';
 import 'service/auth_service.dart';
 import 'service/audio_handler.dart';
 import 'service/download_service.dart';
@@ -85,6 +86,18 @@ Future<void> main() async {
     final downloadProvider = DownloadProvider(downloadService, hybridCache);
     await downloadProvider.init();
 
+    // Construct the global connectivity listener after every collaborator
+    // it needs to wake up is alive. `initialize` runs the synchronous
+    // initial probe (so the system is locked to `offline` or `online`
+    // from the very first frame) and then attaches the long-lived
+    // `onConnectivityChanged` subscription.
+    final connectivityService = ConnectivityService(
+      audioRepository: audioRepository,
+      remoteDataSource: remoteDataSource,
+      lyricsDataSource: lyricsDataSource,
+    );
+    await connectivityService.initialize();
+
     runApp(MonochromeApp(
       playlistRepository: playlistRepository,
       audioRepository: audioRepository,
@@ -93,6 +106,7 @@ Future<void> main() async {
       settingsProvider: settingsProvider,
       audioHandler: audioHandler,
       hybridCache: hybridCache,
+      connectivityService: connectivityService,
     ));
   } catch (e) {
     runApp(

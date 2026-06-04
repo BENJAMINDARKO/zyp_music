@@ -17,8 +17,8 @@ class YoutubeRemoteDataSource {
   static const _timeout = Duration(seconds: 30);
 
   final AuthService _authService;
-  late final YoutubeExplode _yt;
-  late final ytm.YTMusic _ytMusic;
+  late YoutubeExplode _yt;
+  late ytm.YTMusic _ytMusic;
 
   YoutubeRemoteDataSource({AuthService? authService})
       : _authService = authService ?? AuthService();
@@ -34,6 +34,30 @@ class YoutubeRemoteDataSource {
     } catch (e) {
       AppLogger.log('Failed to initialize YTMusic (possibly offline): $e', name: 'YoutubeRemoteDataSource');
     }
+  }
+
+  /// Rebuilds the YouTube + YTMusic clients against a fresh cookie read.
+  ///
+  /// Called by [ConnectivityService] when the device transitions from
+  /// `offline -> online`, so the clients that were initialised against
+  /// a dead radio at app start are replaced with a working pair before
+  /// the next search / stream / metadata call lands.
+  ///
+  /// Safe to call repeatedly; the existing `_yt` client is closed before
+  /// the new one is constructed. No audio playback is touched.
+  Future<void> refreshNetworkClientHeaders() async {
+    try {
+      _yt.close();
+    } catch (_) {
+      // The previous client may already be closed (e.g. first launch
+      // where `init` succeeded end-to-end). Swallow — we are about to
+      // overwrite the reference anyway.
+    }
+    await init();
+    AppLogger.log(
+      'Network client headers refreshed after connectivity restoration',
+      name: 'YoutubeRemoteDataSource',
+    );
   }
 
   Future<PlaylistModel> getPlaylist(String playlistId) async {

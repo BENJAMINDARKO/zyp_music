@@ -1,18 +1,58 @@
-feat: sync play-lyrics delay, stopping/advancing queue, & lyrics caching
+fix: dynamic offline-to-online network state restoration
 
-- player_provider.dart:
-  - Await _fetchLyricsForCurrentTrack() with a 1.5s timeout.
-  - Delay audio startup by 1400ms if lyrics are present to sync with dot animation entrance.
-  - Advance playback index and play next track automatically in removeFromQueue(), or stop playback cleanly via stop() if the active track removed was the last.
-- audio_repository_impl.dart:
-  - Cache network-fetched lyrics locally to '${track.title}-lyrics.lrc' inside documents folder so subsequent fetches load instantly.
-- download_service.dart:
-  - Cache lyrics automatically during single track and playlist downloads.
-- synced_lyrics_widget.dart:
-  - Update typography style to fixed plain white (#FFFFFF) with opacity/bold states (1.0 active, 0.4 upcoming, 0.25 passed).
-  - Implement vertical 3-dot pulsing holding & entrance sequences.
-  - Position active lyric line at H * 0.25 (upper third) for index > 0, and 0.0 for index == 0.
-- playing_screen.dart, custom_lyrics_modal.dart, miniplayer_lyrics_view.dart:
-  - Update ShaderMask to apply a transparent gradient fade to the bottom edge only.
 - pubspec.yaml:
-  - Bump app version to 1.1.0+1.
+  - Add connectivity_plus: ^6.0.0 (resolved 6.1.5 in pubspec.lock).
+  - Bump app version to 1.1.5+3.
+- android/app/src/main/AndroidManifest.xml:
+  - Add ACCESS_NETWORK_STATE permission (required by connectivity_plus).
+- lib/core/constants/network_state.dart (new):
+  - Define enum NetworkState { unknown, online, offline } as the public
+    state contract exposed by ConnectivityService.
+- lib/core/services/connectivity_service.dart (new):
+  - Global reactive ChangeNotifier that owns the single long-lived
+    connectivity_plus subscription.
+  - initialize() runs a synchronous checkConnectivity() probe and then
+    attaches onConnectivityChanged for the rest of the app's lifetime.
+  - _handleChange() flips between offline and online, calls
+    audioRepository.setOfflineMode(), and on the offline -> online
+    transition calls remoteDataSource.refreshNetworkClientHeaders()
+    and lyricsDataSource.retryPendingConnections() in the background.
+  - Idempotent: re-initialising will not create duplicate subscriptions,
+    and the wasOffline guard prevents redundant wake-up work on a
+    healthy first launch.
+- lib/data/datasources/remote/youtube_remote_datasource.dart:
+  - Drop `late final` on _yt and _ytMusic (now `late`) so the clients
+    can be reassigned after connectivity restoration.
+  - Add refreshNetworkClientHeaders() that closes _yt (swallowing
+    double-close) and re-runs init() against a fresh cookie read. No
+    audio playback is touched.
+- lib/data/datasources/remote/lyrics_remote_datasource.dart:
+  - Add retryPendingConnections() as the explicit listener contract;
+    the source is stateless so the method only emits an observability
+    log line, and the next getSyncedLyrics() call uses the live network.
+- lib/data/repositories/audio_repository_impl.dart:
+  - Add private _isOffline flag with public isOffline getter.
+  - Add setOfflineMode(bool) toggle. Strictly a state setter; the audio
+    decoding, active media players, and local cache lookup structures
+    are not modified. The public AudioRepository interface is unchanged.
+- lib/main.dart:
+  - Construct ConnectivityService after audioRepository, remoteDataSource,
+    and lyricsDataSource exist.
+  - await connectivityService.initialize() before runApp, so the system
+    is locked to the correct starting mode (offline or online) from
+    the very first frame.
+  - Pass the service into MonochromeApp.
+- lib/app.dart:
+  - Accept ConnectivityService in the constructor and expose it via
+    ChangeNotifierProvider.value in the MultiProvider tree, so the UI
+    layer can context.watch<ConnectivityService>() for status badges.
+
+Behavior:
+  - Startup offline: NetworkState = offline, asset queries restricted
+    to local Hive/SQLite and file paths (the existing getAudioUrl
+    fallback in audio_repository_impl.dart handles this naturally).
+  - Connection restored: NetworkState = online, the YouTube and YTMusic
+    clients are rebuilt against the live radio, and the lyrics source
+    is re-armed — all in the background, with no app reload, no user
+    interaction, and no UI page refresh. Current audio playback is
+    intentionally left untouched.
