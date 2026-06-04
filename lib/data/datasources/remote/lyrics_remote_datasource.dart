@@ -13,7 +13,7 @@ class LyricsRemoteDataSource {
       };
 
       final uri = Uri.parse(_baseUrl).replace(queryParameters: queryParameters);
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);

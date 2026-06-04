@@ -89,10 +89,8 @@ class DownloadService {
 
     try {
       final audioUrl = await _audioRepository.getAudioUrl(
-        track, 
+        track,
         quality: quality,
-        preferredSource: track.source,
-        enableFallback: _settingsProvider?.enableSourceFallback ?? true,
       );
       final resolved = await _resolveRedirects(audioUrl);
       await _downloadFile(resolved, filePath, track, 0, 1);
@@ -138,10 +136,8 @@ class DownloadService {
 
       try {
         final audioUrl = await _audioRepository.getAudioUrl(
-          track, 
+          track,
           quality: quality,
-          preferredSource: track.source,
-          enableFallback: _settingsProvider?.enableSourceFallback ?? true,
         );
         final resolved = await _resolveRedirects(audioUrl);
         await _downloadFile(resolved, filePath, track, i, total);

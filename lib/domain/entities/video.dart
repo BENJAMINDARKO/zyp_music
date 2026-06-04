@@ -1,4 +1,4 @@
-enum TrackSource { youtube, tidal, youtube_music }
+enum TrackSource { youtube, youtube_music }
 
 class SourceRef {
   final TrackSource provider;

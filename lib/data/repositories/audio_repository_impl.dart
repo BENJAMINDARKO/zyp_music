@@ -6,11 +6,12 @@ import 'package:just_audio/just_audio.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../datasources/remote/youtube_remote_datasource.dart';
-import '../datasources/remote/tidal_remote_datasource.dart';
 import '../datasources/remote/lyrics_remote_datasource.dart';
 import '../datasources/local/playlist_database.dart';
+
 import '../../service/audio_handler.dart';
 import '../../core/services/audio_cache_service.dart';
+import '../../core/services/hybrid_cache_service.dart';
 
   String _stripPrefixes(String id) {
     var stripped = id;
@@ -21,100 +22,89 @@ import '../../core/services/audio_cache_service.dart';
       stripped = stripped.substring('youtube_music_'.length);
     } else if (stripped.startsWith('youtube_')) {
       stripped = stripped.substring('youtube_'.length);
-    } else if (stripped.startsWith('tidal_')) {
-      stripped = stripped.substring('tidal_'.length);
     }
     return stripped;
   }
 
 class AudioRepositoryImpl implements AudioRepository {
   final YoutubeRemoteDataSource remoteDataSource;
-  final TidalRemoteDataSource tidalDataSource;
   final LyricsRemoteDataSource lyricsDataSource;
   final MusicAudioHandler _handler;
   final PlaylistDatabase _database;
+  final HybridCacheService? _hybridCache;
   final AudioCacheService _cacheService = AudioCacheService();
 
   AudioRepositoryImpl({
     required this.remoteDataSource,
-    required this.tidalDataSource,
     required this.lyricsDataSource,
     required MusicAudioHandler handler,
     required PlaylistDatabase database,
-  }) : _handler = handler, _database = database;
+    HybridCacheService? hybridCache,
+  })  : _handler = handler,
+        _database = database,
+        _hybridCache = hybridCache {
+    // Forward every successful on-disk write to the Hive cache tracker so
+    // pre-buffered tracks register themselves in the box. This is what makes
+    // the download icon flip to the checkmark for tracks that were cached
+    // by the lookahead pre-buffer engine (not just user-initiated downloads).
+    _cacheService.onCacheSuccess = (trackId, filePath) async {
+      final cache = _hybridCache;
+      if (cache == null) return;
+      await cache.markSuccessAfterWrite(
+        trackId,
+        expectedFilePath: filePath,
+      );
+    };
+  }
 
   @override
   Future<String> getAudioUrl(
     Track track, {
     String quality = 'adaptive',
-    TrackSource? preferredSource,
-    bool enableFallback = false,
   }) async {
-    // 1. Check for a local downloaded file first
-    final localPath = await _database.getDownloadedFilePath(track.id);
-    if (localPath != null && File(localPath).existsSync()) {
-      return localPath;
-    }
-
-    // 2. Check for LRU cached file
-    final cachedUri = await _cacheService.getCachedUri(track.id);
-    if (cachedUri != null) {
-      if (cachedUri.endsWith('/.mp3') || cachedUri == '.mp3') {
-        AppLogger.log('Invalid cache path detected: $cachedUri. Skipping cache.', name: 'AudioRepository');
-      } else {
-        AppLogger.log('Playing from cache: $cachedUri', name: 'AudioRepository');
-        return cachedUri;
-      }
-    }
-
-    final targetSource = preferredSource ?? track.source;
-
     try {
-      String? url;
+      // 1. Local downloaded file takes priority over everything
+      final localPath = await _database.getDownloadedFilePath(track.id);
+      if (localPath != null && File(localPath).existsSync()) {
+        return localPath;
+      }
 
-      if (track.source == targetSource) {
-        url = await _getUrlFromSource(track.id, targetSource, quality);
-      } else {
-        // Track is from a different source — search the target source
-        final query = '${track.title} ${track.author ?? ''}'.trim();
-        final results = await _searchSource(query, targetSource);
-        if (results.isNotEmpty) {
-          url = await _getUrlFromSource(results.first.id, targetSource, quality);
+      // 2. LRU cache (skip obviously broken paths)
+      final cachedUri = await _cacheService.getCachedUri(track.id);
+      if (cachedUri != null) {
+        if (cachedUri.endsWith('/.mp3') || cachedUri == '.mp3') {
+          AppLogger.log('Invalid cache path detected: $cachedUri. Skipping.', name: 'AudioRepository');
+        } else {
+          AppLogger.log('Playing from cache: $cachedUri', name: 'AudioRepository');
+          return cachedUri;
         }
       }
 
-      if (url != null) return url;
-
-      // Tidal returned null (no user token) — always fall back to YouTube
-      AppLogger.log('Target source returned null URL, falling back to YouTube', name: 'AudioRepository');
+      // 3. YouTube-only stream retrieval (hardcoded).
       return await _getYouTubeUrl(track, quality);
     } catch (e) {
-      if (enableFallback || true) {
-        // Always try YouTube as last resort
-        AppLogger.log('Primary source failed ($e), trying YouTube fallback', name: 'AudioRepository');
-        try {
-          return await _getYouTubeUrl(track, quality);
-        } catch (ytError) {
-          AppLogger.log('YouTube fallback also failed: $ytError', name: 'AudioRepository');
-        }
-      }
-      rethrow;
+      throw Exception('YouTube stream failed: $e');
     }
   }
 
+  /// Resolve a YouTube stream URL for [track].
+  ///
+  /// For native YouTube tracks with an 11-char ID, tries direct URL resolution first.
+  /// Falls back to a search query for any other track or if the direct call fails.
   Future<String> _getYouTubeUrl(Track track, String quality) async {
     final rawId = _stripPrefixes(track.id);
-    if (track.source == TrackSource.youtube && rawId.length == 11) {
+    if ((track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) &&
+        rawId.length == 11) {
       try {
         return await remoteDataSource.getAudioUrl(rawId, quality: quality);
       } catch (e) {
-        AppLogger.log('Direct YT URL failed, falling back to search mapping: $e', name: 'AudioRepository');
+        AppLogger.log('Direct YT URL failed, falling back to search: $e', name: 'AudioRepository');
       }
     }
-    
-    // Search YouTube for this track using linking algorithm
+
+    // Search YouTube by title + artist + album
     final query = '${track.title} ${track.author ?? ''} ${track.album ?? ''} official audio'.trim();
-    AppLogger.log('Mapping track with search: $query', name: 'AudioRepository');
+    AppLogger.log('Mapping track via YouTube search: $query', name: 'AudioRepository');
     final results = await remoteDataSource.search(query);
     if (results.isNotEmpty) {
       return await remoteDataSource.getAudioUrl(results.first.id, quality: quality);
@@ -122,30 +112,13 @@ class AudioRepositoryImpl implements AudioRepository {
     throw Exception('Could not find "${track.title}" on YouTube');
   }
 
-  Future<String?> _getUrlFromSource(String id, TrackSource source, String quality) async {
-    final rawId = _stripPrefixes(id);
-    if (source == TrackSource.tidal) {
-      return await tidalDataSource.getTrackStreamUrl(rawId, quality: quality);
-    } else {
-      return await remoteDataSource.getAudioUrl(rawId, quality: quality);
-    }
-  }
-
-  Future<List<dynamic>> _searchSource(String query, TrackSource source) async {
-    if (source == TrackSource.tidal) {
-      return await tidalDataSource.search(query);
-    } else {
-      return await remoteDataSource.search(query);
-    }
-  }
-
-
   @override
   Future<void> playTrack(Track track, String audioUrl) async {
     String finalUrl = audioUrl;
 
     // YouTube Stream URL Expiry Fix: Always re-fetch a fresh stream URL immediately before playback
-    if (track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) {
+    if ((track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) &&
+        finalUrl.contains('googlevideo.com')) {
       try {
         AppLogger.log('Fetching fresh YouTube stream URL at play time', name: 'AudioRepository');
         final rawId = _stripPrefixes(track.id);
@@ -162,7 +135,9 @@ class AudioRepositoryImpl implements AudioRepository {
       // Start caching the stream in the background
       _cacheService.cacheStream(track.id, finalUrl);
     }
-    
+
+    final actualSource = 'youtube';
+
     final item = MediaItem(
       id: track.id,
       title: track.title,
@@ -174,20 +149,63 @@ class AudioRepositoryImpl implements AudioRepository {
       duration: track.duration,
       extras: {
         'year': track.year,
-        'source': track.source == TrackSource.tidal ? 'tidal' : 'youtube',
+        'source': actualSource,
       },
     );
 
-    // Never resolve redirects for signed URLs — the handler decides based on URL type
-    final queue = _handler.queue.value;
-    if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
-      _handler.mediaItem.add(item);
-      await _handler.playTrack(finalUrl, item);
-    } else {
-      final newQueue = List<MediaItem>.from(queue);
-      newQueue.add(item);
-      _handler.queue.add(newQueue);
-      await _handler.playTrack(finalUrl, item);
+    Future<void> executePlay(String url, MediaItem mediaItem) async {
+      final queue = _handler.queue.value;
+      if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
+        _handler.mediaItem.add(mediaItem);
+        await _handler.playTrack(url, mediaItem);
+      } else {
+        final newQueue = List<MediaItem>.from(queue);
+        newQueue.add(mediaItem);
+        _handler.queue.add(newQueue);
+        await _handler.playTrack(url, mediaItem);
+      }
+    }
+
+    try {
+      await executePlay(finalUrl, item);
+    } catch (e) {
+      if (finalUrl.startsWith('file://') || !finalUrl.startsWith('http')) {
+        AppLogger.log('Local cached file failed to play: $e. Deleting cache and retrying from network...', name: 'AudioRepository');
+        try {
+          final filePath = finalUrl.startsWith('file://') ? Uri.parse(finalUrl).toFilePath() : finalUrl;
+          final file = File(filePath);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (cleanupError) {
+          AppLogger.log('Failed to delete corrupted cached file: $cleanupError', name: 'AudioRepository');
+        }
+
+        try {
+          final networkUrl = await getAudioUrl(track, quality: 'adaptive');
+          if (networkUrl.startsWith('http')) {
+            final newItem = MediaItem(
+              id: track.id,
+              title: track.title,
+              artist: track.author ?? '',
+              album: track.album,
+              artUri: track.thumbnailUrl != null
+                  ? Uri.tryParse(track.thumbnailUrl!)
+                  : null,
+              duration: track.duration,
+              extras: {
+                'year': track.year,
+                'source': 'youtube',
+              },
+            );
+            await executePlay(networkUrl, newItem);
+            return;
+          }
+        } catch (retryError) {
+          AppLogger.log('Retry playback failed: $retryError', name: 'AudioRepository');
+        }
+      }
+      rethrow;
     }
   }
 
@@ -274,28 +292,7 @@ class AudioRepositoryImpl implements AudioRepository {
   }
 
   Future<String?> _fetchLyricsFromNetwork(Track track) async {
-    // Attempt to fetch synced lyrics from LrcLib
-    final lrclibLyrics = await lyricsDataSource.getSyncedLyrics(track.title, track.author ?? '');
-    if (lrclibLyrics != null) {
-      return lrclibLyrics;
-    }
-
-    // Fallback to Tidal lyrics
-    if (track.source == TrackSource.tidal) {
-      return tidalDataSource.getLyrics(track.id);
-    }
-    
-    // Fallback: try searching Tidal for the YouTube track's title to find lyrics
-    try {
-      final searchResults = await tidalDataSource.search(track.title);
-      if (searchResults.isNotEmpty) {
-         return tidalDataSource.getLyrics(searchResults.first.id);
-      }
-    } catch (e) {
-      AppLogger.log('Failed to find fallback lyrics: $e', name: 'AudioRepository');
-    }
-    
-    return null;
+    return await lyricsDataSource.getSyncedLyrics(track.title, track.author ?? '');
   }
 
   @override
@@ -343,7 +340,7 @@ class AudioRepositoryImpl implements AudioRepository {
   @override
   Future<void> preloadTrack(Track track) async {
     try {
-      final audioUrl = await getAudioUrl(track, enableFallback: true);
+      final audioUrl = await getAudioUrl(track);
       if (audioUrl.startsWith('http')) {
         await _cacheService.cacheStream(track.id, audioUrl);
         AppLogger.log('Successfully preloaded track: ${track.id}', name: 'AudioRepository');

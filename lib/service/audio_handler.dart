@@ -133,30 +133,35 @@ class MusicAudioHandler extends BaseAudioHandler {
       if (_currentIndex == -1) _currentIndex = null;
       mediaItem.add(item);
 
-      final source = item.extras?['source'] as String?;
-      final headers = await _getHeaders(source: source);
+      final headers = await _getHeaders();
 
-      final client = http.Client();
       final Uri uri;
       try {
-        uri = url.startsWith('http') || url.startsWith('https')
-            ? Uri.parse(
-                await NetworkUtils.resolveRedirects(
-                  client,
-                  url,
-                  headers: headers,
-                ),
-              )
-            : url.startsWith('file://') ? Uri.parse(url) : Uri.file(url);
-      } finally {
-        client.close();
+        if (url.startsWith('file://') || !url.startsWith('http')) {
+          uri = url.startsWith('file://') ? Uri.parse(url) : Uri.file(url);
+        } else {
+          final client = http.Client();
+          try {
+            uri = Uri.parse(
+              await NetworkUtils.resolveRedirects(
+                client,
+                url,
+                headers: headers,
+              ),
+            );
+          } finally {
+            client.close();
+          }
+        }
+      } catch (e) {
+        throw Exception('Failed to resolve URL: $e');
       }
 
       AppLogger.log('Playing Resolved URL: $uri', name: 'MusicAudioHandler');
 
       await _player.stop();
       
-      // 2. Pass headers down to AudioSource config to keep connections alive on proxy/YT paths
+      // 2. Pass headers down to AudioSource config to keep connections alive on YouTube paths
       if (uri.isScheme('HTTP') || uri.isScheme('HTTPS')) {
         final finalHeaders = uri.host.contains('googlevideo.com') ? null : headers;
         await _player.setAudioSource(
@@ -230,18 +235,16 @@ class MusicAudioHandler extends BaseAudioHandler {
     await stop();
   }
 
-  Future<Map<String, String>> _getHeaders({String? source}) async {
+  Future<Map<String, String>> _getHeaders() async {
     final cookies = await _authService.getCookies();
     final headers = <String, String>{
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
     };
-    
-    if (source != 'tidal') {
-      headers['Referer'] = 'https://www.youtube.com/';
-      if (cookies != null && cookies.isNotEmpty) {
-        headers['Cookie'] = cookies;
-      }
+
+    headers['Referer'] = 'https://www.youtube.com/';
+    if (cookies != null && cookies.isNotEmpty) {
+      headers['Cookie'] = cookies;
     }
     return headers;
   }

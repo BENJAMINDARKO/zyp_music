@@ -6,11 +6,13 @@ import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../service/download_service.dart';
+import '../../core/services/hybrid_cache_service.dart';
 
 class DownloadProvider extends ChangeNotifier {
   final DownloadService _downloadService;
+  final HybridCacheService _hybridCache;
 
-  DownloadProvider(this._downloadService);
+  DownloadProvider(this._downloadService, this._hybridCache);
 
   Set<String> _downloadedTrackIds = {};
   final Map<String, DownloadProgress> _activeDownloads = {};
@@ -45,17 +47,40 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> init() async {
     _downloadedTrackIds = await _downloadService.getAllDownloadedIds();
     _downloadedPlaylists.addAll(await _downloadService.getFullyDownloadedPlaylistIds());
-    
-    // Listen globally to progress & completed streams to sync single-track states
+
+    // Listen globally to progress & completed streams to sync single-track states.
+    // `markCaching` fires the first time we see real bytes for a track; this
+    // keeps the download icon spinner bound to the actual write loop instead
+    // of a pre-flight placeholder, which fixes the indefinite-spinner bug.
     _downloadService.progressStream.listen((progress) {
       _activeDownloads[progress.trackId] = progress;
+      if (progress.currentBytes > 0) {
+        _hybridCache.markCaching(progress.trackId);
+      }
       notifyListeners();
     });
 
-    _downloadService.completedStream.listen((trackId) {
+    _downloadService.completedStream.listen((trackId) async {
       _downloadedTrackIds.add(trackId);
       _activeDownloads.remove(trackId);
+      final localPath = await _downloadService.getLocalFilePath(trackId);
+      if (localPath != null) {
+        await _hybridCache.markSuccessAfterWrite(
+          trackId,
+          expectedFilePath: localPath,
+        );
+      } else {
+        _hybridCache.markNotCaching(trackId);
+      }
       notifyListeners();
+    });
+
+    _downloadService.errorStream.listen((_) {
+      // On error, any tracks that were actively caching must clear the
+      // transient state so the spinner stops looping.
+      for (final id in _activeDownloads.keys.toList()) {
+        _hybridCache.markNotCaching(id);
+      }
     });
 
     notifyListeners();
@@ -104,8 +129,11 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
     if (_downloadedTrackIds.contains(track.id)) return;
     if (_activeDownloads.containsKey(track.id)) return;
-    
-    // Show spinner immediately by inserting a placeholder progress object
+
+    // Flip the cache state to `caching` on tap so the icon switches to the
+    // spinner in the same frame the user pressed it. The byte stream (and
+    // the error stream) gate the transition out of `caching` — see init().
+    _hybridCache.markCaching(track.id);
     _activeDownloads[track.id] = DownloadProgress(
       trackId: track.id,
       trackTitle: track.title,
@@ -120,6 +148,7 @@ class DownloadProvider extends ChangeNotifier {
       await _downloadService.downloadTrack(track, playlistId, quality: quality);
     } catch (e) {
       _activeDownloads.remove(track.id);
+      _hybridCache.markNotCaching(track.id);
       notifyListeners();
     }
   }
@@ -173,6 +202,7 @@ class DownloadProvider extends ChangeNotifier {
       final track = queue[i];
       if (_downloadedTrackIds.contains(track.id)) continue;
       if (_activeDownloads.containsKey(track.id)) continue;
+      if (_hybridCache.isCached(track.id)) continue;
       futures.add(_downloadService.downloadTrack(track, playlistId)
           .catchError((e) => AppLogger.log('Pre-download failed for ${track.id}: $e', name: 'DownloadProvider')));
     }

@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/audio_quality.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
+import '../../core/services/hybrid_cache_service.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../../service/audio_handler.dart';
@@ -16,16 +17,28 @@ import 'settings_provider.dart';
 class PlayerProvider extends ChangeNotifier {
   final AudioRepository _audioRepository;
   final SettingsProvider _settingsProvider;
+  final HybridCacheService _hybridCache;
   late final FallbackEngine _fallbackEngine;
 
-  PlayerProvider(this._audioRepository, this._settingsProvider) {
-    _fallbackEngine = FallbackEngine(settingsProvider: _settingsProvider);
+  PlayerProvider(
+    this._audioRepository,
+    this._settingsProvider,
+    this._hybridCache,
+  ) {
+    _fallbackEngine = FallbackEngine();
+
+    _settingsProvider.addListener(() {
+      PlaybackSession().clear();
+    });
+
     _skipNextSubscription = _audioRepository.onSkipNextRequested.listen((_) {
       next();
     });
     _skipPrevSubscription = _audioRepository.onSkipPreviousRequested.listen((_) {
       previous();
     });
+    // Drive the Hive-driven preload loop off the existing track-changed hook.
+    addTrackChangedListener(_onTrackChangedForPreload);
     // Load recently played tracks on startup
     loadRecentlyPlayed().then((_) {
       if (_recentlyPlayed.isNotEmpty) {
@@ -362,14 +375,11 @@ class PlayerProvider extends ChangeNotifier {
       _extractDominantColor(track.thumbnailUrl);
       
       final sourceRef = await PlaybackSession().resolve(track, _fallbackEngine);
-      final defaultSource = sourceRef?.provider ?? TrackSource.tidal;
       final qualityStr = sourceRef?.quality ?? 'adaptive';
-      
+
       final audioUrl = await _audioRepository.getAudioUrl(
-        track, 
+        track,
         quality: qualityStr,
-        preferredSource: defaultSource,
-        enableFallback: _settingsProvider.enableSourceFallback,
       );
 
       if (sourceRef != null) {
@@ -403,6 +413,25 @@ class PlayerProvider extends ChangeNotifier {
       final nextTrack = _queue[_currentIndex + 1];
       // Do not block playback on preloading
       _audioRepository.preloadTrack(nextTrack);
+    }
+  }
+
+  /// Settings-slider-driven preload. On every track change we look ahead by
+  /// `_settingsProvider.prebufferCount` (1..5) tracks, check the Hive box
+  /// instantly, and fire background downloads for any missing ones.
+  Future<void> _onTrackChangedForPreload() async {
+    final lookAhead = _settingsProvider.prebufferCountClamped;
+    for (var i = 1; i <= lookAhead; i++) {
+      final idx = _currentIndex + i;
+      if (idx < 0 || idx >= _queue.length) break;
+      final track = _queue[idx];
+      if (_hybridCache.isCached(track.id)) continue;
+      if (_hybridCache.isActivelyCaching(track.id)) continue;
+      _hybridCache.markCaching(track.id);
+      // Fire-and-forget — never block the queue change on background writes.
+      unawaited(_audioRepository.preloadTrack(track).catchError((_) {
+        _hybridCache.markNotCaching(track.id);
+      }));
     }
   }
 

@@ -9,12 +9,29 @@ class AudioCacheService {
   static const int _maxCachedItems = 200;
   static const String _prefsKey = 'audio_cache_lru';
 
+  /// Optional notifier fired after a stream write completes successfully.
+  /// Receives the `(trackId, finalFilePath)` so the caller can register the
+  /// new cache entry in its own index (e.g. a Hive box) without coupling
+  /// this service to that index.
+  ///
+  /// Errors raised inside the callback are swallowed; the file is already
+  /// on disk and the next reconcile pass can pick it up if the index update
+  /// did not land.
+  Future<void> Function(String trackId, String filePath)? onCacheSuccess;
+
   /// Returns the local file URI if the track is cached, otherwise null.
   Future<String?> getCachedUri(String trackId) async {
     try {
       final cacheDir = await _getCacheDir();
-      final file = File('${cacheDir.path}/$trackId.mp3');
-      if (await file.exists()) {
+      if (!await cacheDir.exists()) return null;
+
+      final files = cacheDir.listSync().whereType<File>().where((file) {
+        final name = file.path.split('/').last;
+        return name.startsWith('$trackId.');
+      }).toList();
+
+      if (files.isNotEmpty) {
+        final file = files.first;
         if (await file.length() > 0) {
           await _updateAccessTime(trackId);
           return file.uri.toString();
@@ -33,21 +50,48 @@ class AudioCacheService {
   Future<void> cacheStream(String trackId, String streamUrl) async {
     try {
       final cacheDir = await _getCacheDir();
-      final file = File('${cacheDir.path}/$trackId.mp3');
       
-      if (await file.exists() && await file.length() > 0) {
-        await _updateAccessTime(trackId);
+      // Determine file extension based on streamUrl
+      String ext = 'mp3';
+      final lowerUrl = streamUrl.toLowerCase();
+      if (lowerUrl.contains('.flac')) {
+        ext = 'flac';
+      } else if (lowerUrl.contains('.webm')) {
+        ext = 'webm';
+      } else if (lowerUrl.contains('.mp4') || lowerUrl.contains('.m4a') || lowerUrl.contains('.aac')) {
+        ext = 'm4a';
+      }
+
+      final file = File('${cacheDir.path}/$trackId.$ext');
+      
+      final existingUri = await getCachedUri(trackId);
+      if (existingUri != null) {
         return;
       }
 
       // Download file to temp location first
       final tmpFile = File('${cacheDir.path}/$trackId.tmp');
-      final response = await http.get(Uri.parse(streamUrl));
+      final response = await http.get(
+        Uri.parse(streamUrl),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+              'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        },
+      );
       if (response.statusCode == 200) {
         await tmpFile.writeAsBytes(response.bodyBytes);
         await tmpFile.rename(file.path);
         await _updateAccessTime(trackId);
         await _enforceCacheLimit();
+        final hook = onCacheSuccess;
+        if (hook != null) {
+          try {
+            await hook(trackId, file.path);
+          } catch (e) {
+            AppLogger.log('onCacheSuccess hook failed for $trackId: $e',
+                name: 'AudioCacheService');
+          }
+        }
       }
     } catch (e) {
       AppLogger.log('Error caching stream: $e', name: 'AudioCacheService');
@@ -100,9 +144,15 @@ class AudioCacheService {
       
       for (int i = 0; i < itemsToRemove; i++) {
         final oldestTrackId = lru[0];
-        final file = File('${cacheDir.path}/$oldestTrackId.mp3');
-        if (await file.exists()) {
-          await file.delete();
+        final files = cacheDir.listSync().whereType<File>().where((file) {
+          final name = file.path.split('/').last;
+          return name.startsWith('$oldestTrackId.');
+        }).toList();
+
+        for (final file in files) {
+          if (await file.exists()) {
+            await file.delete();
+          }
         }
         lru.removeAt(0);
       }

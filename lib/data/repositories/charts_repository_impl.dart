@@ -46,7 +46,7 @@ class ChartsRepositoryImpl {
         'albumArtist': track.albumArtist,
         'year': track.year,
         'index': track.index,
-        'source': track.source == TrackSource.tidal ? 'tidal' : 'youtube',
+        'source': 'youtube',
       },
     );
   }
@@ -69,7 +69,7 @@ class ChartsRepositoryImpl {
         'albumArtist': track.albumArtist,
         'year': track.year,
         'index': track.index,
-        'source': track.source == TrackSource.tidal ? 'tidal' : 'youtube',
+        'source': 'youtube',
       },
     );
   }

@@ -142,7 +142,6 @@ lib/
 │   │       ├── authenticated_client.dart
 │   │       ├── charts_remote_datasource.dart
 │   │       ├── lyrics_remote_datasource.dart
-│   │       ├── tidal_remote_datasource.dart
 │   │       ├── youtube_audio_extractor.dart
 │   │       └── youtube_remote_datasource.dart
 │   ├── models/

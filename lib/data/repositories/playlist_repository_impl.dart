@@ -5,19 +5,17 @@ import '../../domain/entities/artist.dart';
 import '../../domain/repositories/playlist_repository.dart';
 import '../datasources/local/playlist_database.dart';
 import '../datasources/remote/youtube_remote_datasource.dart';
-import '../datasources/remote/tidal_remote_datasource.dart';
 import '../models/playlist_model.dart';
 import '../models/video_model.dart';
 import '../../core/utils/normalise.dart';
+import '../../core/utils/app_logger.dart';
 
 class PlaylistRepositoryImpl implements PlaylistRepository {
   final YoutubeRemoteDataSource remoteDataSource;
-  final TidalRemoteDataSource tidalDataSource;
   final PlaylistDatabase localDatabase;
 
   PlaylistRepositoryImpl({
     required this.remoteDataSource,
-    required this.tidalDataSource,
     required this.localDatabase,
   });
 
@@ -283,23 +281,16 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<List<Track>> searchTracks(String query) async {
-    final futures = <Future<List<Track>>>[];
-
-    futures.add(tidalDataSource.search(query).then((tracks) {
-      return tracks.map((t) => t.copyWith(source: TrackSource.tidal)).toList();
-    }).catchError((_) => <Track>[]));
-
-    futures.add(remoteDataSource.searchTracks(query).then((models) {
-      return models.map((m) => m.toEntity().copyWith(source: TrackSource.youtube_music)).toList();
-    }).catchError((_) => <Track>[]));
-
-    final results = await Future.wait(futures);
-    final allTracks = results
-        .expand((list) => list)
-        .where((t) => !_isOfficialVideoOrSimilar(t))
-        .toList();
-
-    return _deduplicateTracks(allTracks);
+    try {
+      final models = await remoteDataSource.searchTracks(query);
+      return models
+          .map((m) => m.toEntity().copyWith(source: TrackSource.youtube_music))
+          .where((t) => !_isOfficialVideoOrSimilar(t))
+          .toList();
+    } catch (e) {
+      AppLogger.log('YouTube searchTracks failed for "$query": $e', name: 'PlaylistRepository');
+      return <Track>[];
+    }
   }
 
   List<Track> _deduplicateTracks(List<Track> tracks) {
@@ -313,7 +304,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         final existing = unified[key]!;
         final existingNormTitle = normalise(existing.title);
         final existingNormArtist = normalise(existing.author ?? '');
-        
+
         if (existingNormTitle == normTitle && existingNormArtist == normArtist) {
           final diff = (existing.duration.inSeconds - track.duration.inSeconds).abs();
           if (diff <= 5 || track.duration.inSeconds == 0 || existing.duration.inSeconds == 0) {
@@ -321,7 +312,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
             final newSourceRef = SourceRef(
               provider: track.source,
               streamId: track.id,
-              quality: track.source == TrackSource.tidal ? 'lossless' : 'adaptive',
+              quality: 'adaptive',
             );
             existing.sources.add(newSourceRef);
             foundMatch = true;
@@ -335,7 +326,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
           SourceRef(
             provider: track.source,
             streamId: track.id,
-            quality: track.source == TrackSource.tidal ? 'lossless' : 'adaptive',
+            quality: 'adaptive',
           )
         ];
         unified[track.id] = track.copyWith(
@@ -433,14 +424,8 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<List<Track>> getEditorsPicks() async {
-    try {
-      return await tidalDataSource.getEditorsPicks();
-    } catch (e) {
-      print('Tidal editor picks failed: $e');
-      // Fallback to YouTube search for hot tracks
-      final models = await remoteDataSource.search("Top Hits");
-      return models.map((m) => m.toEntity()).toList();
-    }
+    final models = await remoteDataSource.search("Top Hits");
+    return models.map((m) => m.toEntity()).toList();
   }
 
   @override

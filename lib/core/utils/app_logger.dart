@@ -31,6 +31,7 @@ class AppLogger {
     // Print to debug console
     if (kDebugMode) {
       developer.log(message, name: name);
+      print('[$name] $message');
     }
     
     // Append to file if initialized
@@ -41,6 +42,7 @@ class AppLogger {
       } catch (e) {
         if (kDebugMode) {
           developer.log('Failed to write to log file: $e', name: 'System');
+          print('[System] Failed to write to log file: $e');
         }
       }
     }

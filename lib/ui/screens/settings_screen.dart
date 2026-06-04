@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +9,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../presentation/providers/settings_provider.dart';
-import '../../core/constants/audio_quality.dart';
 import '../../service/oauth_service.dart';
 import 'youtube_login_webview.dart';
 import '../../core/services/audio_cache_service.dart';
@@ -42,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 7,
+      length: 6,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
@@ -60,7 +58,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Tab(text: "Scrobbling"),
               Tab(text: "Audio"),
               Tab(text: "Downloads"),
-              Tab(text: "Connections"),
               Tab(text: "System"),
             ],
           ),
@@ -74,7 +71,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildScrobblingTab(provider, context),
                 _buildAudioTab(provider, context),
                 _buildDownloadsTab(provider, context),
-                _buildConnectionsTab(provider, context),
                 _buildSystemTab(provider, context),
               ],
             );
@@ -153,7 +149,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _buildSectionHeader('Search Sources'),
         _buildSwitchTile('YouTube', provider.searchSourceYoutube, (v) => provider.setBoolSetting('searchSourceYoutube', v)),
         _buildSwitchTile('YouTube Music', provider.searchSourceYTMusic, (v) => provider.setBoolSetting('searchSourceYTMusic', v)),
-        _buildSwitchTile('Tidal', provider.searchSourceTidal, (v) => provider.setBoolSetting('searchSourceTidal', v)),
         const SizedBox(height: 24),
         _buildSectionHeader('System & Storage'),
         ListTile(
@@ -283,29 +278,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildSectionHeader('Streaming Engine'),
-        _buildDropdownSetting<StreamSource>(
-          title: 'Default Audio Source',
-          subtitle: 'Choose which engine to use for playback.',
-          value: provider.streamSource,
-          items: const [
-            DropdownMenuItem(value: StreamSource.youtube, child: Text('YouTube Music')),
-            DropdownMenuItem(value: StreamSource.tidal, child: Text('Tidal')),
-          ],
-          onChanged: (val) {
-            if (val != null) provider.setStreamSource(val);
-          },
-        ),
-        SwitchListTile(
-          title: const Text('Enable Source Fallback', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('If the default engine fails to load a stream, attempt to find and play it on the other engine.', style: TextStyle(color: Colors.white54)),
-          value: provider.enableSourceFallback,
-          activeColor: const Color(0xFFEAB308),
-          onChanged: (val) {
-            provider.setEnableSourceFallback(val);
-          },
-        ),
-        const SizedBox(height: 24),
         _buildSectionHeader('Streaming Quality'),
         _buildDropdownSetting<String>(
           title: 'YouTube Music Quality',
@@ -321,30 +293,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (val != null) provider.setStringSetting('youtubeMusicQuality', val);
           },
         ),
-        _buildDropdownSetting<String>(
-          title: 'Tidal Streaming Quality',
-          subtitle: 'Quality for Tidal streaming.',
-          value: provider.tidalStreamingQuality,
-          items: [
-            const DropdownMenuItem(value: 'tidalLow', child: Text('AAC 96kbps (Low)')),
-            const DropdownMenuItem(value: 'tidalHigh', child: Text('AAC 320kbps (High)')),
-            const DropdownMenuItem(value: 'tidalLossless', child: Text('Lossless 16-bit')),
-            const DropdownMenuItem(value: 'tidalHiRes', child: Text('HiRes 24-bit Lossless')),
-          ],
-          onChanged: (val) {
-            if (val != null) provider.setStringSetting('tidalStreamingQuality', val);
-          },
-        ),
         const SizedBox(height: 24),
         _buildSectionHeader('Caching & Prebuffer'),
         _buildSliderSetting(
           title: 'Pre-buffer Count',
-          subtitle: 'Number of upcoming tracks to preload.',
-          value: provider.prebufferCount.toDouble(),
+          subtitle: 'Number of upcoming tracks to preload (1-5).',
+          value: provider.prebufferCountClamped.toDouble(),
           min: 1,
-          max: 10,
-          divisions: 9,
-          label: provider.prebufferCount.toString(),
+          max: 5,
+          divisions: 4,
+          label: provider.prebufferCountClamped.toString(),
           onChanged: (val) {
             provider.setPrebufferCount(val.toInt());
           },
@@ -417,96 +375,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         _buildSwitchTile('Force ZIP as Blob', provider.forceZipAsBlob, (v) => provider.setBoolSetting('forceZipAsBlob', v)),
       ],
-    );
-  }
-
-  Widget _buildConnectionsTab(SettingsProvider provider, BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildSectionHeader('Tidal API Instances'),
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white54),
-              onPressed: () async {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Refreshing instances from remote...')));
-                await provider.refreshTidalInstances();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Instances refreshed!')));
-                }
-              },
-            ),
-          ],
-        ),
-        ...provider.tidalApiInstances.map((url) => ListTile(
-          title: Text(url, style: const TextStyle(color: Colors.white)),
-          trailing: IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            onPressed: () => provider.removeTidalApiInstance(url),
-          ),
-        )),
-        ListTile(
-          title: const Text('Add API Instance...', style: TextStyle(color: Color(0xFFEAB308))),
-          leading: const Icon(Icons.add, color: Color(0xFFEAB308)),
-          onTap: () => _showAddInstanceDialog(context, provider, true),
-        ),
-        
-        const SizedBox(height: 24),
-        _buildSectionHeader('Tidal Streaming Instances'),
-        ...provider.tidalStreamingInstances.map((url) => ListTile(
-          title: Text(url, style: const TextStyle(color: Colors.white)),
-          trailing: IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            onPressed: () => provider.removeTidalStreamingInstance(url),
-          ),
-        )),
-        ListTile(
-          title: const Text('Add Streaming Instance...', style: TextStyle(color: Color(0xFFEAB308))),
-          leading: const Icon(Icons.add, color: Color(0xFFEAB308)),
-          onTap: () => _showAddInstanceDialog(context, provider, false),
-        ),
-      ],
-    );
-  }
-
-  void _showAddInstanceDialog(BuildContext context, SettingsProvider provider, bool isApi) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F1F),
-        title: Text(isApi ? 'Add API Instance' : 'Add Streaming Instance', style: const TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'https://...',
-            hintStyle: TextStyle(color: Colors.white54),
-          ),
-        ),
-        actions: [
-          TextButton(
-            child: const Text('CANCEL', style: TextStyle(color: Colors.white54)),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-          TextButton(
-            child: const Text('ADD', style: TextStyle(color: Color(0xFFEAB308))),
-            onPressed: () {
-              final url = controller.text.trim();
-              if (url.isNotEmpty) {
-                if (isApi) {
-                  provider.addTidalApiInstance(url);
-                } else {
-                  provider.addTidalStreamingInstance(url);
-                }
-              }
-              Navigator.pop(ctx);
-            },
-          ),
-        ],
-      ),
     );
   }
 

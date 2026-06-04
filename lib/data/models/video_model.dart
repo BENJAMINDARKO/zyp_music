@@ -26,11 +26,6 @@ class TrackModel {
   });
 
   factory TrackModel.fromMap(Map<String, dynamic> map) {
-    TrackSource parseSource(String? sourceStr) {
-      if (sourceStr == 'tidal') return TrackSource.tidal;
-      return TrackSource.youtube;
-    }
-
     return TrackModel(
       id: map['id'] as String,
       title: map['title'] as String,
@@ -41,7 +36,7 @@ class TrackModel {
       albumArtist: map['albumArtist'] as String?,
       year: map['year'] as int?,
       index: map['idx'] as int? ?? 0,
-      source: parseSource(map['source'] as String?),
+      source: TrackSource.youtube,
     );
   }
 
@@ -56,7 +51,7 @@ class TrackModel {
       'albumArtist': albumArtist,
       'year': year,
       'idx': index,
-      'source': source == TrackSource.tidal ? 'tidal' : 'youtube',
+      'source': 'youtube',
     };
   }
 

@@ -165,40 +165,60 @@ class _SeekbarPainter extends CustomPainter {
   }
 
   void _paintWavy(Canvas canvas, Size size) {
+    // ---- Hybrid dynamic progress bar (Wavy) -------------------------------
+    // Two tiers split at X_split = size.width * value:
+    //   * 0 <= x <= X_split : Y(x) = cy + A * sin(ω * x + φ)   (active wave)
+    //   * x >  X_split     : Y(x) = cy                        (flat track)
+    // Both segments share identical stroke properties — width, anti-aliasing
+    // and rounded caps — so the transition seam is clean.
     final activeWidth = size.width * value;
     final cy = size.height / 2;
-    
-    final path = Path();
-    path.moveTo(0, cy);
-    
-    int waveCount = 20;
-    double waveLen = size.width / waveCount;
-    
-    for (int i = 0; i < waveCount; i++) {
-      path.quadraticBezierTo(
-        waveLen * i + waveLen / 2,
-        cy + (i % 2 == 0 ? -4 : 4),
-        waveLen * (i + 1),
-        cy,
+
+    const double amplitude = 4.0;            // A
+    const double waveLength = 32.0;          // pixels per sine cycle
+    final double omega = 2 * pi / waveLength;
+    const double phase = 0.0;                // φ
+    const double step = 1.0;                 // 1px sample step -> smooth wave
+
+    final wavyPaint = Paint()
+      ..color = activeColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+
+    final flatPaint = Paint()
+      ..color = Colors.white24
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+
+    // Played segment: continuous sine wave from x=0 to x=activeWidth.
+    if (activeWidth > 0) {
+      final wavePath = Path()..moveTo(0, cy + amplitude * sin(omega * 0 + phase));
+      for (double x = step; x <= activeWidth; x += step) {
+        final y = cy + amplitude * sin(omega * x + phase);
+        wavePath.lineTo(x, y);
+      }
+      // Ensure the last sample lands exactly on the split point.
+      wavePath.lineTo(activeWidth, cy + amplitude * sin(omega * activeWidth + phase));
+      canvas.drawPath(wavePath, wavyPaint);
+    }
+
+    // Unplayed segment: perfectly horizontal straight line from X_split to
+    // the right edge. Always drawn so the track is never stranded (including
+    // the value == 0 case, where it covers the full width).
+    if (activeWidth < size.width) {
+      canvas.drawLine(
+        Offset(activeWidth, cy),
+        Offset(size.width, cy),
+        flatPaint,
       );
     }
 
-    final trackPaint = Paint()
-      ..color = Colors.white24
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-      
-    canvas.drawPath(path, trackPaint);
-
-    canvas.save();
-    canvas.clipRect(Rect.fromLTWH(0, 0, activeWidth, size.height));
-    final activePaint = Paint()
-      ..color = activeColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-    canvas.drawPath(path, activePaint);
-    canvas.restore();
-    
+    // Thumb marker (kept from the original implementation).
     final thumbPaint = Paint()..color = Colors.white;
     canvas.drawCircle(Offset(activeWidth, cy), 4, thumbPaint);
   }
