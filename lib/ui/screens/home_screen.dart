@@ -11,6 +11,7 @@ import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
 import '../../data/models/video_model.dart';
 import '../widgets/track_context_menu.dart';
+import '../widgets/album_context_menu.dart';
 import 'album_screen.dart'; // We'll need this for albums
 import 'package:zyp_music/ui/screens/artist_screen.dart';
 
@@ -578,14 +579,7 @@ class _AlbumCard extends StatelessWidget {
             ),
           );
         },
-        onLongPress: () async {
-          await context.read<PlaylistProvider>().toggleFavoriteAlbum(album);
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Added ${album.title} to favorites')),
-            );
-          }
-        },
+        onLongPress: () => AlbumContextMenu.show(context, album),
         borderRadius: BorderRadius.circular(8),
         child: Container(
           decoration: BoxDecoration(

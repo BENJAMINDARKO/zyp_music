@@ -410,6 +410,40 @@ class BottomPlayer extends StatelessWidget {
                           );
                         },
                       ),
+                      // Auto DJ button — only present when the manual queue
+                      // still has items remaining. Tapping instantly engages
+                      // the hybrid AutoNext engine so the player keeps
+                      // rolling recommendations (or shuffled offline cache)
+                      // once the current track ends.
+                      if (_hasManualQueueRemaining(player))
+                        IconButton(
+                          icon: Icon(
+                            player.isAutoDJEnabled
+                                ? Icons.auto_awesome
+                                : Icons.auto_awesome_outlined,
+                            color: player.isAutoDJEnabled
+                                ? const Color(0xFFEAB308)
+                                : Colors.white54,
+                            size: 22,
+                          ),
+                          tooltip: player.isAutoDJEnabled
+                              ? 'Auto DJ engaged — tap to disengage'
+                              : 'Engage Auto DJ',
+                          onPressed: () {
+                            player.toggleAutoDJ();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  player.isAutoDJEnabled
+                                      ? 'Auto DJ engaged'
+                                      : 'Auto DJ disengaged',
+                                ),
+                              ),
+                            );
+                          },
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          constraints: const BoxConstraints(),
+                        ),
                       IconButton(
                         icon: const Icon(Icons.mic_none, color: Colors.white54, size: 18),
                         onPressed: () {
@@ -595,6 +629,15 @@ class BottomPlayer extends StatelessWidget {
 
   void _showQueueFlyout(BuildContext context) {
     _showFlyout(context, const MiniplayerQueueView());
+  }
+
+  /// True iff there is at least one track still queued after the current
+  /// one. The Auto DJ button is hidden when the queue is empty (or the
+  /// current track is the only entry) so it never appears in the "single
+  /// play" state — explicit queue context is required.
+  bool _hasManualQueueRemaining(PlayerProvider player) {
+    if (player.currentTrack == null) return false;
+    return player.currentIndex + 1 < player.queue.length;
   }
 
 }

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/audio_quality.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../core/services/hybrid_cache_service.dart';
+import '../../core/services/queue_manager.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../../service/audio_handler.dart';
@@ -18,13 +19,15 @@ class PlayerProvider extends ChangeNotifier {
   final AudioRepository _audioRepository;
   final SettingsProvider _settingsProvider;
   final HybridCacheService _hybridCache;
+  final QueueManager? _queueManager;
   late final FallbackEngine _fallbackEngine;
 
   PlayerProvider(
     this._audioRepository,
     this._settingsProvider,
-    this._hybridCache,
-  ) {
+    this._hybridCache, {
+    QueueManager? queueManager,
+  }) : _queueManager = queueManager {
     _fallbackEngine = FallbackEngine();
 
     _settingsProvider.addListener(() {
@@ -39,8 +42,17 @@ class PlayerProvider extends ChangeNotifier {
     });
     // Drive the Hive-driven preload loop off the existing track-changed hook.
     addTrackChangedListener(_onTrackChangedForPreload);
+    // Auto DJ engine state must invalidate any UI bound to this provider.
+    _queueManager?.addListener(notifyListeners);
+    // Allow the offline Auto DJ pool to look up recently-played metadata.
+    _queueManager?.metadataResolver = () => {
+          for (final t in _recentlyPlayed) t.id: t,
+        };
     // Load recently played tracks on startup
     loadRecentlyPlayed().then((_) {
+      _queueManager?.metadataResolver = () => {
+            for (final t in _recentlyPlayed) t.id: t,
+          };
       if (_recentlyPlayed.isNotEmpty) {
         notifyListeners();
       }
@@ -287,6 +299,34 @@ class PlayerProvider extends ChangeNotifier {
     _originalQueue = null;
     _shuffleMode = false;
     _error = null;
+    // A direct setQueue is always a manual playback action. Auto DJ must be
+    // explicitly engaged by the user via the context menu or the dedicated
+    // Auto DJ icon; never implicit.
+    _queueManager?.disableAutoDJ();
+    notifyListeners();
+  }
+
+  /// Engages the Auto DJ engine and resets the active queue to the supplied
+  /// tracks. The next-track generation engine is the [QueueManager]; it
+  /// produces candidates from the online AutoNext web service or, when
+  /// offline, from the Hive cache + SQLite library cross-check pool.
+  void startAutoDJ(List<Track> tracks, {int startIndex = 0, String? playlistId}) {
+    _queue = tracks;
+    _currentIndex = startIndex;
+    _currentPlaylistId = playlistId;
+    _originalQueue = null;
+    _shuffleMode = false;
+    _error = null;
+    _queueManager?.enableAutoDJ();
+    notifyListeners();
+  }
+
+  /// Appends [tracks] to the end of the active queue without interrupting
+  /// the currently playing track. **Never** engages Auto DJ — once the
+  /// manual queue finishes, playback stops.
+  void appendToQueue(List<Track> tracks) {
+    if (tracks.isEmpty) return;
+    _queue.addAll(tracks);
     notifyListeners();
   }
 
@@ -478,19 +518,16 @@ class PlayerProvider extends ChangeNotifier {
   Future<void> next() async {
     if (_currentIndex + 1 < _queue.length) {
       await playFromQueue(_currentIndex + 1);
-    } else if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
-      await playFromQueue(0);
-    } else {
-      // Autoplay: fetch next tracks if at the end
-      if (_currentTrack != null) {
-        final upNexts = await _audioRepository.getUpNexts(_currentTrack!);
-        if (upNexts.isNotEmpty) {
-          _queue.addAll(upNexts);
-          notifyListeners();
-          await playFromQueue(_currentIndex + 1);
-        }
-      }
+      return;
     }
+    if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
+      await playFromQueue(0);
+      return;
+    }
+    // End of the manual queue. The next-button is a no-op here — auto DJ
+    // (if engaged) is only driven by the completion handler so a user who
+    // taps "next" at the end of a manual queue does not unexpectedly flip
+    // on the recommendation engine.
   }
 
   Future<void> previous() async {
@@ -561,11 +598,48 @@ class PlayerProvider extends ChangeNotifier {
           next();
         } else if (_repeatMode == repeat.PlaybackRepeatMode.all) {
           playFromQueue(0);
+        } else if (_queueManager?.isActive ?? false) {
+          _generateAutoDJNext();
         } else {
-          next(); // Will trigger autoplay fetching
+          // End of the manual queue with Auto DJ disengaged. Strict finite
+          // playback: stop without auto-rolling recommendations.
+          _stopAfterQueue();
         }
       }
     });
+  }
+
+  /// Asks the [QueueManager] for the next Auto DJ track and plays it.
+  /// Falls back to a graceful stop if the engine returns nothing.
+  Future<void> _generateAutoDJNext() async {
+    final manager = _queueManager;
+    final current = _currentTrack;
+    if (manager == null || current == null) {
+      _stopAfterQueue();
+      return;
+    }
+    final next = await manager.generateNextAutoDJTrack(current);
+    if (next == null) {
+      _stopAfterQueue();
+      return;
+    }
+    _queue.add(next);
+    await playFromQueue(_currentIndex + 1);
+  }
+
+  /// Stops playback at the end of the manual queue when Auto DJ is off.
+  /// Mirrors the existing [stop] side-effects but leaves the queue and
+  /// current track metadata intact so the miniplayer remains in its last
+  /// resting state.
+  void _stopAfterQueue() {
+    _audioRepository.pause();
+    _isPlaying = false;
+    _autoScroll = false;
+    _position = Duration.zero;
+    _bufferedPosition = Duration.zero;
+    _processingState = ProcessingState.idle;
+    _queueManager?.disableAutoDJ();
+    notifyListeners();
   }
 
   Future<void> stop() async {
@@ -584,10 +658,22 @@ class PlayerProvider extends ChangeNotifier {
     _currentPlaylistId = null;
     _originalQueue = null;
     _shuffleMode = false;
+    _queueManager?.disableAutoDJ();
     _audioHandler?.clearQueue();
     await stop();
     notifyListeners();
   }
+
+  /// Toggles the Auto DJ engine without changing the active queue. Used by
+  /// the dedicated Auto DJ icon in the miniplayer and the full-screen
+  /// player. Returns the new state.
+  bool toggleAutoDJ() {
+    final manager = _queueManager;
+    if (manager == null) return false;
+    return manager.toggleAutoDJ();
+  }
+
+  bool get isAutoDJEnabled => _queueManager?.isActive ?? false;
 
   void clearError() {
     _error = null;
@@ -611,6 +697,7 @@ class PlayerProvider extends ChangeNotifier {
     _positionSub?.cancel();
     _bufferedPositionSub?.cancel();
     _durationSub?.cancel();
+    _queueManager?.removeListener(notifyListeners);
     super.dispose();
   }
 }

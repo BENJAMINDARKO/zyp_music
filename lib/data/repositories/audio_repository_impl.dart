@@ -281,12 +281,13 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<String?> getLyrics(Track track) async {
-    final safeTitle = track.title.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
+    // Lyrics files are keyed by trackId so the Hive eviction pipeline can
+    // find and purge them in lockstep with the audio cache entry.
+    final lyricsPath = await _lyricsFilePathFor(track.id);
 
     // 1. Try to read from local file first
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$safeTitle-lyrics.lrc');
+      final file = File(lyricsPath);
       if (await file.exists()) {
         final content = await file.readAsString();
         // Only use the cached file if it has content.
@@ -311,9 +312,14 @@ class AudioRepositoryImpl implements AudioRepository {
     final lyrics = await _fetchLyricsFromNetwork(track);
     if (lyrics != null && lyrics.isNotEmpty) {
       try {
-        final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/$safeTitle-lyrics.lrc');
+        final file = File(lyricsPath);
         await file.writeAsString(lyrics);
+        // Mirror the lyrics into the Hive cache tracker so the eviction
+        // pipeline knows the on-disk path of this track's lyrics.
+        final cache = _hybridCache;
+        if (cache != null) {
+          await cache.setLyrics(track.id, lyrics, filePath: lyricsPath);
+        }
       } catch (e) {
         AppLogger.log('Error caching fetched lyrics: \$e', name: 'AudioRepository');
       }
@@ -327,18 +333,29 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<String?> refreshLyrics(Track track) async {
-    final safeTitle = track.title.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
+    final lyricsPath = await _lyricsFilePathFor(track.id);
     final lyrics = await _fetchLyricsFromNetwork(track);
     if (lyrics != null) {
       try {
-        final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/$safeTitle-lyrics.lrc');
+        final file = File(lyricsPath);
         await file.writeAsString(lyrics);
+        final cache = _hybridCache;
+        if (cache != null) {
+          await cache.setLyrics(track.id, lyrics, filePath: lyricsPath);
+        }
       } catch (e) {
         AppLogger.log('Error saving lyrics file on refresh: \$e', name: 'AudioRepository');
       }
     }
     return lyrics;
+  }
+
+  /// Resolves the deterministic trackId-keyed lyrics file path inside the
+  /// application documents directory. Kept private to the repository so the
+  /// Hive eviction pipeline can rely on the same naming convention.
+  Future<String> _lyricsFilePathFor(String trackId) async {
+    final directory = await getApplicationDocumentsDirectory();
+    return '${directory.path}/$trackId-lyrics.lrc';
   }
 
   @override

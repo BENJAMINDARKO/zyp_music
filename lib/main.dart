@@ -14,6 +14,7 @@ import 'data/repositories/charts_repository_impl.dart';
 import 'data/models/cache_tracker_model.dart';
 import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
+import 'core/services/queue_manager.dart';
 import 'service/auth_service.dart';
 import 'service/audio_handler.dart';
 import 'service/download_service.dart';
@@ -28,7 +29,11 @@ Future<void> main() async {
   if (!Hive.isAdapterRegistered(1)) {
     Hive.registerAdapter(CacheTrackerModelAdapter());
   }
-  final hybridCache = HybridCacheService();
+  // The local SQLite database is opened before the Hive box so the cache
+  // coordinator can be constructed with a reference to the permanent
+  // library. The cross-database eviction guard needs that handle.
+  final localDatabase = PlaylistDatabase();
+  final hybridCache = HybridCacheService(libraryDatabase: localDatabase);
   await hybridCache.init();
 
   try {
@@ -46,7 +51,6 @@ Future<void> main() async {
     final authService = AuthService();
     final remoteDataSource = YoutubeRemoteDataSource(authService: authService);
     await remoteDataSource.init();
-    final localDatabase = PlaylistDatabase();
     final playlistRepository = PlaylistRepositoryImpl(
       remoteDataSource: remoteDataSource,
       localDatabase: localDatabase,
@@ -98,6 +102,18 @@ Future<void> main() async {
     );
     await connectivityService.initialize();
 
+    // QueueManager coordinates the manual playback queue and the explicit
+    // Auto DJ engine. It listens to the connectivity service so the offline
+    // Hive-shuffle pool and the online AutoNext web service can be hot
+    // swapped as the device transitions between states.
+    final queueManager = QueueManager(
+      audioRepository: audioRepository,
+      hybridCache: hybridCache,
+      connectivity: connectivityService,
+      libraryDatabase: localDatabase,
+    );
+    queueManager.start();
+
     runApp(MonochromeApp(
       playlistRepository: playlistRepository,
       audioRepository: audioRepository,
@@ -107,6 +123,7 @@ Future<void> main() async {
       audioHandler: audioHandler,
       hybridCache: hybridCache,
       connectivityService: connectivityService,
+      queueManager: queueManager,
     ));
   } catch (e) {
     runApp(

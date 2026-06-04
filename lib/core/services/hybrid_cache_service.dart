@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../data/datasources/local/playlist_database.dart';
 import '../../data/models/cache_tracker_model.dart';
 import '../../core/utils/app_logger.dart';
 
@@ -16,16 +17,25 @@ class CachedStateEvent {
   const CachedStateEvent(this.trackId, this.state);
 }
 
-/// Hybrid two-tier cache backed by a single memory-mapped Hive box.
+/// Hybrid two-tier cache backed by a single memory-mapped Hive box
+/// (transient cache tier) cross-referenced against the SQLite-backed
+/// [PlaylistDatabase] (permanent library tier).
 ///
 /// Tier A — **Favorites** (persistent, protected). Entries flagged with
 /// `isFavorite = true` are completely immune to automated eviction and to
 /// non-favorite LRU bounds.
 ///
-/// Tier B — **Casual LRU** (bounded at [_maxCasualEntries], 200 by default).
-/// When the box would exceed the cap, the 10 oldest non-favorite entries are
-/// removed in a single `box.deleteAll(keys)` call. Their audio files and any
-/// persisted lyrics are physically removed from local storage in the same step.
+/// Tier B — **Casual LRU** (bounded at [casualLimit], 200 by default).
+/// When the box would exceed the cap, the [evictionBatchSize] oldest
+/// non-favorite entries are removed in a single `box.deleteAll(keys)` call.
+/// Their audio files and any persisted lyrics are physically removed from
+/// local storage in the same step.
+///
+/// The eviction pipeline always cross-references the SQLite library before
+/// purging any file from disk — see [evaluateAndEvictCasualCache]. This
+/// prevents the system from accidentally deleting a cached file that the user
+/// has marked as a favorite in the permanent library, even when the Hive
+/// favourite flag has drifted out of sync.
 ///
 /// The service also exposes a transient in-memory `caching` set so the UI
 /// can distinguish "actively writing bytes" from "fully cached" without
@@ -35,10 +45,22 @@ class HybridCacheService extends ChangeNotifier {
   static const String _logTag = 'HybridCacheService';
   static const String boxName = 'cache_tracker_box';
 
-  static const int _maxCasualEntries = 200;
-  static const int _evictBatchSize = 10;
+  /// Hard cap on the Hive transient tracker box (per the hybrid architecture
+  /// spec). Exposed publicly so tests and external coordinators can use the
+  /// same number the eviction pipeline uses.
+  static const int casualLimit = 200;
+
+  /// Number of oldest entries inspected per eviction pass. Exposed publicly
+  /// for the same reason as [casualLimit].
+  static const int evictionBatchSize = 10;
 
   static const String _cacheSubdir = 'audio_cache';
+
+  /// Optional handle to the SQLite-backed permanent library. When supplied,
+  /// the eviction pipeline uses it as the source of truth for the
+  /// "saved in library" cross-check. When omitted, eviction falls back to
+  /// the in-box `isFavorite` flag and never touches the SQLite tier.
+  final PlaylistDatabase? libraryDatabase;
 
   Box<CacheTrackerModel>? _box;
   final Set<String> _activeCaching = <String>{};
@@ -48,6 +70,8 @@ class HybridCacheService extends ChangeNotifier {
   Stream<CachedStateEvent> get stateStream => _stateEvents.stream;
 
   bool get isInitialized => _box?.isOpen ?? false;
+
+  HybridCacheService({this.libraryDatabase});
 
   // ---------------------------------------------------------------------------
   // Lifecycle
@@ -118,6 +142,18 @@ class HybridCacheService extends ChangeNotifier {
   /// True iff the track has a persisted cache record.
   bool isCached(String trackId) {
     return _box?.containsKey(trackId) ?? false;
+  }
+
+  /// Snapshot of every trackId currently registered in the Hive tracker box.
+  ///
+  /// Used by the Auto DJ offline shuffle pool to draw from the 200 casual
+  /// cached tracks. The returned list is a fresh, mutable copy — callers are
+  /// free to shuffle it. Returns an empty list when the box has not been
+  /// opened yet.
+  List<String> getCachedTrackIds() {
+    final box = _box;
+    if (box == null) return const <String>[];
+    return box.keys.map((k) => k.toString()).toList(growable: false);
   }
 
   /// True iff the track is currently being written to disk.
@@ -192,11 +228,12 @@ class HybridCacheService extends ChangeNotifier {
       cachedAt: DateTime.now().millisecondsSinceEpoch,
       isFavorite: existing?.isFavorite ?? false,
       timedLyrics: existing?.timedLyrics,
+      lyricsFilePath: existing?.lyricsFilePath,
     );
     await box.put(trackId, next);
     _activeCaching.remove(trackId);
 
-    await _enforceCasualCap();
+    await evaluateAndEvictCasualCache();
     _emit(trackId, CachedState.success);
   }
 
@@ -215,7 +252,10 @@ class HybridCacheService extends ChangeNotifier {
 
   /// Persists timed-lyrics text against a track. If the track is not yet
   /// cached, a stub record is created so the lyrics survive across sessions.
-  Future<void> setLyrics(String trackId, String lrc) async {
+  /// If [filePath] is provided, the on-disk lyrics file path is also recorded
+  /// so the cross-database eviction pipeline can purge the file alongside the
+  /// Hive entry.
+  Future<void> setLyrics(String trackId, String lrc, {String? filePath}) async {
     final box = _box;
     if (box == null) return;
     final existing = box.get(trackId);
@@ -224,7 +264,7 @@ class HybridCacheService extends ChangeNotifier {
               trackId: trackId,
               cachedAt: DateTime.now().millisecondsSinceEpoch,
             ))
-        .copyWith(timedLyrics: lrc);
+        .copyWith(timedLyrics: lrc, lyricsFilePath: filePath);
     await box.put(trackId, next);
   }
 
@@ -249,66 +289,150 @@ class HybridCacheService extends ChangeNotifier {
     final existing = box.get(trackId);
     if (existing == null) return;
     await box.put(trackId, existing.copyWith(isFavorite: false));
-    await _enforceCasualCap();
+    await evaluateAndEvictCasualCache();
   }
 
   // ---------------------------------------------------------------------------
   // Hybrid eviction routine
   // ---------------------------------------------------------------------------
 
-  /// Bounded LRU enforcement. Counts only non-favorite entries; if the
-  /// count exceeds [_maxCasualEntries], sorts the protected-eligible set by
-  /// `cachedAt` ascending, picks the [_evictBatchSize] oldest, deletes their
-  /// physical audio files + their persisted lyrics, then batch-deletes the
-  /// box keys in a single `box.deleteAll` call.
-  Future<void> _enforceCasualCap() async {
+  /// Bounded LRU enforcement with a cross-database guard.
+  ///
+  /// This is the core execution flow for the cache coordinator. It is the
+  /// single entry point that bridges the Hive transient cache tier with the
+  /// SQLite permanent library tier.
+  ///
+  /// Operational logic, lifted from the hybrid architecture spec:
+  ///
+  ///   1. Check whether the Hive transient tracker box exceeds [casualLimit]
+  ///      (200). If not, no eviction runs.
+  ///   2. Sort the entire in-memory Hive list by `cachedAt` ascending and take
+  ///      the [evictionBatchSize] (10) oldest entries as candidates.
+  ///   3. For each candidate, **ask the SQLite library** whether the track is
+  ///      either favorited or bound to a downloaded album. This cross-check
+  ///      is mandatory — the in-box `isFavorite` flag is a cached projection
+  ///      and is not the source of truth.
+  ///   4. If the track is **not** in the SQLite library: delete the local
+  ///      audio file, the local lyrics file, and the Hive box entry.
+  ///   5. If the track **is** in the SQLite library: leave the file in
+  ///      place and update the Hive entry to flip `isFavorite = true` so
+  ///      subsequent LRU passes skip it.
+  ///
+  /// When [libraryDatabase] is null, the SQLite cross-check is skipped and
+  /// the in-box `isFavorite` flag is used as a best-effort fallback. This
+  /// preserves the previous behaviour for callers that wire the service
+  /// without a database handle.
+  Future<void> evaluateAndEvictCasualCache() async {
     final box = _box;
     if (box == null) return;
 
-    final casualEntries = <_CasualEntry>[];
-    for (final key in box.keys) {
-      final entry = box.get(key);
-      if (entry == null) continue;
-      if (entry.isFavorite) continue;
-      casualEntries.add(_CasualEntry(key.toString(), entry.cachedAt));
+    if (box.length <= casualLimit) return;
+
+    final sortedCache = box.values.toList()
+      ..sort((a, b) => a.cachedAt.compareTo(b.cachedAt));
+    final evictionCandidates = sortedCache.take(evictionBatchSize).toList();
+
+    final db = libraryDatabase;
+    var removed = 0;
+    var guarded = 0;
+
+    for (final track in evictionCandidates) {
+      final isSavedInLibrary = await _isSavedInLibrary(db, track.trackId);
+      if (!isSavedInLibrary) {
+        await deleteLocalAudioFile(track.trackId);
+        await deleteLocalLyricsFile(track.trackId);
+        await box.delete(track.trackId);
+        removed++;
+      } else {
+        // Guard action: the track is in the permanent library. Update the
+        // Hive flag so the next eviction pass treats it as protected.
+        if (!track.isFavorite) {
+          await box.put(
+            track.trackId,
+            track.copyWith(isFavorite: true),
+          );
+        }
+        guarded++;
+      }
     }
 
-    final overflow = casualEntries.length - _maxCasualEntries;
-    if (overflow <= 0) return;
-
-    casualEntries.sort((a, b) => a.cachedAt.compareTo(b.cachedAt));
-    final toEvict = casualEntries
-        .take(_evictBatchSize)
-        .map((e) => e.trackId)
-        .toList(growable: false);
-
-    await _deletePhysicalAssetsFor(toEvict);
-    await box.deleteAll(toEvict);
-
     AppLogger.log(
-      'LRU eviction: removed ${toEvict.length} casual entries (had ${casualEntries.length})',
+      'Hybrid eviction pass: removed=$removed guarded=$guarded '
+      '(box size now ${box.length}, cap $casualLimit)',
       name: _logTag,
     );
   }
 
-  Future<void> _deletePhysicalAssetsFor(List<String> trackIds) async {
+  /// Asks the SQLite library whether [trackId] is part of the user's
+  /// permanent library — i.e. either favorited or bound to a downloaded
+  /// album. Falls back to the in-box Hive flag when no database handle is
+  /// available.
+  Future<bool> _isSavedInLibrary(PlaylistDatabase? db, String trackId) async {
+    if (db == null) {
+      return _box?.get(trackId)?.isFavorite ?? false;
+    }
+    try {
+      final isFavorite = await db.isTrackFavorite(trackId);
+      if (isFavorite) return true;
+      return await db.isTrackDownloaded(trackId);
+    } catch (e) {
+      AppLogger.log(
+        'SQLite cross-check failed for $trackId: $e; falling back to Hive flag',
+        name: _logTag,
+      );
+      return _box?.get(trackId)?.isFavorite ?? false;
+    }
+  }
+
+  /// Removes the local audio file(s) for [trackId] from the audio cache
+  /// directory. The search is best-effort: any file whose name starts with
+  /// `<trackId>.` inside `<docs>/audio_cache/` is purged. Errors are
+  /// swallowed — the next reconcile pass can recover any orphan files.
+  Future<void> deleteLocalAudioFile(String trackId) async {
     try {
       final docs = await getApplicationDocumentsDirectory();
       final cacheDir = Directory('${docs.path}/$_cacheSubdir');
       if (!cacheDir.existsSync()) return;
-      for (final id in trackIds) {
-        final matches = cacheDir
-            .listSync()
-            .whereType<File>()
-            .where((f) => f.path.split('/').last.startsWith('$id.'));
-        for (final f in matches) {
-          try {
-            if (f.existsSync()) await f.delete();
-          } catch (_) {}
+      for (final f in cacheDir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.split('/').last.startsWith('$trackId.'))) {
+        try {
+          if (f.existsSync()) await f.delete();
+        } catch (_) {}
+      }
+    } catch (e) {
+      AppLogger.log('deleteLocalAudioFile failed for $trackId: $e',
+          name: _logTag);
+    }
+  }
+
+  /// Removes the local timed-lyrics file for [trackId] from the documents
+  /// directory. The file path is derived deterministically from [trackId] —
+  /// `<docs>/<trackId>-lyrics.lrc` — which matches the convention used by
+  /// `AudioRepositoryImpl` when it caches fetched lyrics. If the cached
+  /// [CacheTrackerModel] also records an explicit [CacheTrackerModel.lyricsFilePath],
+  /// that path is purged first as a belt-and-braces measure.
+  Future<void> deleteLocalLyricsFile(String trackId) async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final deterministic = File('${docs.path}/$trackId-lyrics.lrc');
+      if (await deterministic.exists()) {
+        await deterministic.delete();
+      }
+      final entry = _box?.get(trackId);
+      final tracked = entry?.lyricsFilePath;
+      if (tracked != null && tracked.isNotEmpty && tracked != deterministic.path) {
+        final trackedFile = File(tracked);
+        if (await trackedFile.exists()) {
+          await trackedFile.delete();
         }
       }
     } catch (e) {
-      AppLogger.log('Physical eviction failed: $e', name: _logTag);
+      AppLogger.log(
+        'deleteLocalLyricsFile failed for $trackId: $e',
+        name: _logTag,
+      );
     }
   }
 
@@ -379,10 +503,4 @@ class HybridCacheService extends ChangeNotifier {
     _box?.close();
     super.dispose();
   }
-}
-
-class _CasualEntry {
-  final String trackId;
-  final int cachedAt;
-  const _CasualEntry(this.trackId, this.cachedAt);
 }

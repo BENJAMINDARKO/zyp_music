@@ -154,8 +154,29 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.more_vert, color: Colors.white),
-                            onPressed: () {},
+                            icon: Icon(
+                              player.isAutoDJEnabled
+                                  ? Icons.auto_awesome
+                                  : Icons.auto_awesome_outlined,
+                              color: player.isAutoDJEnabled
+                                  ? const Color(0xFFEAB308)
+                                  : Colors.white,
+                            ),
+                            tooltip: player.isAutoDJEnabled
+                                ? 'Auto DJ engaged — tap to disengage'
+                                : 'Engage Auto DJ',
+                            onPressed: () {
+                              player.toggleAutoDJ();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    player.isAutoDJEnabled
+                                        ? 'Auto DJ engaged'
+                                        : 'Auto DJ disengaged',
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

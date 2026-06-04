@@ -11,17 +11,20 @@ class CacheTrackerModel {
   static const int kFieldCachedAt = 1;
   static const int kFieldIsFavorite = 2;
   static const int kFieldTimedLyrics = 3;
+  static const int kFieldLyricsFilePath = 4;
 
   final String trackId;
   final int cachedAt;
   final bool isFavorite;
   final String? timedLyrics;
+  final String? lyricsFilePath;
 
   CacheTrackerModel({
     required this.trackId,
     required this.cachedAt,
     this.isFavorite = false,
     this.timedLyrics,
+    this.lyricsFilePath,
   });
 
   CacheTrackerModel copyWith({
@@ -29,21 +32,29 @@ class CacheTrackerModel {
     int? cachedAt,
     bool? isFavorite,
     String? timedLyrics,
+    String? lyricsFilePath,
     bool clearLyrics = false,
+    bool clearLyricsFilePath = false,
   }) {
     return CacheTrackerModel(
       trackId: trackId ?? this.trackId,
       cachedAt: cachedAt ?? this.cachedAt,
       isFavorite: isFavorite ?? this.isFavorite,
       timedLyrics: clearLyrics ? null : (timedLyrics ?? this.timedLyrics),
+      lyricsFilePath: clearLyricsFilePath
+          ? null
+          : (lyricsFilePath ?? this.lyricsFilePath),
     );
   }
 }
 
 /// Hand-written Hive [TypeAdapter] for [CacheTrackerModel].
 ///
-/// Fields are written/read in declaration order using fixed field IDs (0..3)
-/// so the on-disk format is stable across releases.
+/// Fields are written/read in declaration order using fixed field IDs (0..4)
+/// so the on-disk format is stable across releases. Older records that were
+/// written before [CacheTrackerModel.kFieldLyricsFilePath] existed simply
+/// surface with a `null` lyrics file path, which the eviction pipeline
+/// tolerates by falling back to the deterministic trackId-keyed file name.
 class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
   @override
   final int typeId = 1;
@@ -59,13 +70,14 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       cachedAt: fields[CacheTrackerModel.kFieldCachedAt] as int,
       isFavorite: (fields[CacheTrackerModel.kFieldIsFavorite] as bool?) ?? false,
       timedLyrics: fields[CacheTrackerModel.kFieldTimedLyrics] as String?,
+      lyricsFilePath: fields[CacheTrackerModel.kFieldLyricsFilePath] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CacheTrackerModel obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(CacheTrackerModel.kFieldTrackId)
       ..write(obj.trackId)
       ..writeByte(CacheTrackerModel.kFieldCachedAt)
@@ -73,6 +85,8 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       ..writeByte(CacheTrackerModel.kFieldIsFavorite)
       ..write(obj.isFavorite)
       ..writeByte(CacheTrackerModel.kFieldTimedLyrics)
-      ..write(obj.timedLyrics);
+      ..write(obj.timedLyrics)
+      ..writeByte(CacheTrackerModel.kFieldLyricsFilePath)
+      ..write(obj.lyricsFilePath);
   }
 }
