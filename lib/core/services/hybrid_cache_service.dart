@@ -173,6 +173,76 @@ class HybridCacheService extends ChangeNotifier {
     return _box?.get(trackId)?.timedLyrics;
   }
 
+  /// True iff the most recent write-time validation pass confirmed that
+  /// the on-disk LRC file and the in-box `timedLyrics` blob both hold the
+  /// same non-empty payload for [trackId]. Defaults to `true` for legacy
+  /// records that predate the [CacheTrackerModel.kFieldLyricsVerified]
+  /// schema bump, so a one-shot migration is not required.
+  bool isLyricsVerified(String trackId) {
+    return _box?.get(trackId)?.lyricsVerified ?? true;
+  }
+
+  /// Marks a track's lyrics payload as **untrusted**. Called by the
+  /// lyrics-write validation flow when the immediate assertion pass
+  /// (`File.exists()` for the LRC, `box.get(trackId).timedLyrics` not null)
+  /// fails. The next read on the offline cascade will still return whatever
+  /// it can find in the blob, but future eviction passes can use this flag
+  /// to drop the lyrics on a casual-tier purge.
+  Future<void> markLyricsMissing(String trackId) async {
+    final box = _box;
+    if (box == null) return;
+    final existing = box.get(trackId);
+    if (existing == null) {
+      await box.put(
+        trackId,
+        CacheTrackerModel(
+          trackId: trackId,
+          cachedAt: DateTime.now().millisecondsSinceEpoch,
+          lyricsVerified: false,
+        ),
+      );
+      return;
+    }
+    if (existing.lyricsVerified) {
+      await box.put(
+        trackId,
+        existing.copyWith(lyricsVerified: false),
+      );
+    }
+  }
+
+  /// Structural validation for a lyrics write. Returns `true` only when
+  /// all three conditions hold:
+  ///
+  /// 1. [lyrics] is not null and not empty.
+  /// 2. The on-disk LRC file at [lyricsFilePath] exists and is non-empty.
+  /// 3. The in-box `timedLyrics` blob equals [lyrics] (i.e. the mirror
+  ///    write to Hive committed successfully).
+  ///
+  /// This is the public assertion entry point the offline-lyrics spec
+  /// calls out — every cache transaction (download, prebuffer, favorite)
+  /// must run this check before declaring the lyrics write successful. On
+  /// failure, callers are expected to either retry the fetch or invoke
+  /// [markLyricsMissing] so the cache state stays honest.
+  static bool validateLyricsWrite({
+    required String trackId,
+    required String? lyrics,
+    required String lyricsFilePath,
+    required HybridCacheService cache,
+  }) {
+    if (lyrics == null || lyrics.isEmpty) return false;
+    try {
+      final file = File(lyricsFilePath);
+      if (!file.existsSync()) return false;
+      if (file.lengthSync() == 0) return false;
+    } catch (_) {
+      return false;
+    }
+    final blob = cache.getLyrics(trackId);
+    if (blob == null || blob.isEmpty) return false;
+    return blob == lyrics;
+  }
+
   bool isFavorite(String trackId) {
     return _box?.get(trackId)?.isFavorite ?? false;
   }
@@ -229,6 +299,7 @@ class HybridCacheService extends ChangeNotifier {
       isFavorite: existing?.isFavorite ?? false,
       timedLyrics: existing?.timedLyrics,
       lyricsFilePath: existing?.lyricsFilePath,
+      lyricsVerified: existing?.lyricsVerified ?? true,
     );
     await box.put(trackId, next);
     _activeCaching.remove(trackId);
@@ -254,7 +325,9 @@ class HybridCacheService extends ChangeNotifier {
   /// cached, a stub record is created so the lyrics survive across sessions.
   /// If [filePath] is provided, the on-disk lyrics file path is also recorded
   /// so the cross-database eviction pipeline can purge the file alongside the
-  /// Hive entry.
+  /// Hive entry. The persisted record is stamped [CacheTrackerModel.lyricsVerified]
+  /// = `true` so the offline read cascade trusts the payload until the
+  /// write-time validator runs and explicitly flips the flag.
   Future<void> setLyrics(String trackId, String lrc, {String? filePath}) async {
     final box = _box;
     if (box == null) return;
@@ -264,7 +337,11 @@ class HybridCacheService extends ChangeNotifier {
               trackId: trackId,
               cachedAt: DateTime.now().millisecondsSinceEpoch,
             ))
-        .copyWith(timedLyrics: lrc, lyricsFilePath: filePath);
+        .copyWith(
+          timedLyrics: lrc,
+          lyricsFilePath: filePath,
+          lyricsVerified: true,
+        );
     await box.put(trackId, next);
   }
 

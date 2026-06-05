@@ -4,20 +4,24 @@ import 'package:hive/hive.dart';
 ///
 /// One record per [trackId] lives inside the `cache_tracker_box`. The model
 /// is intentionally lean — it tracks cache recency for LRU eviction, the
-/// favorite guard flag that protects the entry from eviction, and the
-/// optional persistent timed-lyrics payload.
+/// favorite guard flag that protects the entry from eviction, the optional
+/// persistent timed-lyrics payload, and a [lyricsVerified] boolean used by
+/// the write-time validation hook to flag tracks whose lyrics payload
+/// could not be confirmed against the on-disk LRC + the Hive blob.
 class CacheTrackerModel {
   static const int kFieldTrackId = 0;
   static const int kFieldCachedAt = 1;
   static const int kFieldIsFavorite = 2;
   static const int kFieldTimedLyrics = 3;
   static const int kFieldLyricsFilePath = 4;
+  static const int kFieldLyricsVerified = 5;
 
   final String trackId;
   final int cachedAt;
   final bool isFavorite;
   final String? timedLyrics;
   final String? lyricsFilePath;
+  final bool lyricsVerified;
 
   CacheTrackerModel({
     required this.trackId,
@@ -25,6 +29,7 @@ class CacheTrackerModel {
     this.isFavorite = false,
     this.timedLyrics,
     this.lyricsFilePath,
+    this.lyricsVerified = true,
   });
 
   CacheTrackerModel copyWith({
@@ -33,6 +38,7 @@ class CacheTrackerModel {
     bool? isFavorite,
     String? timedLyrics,
     String? lyricsFilePath,
+    bool? lyricsVerified,
     bool clearLyrics = false,
     bool clearLyricsFilePath = false,
   }) {
@@ -44,17 +50,21 @@ class CacheTrackerModel {
       lyricsFilePath: clearLyricsFilePath
           ? null
           : (lyricsFilePath ?? this.lyricsFilePath),
+      lyricsVerified: lyricsVerified ?? this.lyricsVerified,
     );
   }
 }
 
 /// Hand-written Hive [TypeAdapter] for [CacheTrackerModel].
 ///
-/// Fields are written/read in declaration order using fixed field IDs (0..4)
+/// Fields are written/read in declaration order using fixed field IDs (0..5)
 /// so the on-disk format is stable across releases. Older records that were
 /// written before [CacheTrackerModel.kFieldLyricsFilePath] existed simply
 /// surface with a `null` lyrics file path, which the eviction pipeline
 /// tolerates by falling back to the deterministic trackId-keyed file name.
+/// Records written before [CacheTrackerModel.kFieldLyricsVerified] existed
+/// surface with `lyricsVerified = true` (optimistic) so legacy tracks do not
+/// get treated as missing on the very first launch after the schema bump.
 class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
   @override
   final int typeId = 1;
@@ -71,13 +81,15 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       isFavorite: (fields[CacheTrackerModel.kFieldIsFavorite] as bool?) ?? false,
       timedLyrics: fields[CacheTrackerModel.kFieldTimedLyrics] as String?,
       lyricsFilePath: fields[CacheTrackerModel.kFieldLyricsFilePath] as String?,
+      lyricsVerified:
+          (fields[CacheTrackerModel.kFieldLyricsVerified] as bool?) ?? true,
     );
   }
 
   @override
   void write(BinaryWriter writer, CacheTrackerModel obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(CacheTrackerModel.kFieldTrackId)
       ..write(obj.trackId)
       ..writeByte(CacheTrackerModel.kFieldCachedAt)
@@ -87,6 +99,8 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       ..writeByte(CacheTrackerModel.kFieldTimedLyrics)
       ..write(obj.timedLyrics)
       ..writeByte(CacheTrackerModel.kFieldLyricsFilePath)
-      ..write(obj.lyricsFilePath);
+      ..write(obj.lyricsFilePath)
+      ..writeByte(CacheTrackerModel.kFieldLyricsVerified)
+      ..write(obj.lyricsVerified);
   }
 }

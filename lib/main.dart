@@ -51,16 +51,6 @@ Future<void> main() async {
     final authService = AuthService();
     final remoteDataSource = YoutubeRemoteDataSource(authService: authService);
     await remoteDataSource.init();
-    final playlistRepository = PlaylistRepositoryImpl(
-      remoteDataSource: remoteDataSource,
-      localDatabase: localDatabase,
-    );
-
-    final chartsDataSource = ChartsRemoteDataSource(youtubeDataSource: remoteDataSource);
-    final chartsRepository = ChartsRepositoryImpl(remoteDataSource: chartsDataSource);
-
-    final settingsProvider = SettingsProvider();
-    await settingsProvider.load();
 
     final audioHandler = await AudioService.init(
       builder: () => MusicAudioHandler(),
@@ -74,6 +64,12 @@ Future<void> main() async {
     );
 
     final lyricsDataSource = LyricsRemoteDataSource();
+
+    // Build the audio repository first with no live connectivity
+    // reference; we patch it in via `attachConnectivity` after the
+    // ConnectivityService is constructed. Until then the lyrics read
+    // cascade defaults to the online path, which matches the previous
+    // behaviour for the brief startup window.
     final audioRepository = AudioRepositoryImpl(
       remoteDataSource: remoteDataSource,
       lyricsDataSource: lyricsDataSource,
@@ -81,14 +77,6 @@ Future<void> main() async {
       database: localDatabase,
       hybridCache: hybridCache,
     );
-
-    final downloadService = DownloadService(
-      audioRepository: audioRepository,
-      database: localDatabase,
-      settingsProvider: settingsProvider,
-    );
-    final downloadProvider = DownloadProvider(downloadService, hybridCache);
-    await downloadProvider.init();
 
     // Construct the global connectivity listener after every collaborator
     // it needs to wake up is alive. `initialize` runs the synchronous
@@ -100,7 +88,33 @@ Future<void> main() async {
       remoteDataSource: remoteDataSource,
       lyricsDataSource: lyricsDataSource,
     );
+    // Late-bind: wire the live connectivity service into the repository
+    // so the offline lyrics cascade can read its current state. After
+    // this call every `getLyrics(track)` consults
+    // `connectivityService.isOffline` before deciding whether to attempt
+    // a network fetch.
+    audioRepository.attachConnectivity(connectivityService);
     await connectivityService.initialize();
+
+    final playlistRepository = PlaylistRepositoryImpl(
+      remoteDataSource: remoteDataSource,
+      localDatabase: localDatabase,
+      audioRepository: audioRepository,
+    );
+
+    final chartsDataSource = ChartsRemoteDataSource(youtubeDataSource: remoteDataSource);
+    final chartsRepository = ChartsRepositoryImpl(remoteDataSource: chartsDataSource);
+
+    final settingsProvider = SettingsProvider();
+    await settingsProvider.load();
+
+    final downloadService = DownloadService(
+      audioRepository: audioRepository,
+      database: localDatabase,
+      settingsProvider: settingsProvider,
+    );
+    final downloadProvider = DownloadProvider(downloadService, hybridCache);
+    await downloadProvider.init();
 
     // QueueManager coordinates the manual playback queue and the explicit
     // Auto DJ engine. It listens to the connectivity service so the offline

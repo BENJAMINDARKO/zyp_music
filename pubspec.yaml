@@ -1,7 +1,7 @@
 name: zyp_music
 description: Monochrome - Native Audio Streamer
 publish_to: 'none'
-version: 1.1.5+6
+version: 1.1.6+7
 
 environment:
   sdk: ^3.12.0

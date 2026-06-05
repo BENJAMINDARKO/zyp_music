@@ -1,7 +1,9 @@
+import 'dart:async';
 import '../../domain/entities/playlist.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
 import '../../domain/entities/artist.dart';
+import '../../domain/repositories/audio_repository.dart';
 import '../../domain/repositories/playlist_repository.dart';
 import '../datasources/local/playlist_database.dart';
 import '../datasources/remote/youtube_remote_datasource.dart';
@@ -14,10 +16,17 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   final YoutubeRemoteDataSource remoteDataSource;
   final PlaylistDatabase localDatabase;
 
+  /// Optional reference to the audio repository, used to fire a
+  /// background lyrics fetch + validation when a track is favorited.
+  /// Spec §1: every track that gets cached (including via the favorite
+  /// path) must run the structural lyrics validation pass.
+  final AudioRepository? _audioRepository;
+
   PlaylistRepositoryImpl({
     required this.remoteDataSource,
     required this.localDatabase,
-  });
+    AudioRepository? audioRepository,
+  }) : _audioRepository = audioRepository;
 
   @override
   Future<Playlist> getPlaylist(String playlistId) async {
@@ -188,6 +197,14 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       author: track.author,
       index: track.index,
     ));
+    // Spec §1: when a track is favorited the caching service must also
+    // run the structural lyrics validation. Fire-and-forget — the
+    // favorite toggle must not block on a network lyrics round-trip,
+    // and a failed lyrics fetch must not roll back the favorite.
+    final repo = _audioRepository;
+    if (repo != null) {
+      unawaited(repo.preloadTrackLyrics(track));
+    }
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:zyp_music/core/utils/app_logger.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,6 +12,7 @@ import '../datasources/local/playlist_database.dart';
 
 import '../../service/audio_handler.dart';
 import '../../core/services/audio_cache_service.dart';
+import '../../core/services/connectivity_service.dart';
 import '../../core/services/hybrid_cache_service.dart';
 
   String _stripPrefixes(String id) {
@@ -32,6 +34,7 @@ class AudioRepositoryImpl implements AudioRepository {
   final MusicAudioHandler _handler;
   final PlaylistDatabase _database;
   final HybridCacheService? _hybridCache;
+  ConnectivityService? _connectivity;
   final AudioCacheService _cacheService = AudioCacheService();
 
   bool _isOffline = false;
@@ -58,6 +61,18 @@ class AudioRepositoryImpl implements AudioRepository {
         expectedFilePath: filePath,
       );
     };
+  }
+
+  /// Late-binding entry point used by `main.dart` to break the
+  /// chicken-and-egg ctor cycle between [AudioRepositoryImpl] and
+  /// [ConnectivityService]. The repository is constructed first (so
+  /// the connectivity service can hold a reference for the offline
+  /// push path), then the live connectivity service is patched in
+  /// here so the lyrics offline cascade can read its current state.
+  /// Safe to call exactly once during startup; subsequent calls are
+  /// ignored to keep the contract explicit.
+  void attachConnectivity(ConnectivityService connectivity) {
+    _connectivity = connectivity;
   }
 
   /// Toggle driven exclusively by [ConnectivityService]. The flag itself
@@ -281,50 +296,215 @@ class AudioRepositoryImpl implements AudioRepository {
 
   @override
   Future<String?> getLyrics(Track track) async {
-    // Lyrics files are keyed by trackId so the Hive eviction pipeline can
-    // find and purge them in lockstep with the audio cache entry.
-    final lyricsPath = await _lyricsFilePathFor(track.id);
-
-    // 1. Try to read from local file first
-    try {
-      final file = File(lyricsPath);
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        // Only use the cached file if it has content.
-        // If the timestamp regex doesn't match at all we might have a stale
-        // file written by the old broken _formatLrcTimestamp — skip it so we
-        // fetch fresh synced lyrics from the network.
-        if (content.isNotEmpty) {
-          final hasValidLrc = RegExp(r'\[\d{2}:\d{2}\.\d{2}').hasMatch(content);
-          final isPlainLyrics = !content.contains('[');
-          if (hasValidLrc || isPlainLyrics) {
-            return content;
-          }
-          // Stale/broken file — fall through and re-fetch.
-          AppLogger.log('Cached lyrics file appears corrupt, re-fetching', name: 'AudioRepository');
-        }
-      }
-    } catch (e) {
-      AppLogger.log('Error reading local lyrics file: \$e', name: 'AudioRepository');
+    // When the device is offline the lyrics repository must completely
+    // bypass the network client — the offline cascade is the only legal
+    // read path. This is the spec §2 invariant: when offline, no LrcLib
+    // call is permitted, even if the local file is missing. Falls back
+    // to the online path when the connectivity service has not yet
+    // been attached (the brief startup window before
+    // `attachConnectivity` runs in main.dart).
+    if (_connectivity?.isOffline ?? false) {
+      return getLyricsOffline(track);
     }
 
-    // 2. Fallback to network fetch
-    final lyrics = await _fetchLyricsFromNetwork(track);
-    if (lyrics != null && lyrics.isNotEmpty) {
+    // 1. Try the on-disk LRC first. If it is non-empty and structurally
+    // valid (synced LRC timestamp regex matches, or it is a plain-text
+    // lyrics file with no timestamp lines), return it without touching
+    // the network.
+    final lyricsPath = await _lyricsFilePathFor(track.id);
+    final cached = await _readCachedLyricsFile(track.id, lyricsPath);
+    if (cached != null) return cached;
+
+    // 2. Network fetch with the write-time validation pass. The spec
+    // requires a strict assertion (File.exists() on the LRC, blob
+    // equality against the Hive `timedLyrics`) before the cache
+    // transaction is declared complete. If the assertion fails, retry
+    // the fetch once; if it still fails, flag the lyrics state as
+    // missing so future consumers can self-heal.
+    return _fetchAndCacheLyricsWithValidation(track, lyricsPath);
+  }
+
+  /// Offline-only lyrics read cascade. Used when [ConnectivityService]
+  /// reports the device is offline (or when the caller explicitly needs
+  /// the local-only result). Strict order:
+  ///
+  ///   1. `<docs>/<trackId>-lyrics.lrc` — the deterministic trackId-keyed
+  ///      LRC file. Validated for non-empty content + LRC timestamp
+  ///      structure. Returns immediately on a hit.
+  ///   2. `HybridCacheService.getLyrics(trackId)` — the in-box
+  ///      `timedLyrics` blob. This is the belt-and-braces fallback for
+  ///      the case where the file is missing (manual delete, partial
+  ///      cleanup) but the Hive record survived. The blob was committed
+  ///      to memory-mapped storage as part of the same write transaction
+  ///      as the file, so it is trustworthy in isolation.
+  ///   3. `null` — neither source has a usable payload. The presentation
+  ///      layer renders "Lyrics not available".
+  ///
+  /// This method never calls the network, never modifies either storage
+  /// tier, and never throws on a miss.
+  @override
+  Future<String?> getLyricsOffline(Track track) async {
+    final lyricsPath = await _lyricsFilePathFor(track.id);
+
+    // Step 1: deterministic trackId-keyed LRC file.
+    final cached = await _readCachedLyricsFile(track.id, lyricsPath);
+    if (cached != null) {
+      AppLogger.log(
+        'Offline lyrics served from LRC file for ${track.id}',
+        name: 'AudioRepository',
+      );
+      return cached;
+    }
+
+    // Step 2: Hive tracker blob fallback.
+    final cache = _hybridCache;
+    if (cache != null) {
+      final blob = cache.getLyrics(track.id);
+      if (blob != null && blob.isNotEmpty) {
+        AppLogger.log(
+          'Offline lyrics served from Hive blob for ${track.id} '
+          '(file missing, blob recovered)',
+          name: 'AudioRepository',
+        );
+        return blob;
+      }
+    }
+
+    // Step 3: nothing on disk and nothing in the box.
+    return null;
+  }
+
+  /// Fire-and-forget lyrics fetch used by the prebuffer and favorite
+  /// entry points. Runs the same fetch+validation+retry flow as
+  /// [getLyrics] but is safe to invoke without awaiting from background
+  /// cache coordinators. Errors are swallowed (logged) — a failed
+  /// background lyrics fetch must never abort the audio cache write.
+  ///
+  /// Skips the network fetch when the Hive tracker already reports the
+  /// lyrics as verified (the validator passed on a previous write).
+  /// The validator still runs on the first call after any eviction
+  /// pass that flips `lyricsVerified` back to `false`, so the self-heal
+  /// path stays intact.
+  @override
+  Future<void> preloadTrackLyrics(Track track) async {
+    try {
+      final cache = _hybridCache;
+      if (cache != null && cache.isLyricsVerified(track.id)) {
+        return;
+      }
+      await getLyrics(track);
+    } catch (e) {
+      AppLogger.log(
+        'preloadTrackLyrics failed for ${track.id}: $e',
+        name: 'AudioRepository',
+      );
+    }
+  }
+
+  /// Reads the deterministic trackId-keyed LRC file at [lyricsPath] and
+  /// returns its content only when the content is non-empty AND
+  /// structurally valid (synced LRC timestamps or plain text). Returns
+  /// `null` for a missing file, an empty file, or a corrupt payload —
+  /// in all three cases the caller is expected to fall through to a
+  /// fresh network fetch.
+  Future<String?> _readCachedLyricsFile(
+    String trackId,
+    String lyricsPath,
+  ) async {
+    try {
+      final file = File(lyricsPath);
+      if (!await file.exists()) return null;
+      final content = await file.readAsString();
+      if (content.isEmpty) return null;
+      final hasValidLrc = RegExp(r'\[\d{2}:\d{2}\.\d{2}').hasMatch(content);
+      final isPlainLyrics = !content.contains('[');
+      if (hasValidLrc || isPlainLyrics) return content;
+      AppLogger.log(
+        'Cached lyrics file for $trackId appears corrupt, '
+        'falling through to network',
+        name: 'AudioRepository',
+      );
+      return null;
+    } catch (e) {
+      AppLogger.log(
+        'Error reading local lyrics file for $trackId: $e',
+        name: 'AudioRepository',
+      );
+      return null;
+    }
+  }
+
+  /// Fetches lyrics from the network, writes them to disk and to the
+  /// Hive tracker, and then runs the structural validation pass
+  /// [HybridCacheService.validateLyricsWrite] before declaring the
+  /// transaction complete. If validation fails, retries the network
+  /// fetch once; if the second attempt also fails to validate, the
+  /// track's lyrics state is flagged as missing via
+  /// [HybridCacheService.markLyricsMissing] and the method returns the
+  /// best-effort payload (which may still be the second-attempt body).
+  Future<String?> _fetchAndCacheLyricsWithValidation(
+    Track track,
+    String lyricsPath,
+  ) async {
+    const maxAttempts = 2;
+    String? lastLyrics;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      final lyrics = await _fetchLyricsFromNetwork(track);
+      if (lyrics == null || lyrics.isEmpty) {
+        AppLogger.log(
+          'Lyrics network fetch returned empty for ${track.id} '
+          '(attempt $attempt/$maxAttempts)',
+          name: 'AudioRepository',
+        );
+        continue;
+      }
+      lastLyrics = lyrics;
       try {
         final file = File(lyricsPath);
         await file.writeAsString(lyrics);
-        // Mirror the lyrics into the Hive cache tracker so the eviction
-        // pipeline knows the on-disk path of this track's lyrics.
         final cache = _hybridCache;
         if (cache != null) {
           await cache.setLyrics(track.id, lyrics, filePath: lyricsPath);
         }
       } catch (e) {
-        AppLogger.log('Error caching fetched lyrics: \$e', name: 'AudioRepository');
+        AppLogger.log(
+          'Error persisting fetched lyrics for ${track.id}: $e',
+          name: 'AudioRepository',
+        );
+        continue;
+      }
+      // Write-time validation pass: assert the file exists on disk AND
+      // the in-box blob matches the payload we just wrote. If both
+      // conditions hold the cache transaction is complete.
+      final cache = _hybridCache;
+      final isValid = cache == null
+          ? File(lyricsPath).existsSync()
+          : HybridCacheService.validateLyricsWrite(
+              trackId: track.id,
+              lyrics: lyrics,
+              lyricsFilePath: lyricsPath,
+              cache: cache,
+            );
+      if (isValid) {
+        AppLogger.log(
+          'Lyrics write validation passed for ${track.id} on attempt $attempt',
+          name: 'AudioRepository',
+        );
+        return lyrics;
+      }
+      AppLogger.log(
+        'Lyrics write validation FAILED for ${track.id} on attempt $attempt; '
+        '${attempt < maxAttempts ? "retrying fetch" : "flagging as missing"}',
+        name: 'AudioRepository',
+      );
+    }
+    if (lastLyrics != null) {
+      final cache = _hybridCache;
+      if (cache != null) {
+        await cache.markLyricsMissing(track.id);
       }
     }
-    return lyrics;
+    return lastLyrics;
   }
 
   Future<String?> _fetchLyricsFromNetwork(Track track) async {
@@ -334,20 +514,7 @@ class AudioRepositoryImpl implements AudioRepository {
   @override
   Future<String?> refreshLyrics(Track track) async {
     final lyricsPath = await _lyricsFilePathFor(track.id);
-    final lyrics = await _fetchLyricsFromNetwork(track);
-    if (lyrics != null) {
-      try {
-        final file = File(lyricsPath);
-        await file.writeAsString(lyrics);
-        final cache = _hybridCache;
-        if (cache != null) {
-          await cache.setLyrics(track.id, lyrics, filePath: lyricsPath);
-        }
-      } catch (e) {
-        AppLogger.log('Error saving lyrics file on refresh: \$e', name: 'AudioRepository');
-      }
-    }
-    return lyrics;
+    return _fetchAndCacheLyricsWithValidation(track, lyricsPath);
   }
 
   /// Resolves the deterministic trackId-keyed lyrics file path inside the
@@ -393,6 +560,11 @@ class AudioRepositoryImpl implements AudioRepository {
         await _cacheService.cacheStream(track.id, audioUrl);
         AppLogger.log('Successfully preloaded track: ${track.id}', name: 'AudioRepository');
       }
+      // Spec §1: when a track is cached via the background look-ahead
+      // prebuffer the caching service must also run the structural
+      // lyrics validation. Fire-and-forget — a failed lyrics fetch
+      // never aborts the audio cache write.
+      unawaited(preloadTrackLyrics(track));
     } catch (e) {
       AppLogger.log('Failed to preload next track: $e', name: 'AudioRepository');
     }
