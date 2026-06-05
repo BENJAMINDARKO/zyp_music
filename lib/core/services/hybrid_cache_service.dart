@@ -64,6 +64,14 @@ class HybridCacheService extends ChangeNotifier {
 
   Box<CacheTrackerModel>? _box;
   final Set<String> _activeCaching = <String>{};
+  /// Sync in-memory mirror of the SQLite `downloaded_tracks` table.
+  /// Populated eagerly on [init] and updated whenever the cache
+  /// migration hook promotes a track from the Hive transient cache to
+  /// the permanent library. Backs the dual-source checkmark check
+  /// called out in spec §5: the download icon's success state must
+  /// fire when **either** `hiveBox.containsKey(trackId)` is true
+  /// **or** `favoritesDao.isTrackDownloaded(trackId)` is true.
+  final Set<String> _sqliteDownloadedIds = <String>{};
   final StreamController<CachedStateEvent> _stateEvents =
       StreamController<CachedStateEvent>.broadcast();
 
@@ -92,6 +100,9 @@ class HybridCacheService extends ChangeNotifier {
       'Hive box "$boxName" opened with ${_box!.length} persisted entries',
       name: _logTag,
     );
+    // Eagerly populate the sync SQLite mirror so the spec §5 dual-source
+    // checkmark check works from the very first frame after launch.
+    await refreshSqliteDownloadedCache();
     // Defer so callers see a usable box immediately. Failures are logged
     // but never thrown — the next reconcile on a future launch can recover.
     Future<void>(() => _reconcileWithFilesystem());
@@ -160,10 +171,48 @@ class HybridCacheService extends ChangeNotifier {
   bool isActivelyCaching(String trackId) => _activeCaching.contains(trackId);
 
   /// Resolves the public state used by the download icon state machine.
+  ///
+  /// Per spec §5, the checkmark state is derived from BOTH the Hive
+  /// transient cache box AND the SQLite permanent library. A track
+  /// that was migrated from Hive to SQLite (or downloaded directly
+  /// into the library) still renders the success checkmark even
+  /// though the Hive entry was gently evicted.
   CachedState getCachedState(String trackId) {
     if (isActivelyCaching(trackId)) return CachedState.caching;
     if (isCached(trackId)) return CachedState.success;
+    if (_sqliteDownloadedIds.contains(trackId)) return CachedState.success;
     return CachedState.idle;
+  }
+
+  /// Synchronous mirror of `libraryDatabase.isTrackDownloaded(trackId)`.
+  /// Backed by [_sqliteDownloadedIds] so the UI build can check the
+  /// SQLite library tier without awaiting a database round-trip. The
+  /// mirror is populated by [refreshSqliteDownloadedCache] and updated
+  /// by the cache migration hook.
+  bool isDownloadedInSqlite(String trackId) {
+    return _sqliteDownloadedIds.contains(trackId);
+  }
+
+  /// Eagerly refreshes the [_sqliteDownloadedIds] mirror from the
+  /// library database. Safe to call multiple times — the previous
+  /// snapshot is replaced atomically.
+  Future<void> refreshSqliteDownloadedCache() async {
+    final db = libraryDatabase;
+    if (db == null) {
+      _sqliteDownloadedIds.clear();
+      return;
+    }
+    try {
+      final ids = await db.getAllDownloadedTrackIds();
+      _sqliteDownloadedIds
+        ..clear()
+        ..addAll(ids);
+    } catch (e) {
+      AppLogger.log(
+        'refreshSqliteDownloadedCache failed: $e',
+        name: _logTag,
+      );
+    }
   }
 
   /// Returns the persisted LRC (or other timed-lyric blob) for a track, or
@@ -245,6 +294,37 @@ class HybridCacheService extends ChangeNotifier {
 
   bool isFavorite(String trackId) {
     return _box?.get(trackId)?.isFavorite ?? false;
+  }
+
+  /// Returns the persisted cache record for [trackId], or `null` if the
+  /// box has no entry. Used by the Hive-to-SQLite cache migration hook
+  /// to extract the original `cachedAt` timestamp and any stored
+  /// `timedLyrics` blob before the entry is gently evicted.
+  CacheTrackerModel? getCacheEntry(String trackId) {
+    return _box?.get(trackId);
+  }
+
+  /// Removes the tracking record for [trackId] from the Hive box
+  /// without touching any on-disk files. This is the "gently evict"
+  /// primitive used by the cache migration hook once the SQLite
+  /// library has absorbed the metadata. After the call returns the
+  /// box no longer reports [trackId] as cached, but the audio and
+  /// lyrics files on disk remain in place so the SQLite row still
+  /// resolves to a valid local file URL.
+  ///
+  /// The migration hook calls this immediately after writing the
+  /// SQLite row, so we also keep the [_sqliteDownloadedIds] mirror
+  /// in sync — the spec §5 dual-source checkmark check depends on it.
+  Future<void> evictFromTracker(String trackId) async {
+    final box = _box;
+    if (box == null) return;
+    if (!box.containsKey(trackId)) return;
+    await box.delete(trackId);
+    _sqliteDownloadedIds.add(trackId);
+    final exists = isActivelyCaching(trackId);
+    if (!exists) {
+      _emit(trackId, CachedState.idle);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -429,6 +509,8 @@ class HybridCacheService extends ChangeNotifier {
             track.copyWith(isFavorite: true),
           );
         }
+        // Keep the sync SQLite mirror in sync with the library.
+        _sqliteDownloadedIds.add(track.trackId);
         guarded++;
       }
     }
@@ -576,6 +658,7 @@ class HybridCacheService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _sqliteDownloadedIds.clear();
     _stateEvents.close();
     _box?.close();
     super.dispose();

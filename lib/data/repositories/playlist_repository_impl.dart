@@ -9,6 +9,7 @@ import '../datasources/local/playlist_database.dart';
 import '../datasources/remote/youtube_remote_datasource.dart';
 import '../models/playlist_model.dart';
 import '../models/video_model.dart';
+import '../../core/services/audio_cache_service.dart';
 import '../../core/utils/normalise.dart';
 import '../../core/utils/app_logger.dart';
 
@@ -22,11 +23,20 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   /// path) must run the structural lyrics validation pass.
   final AudioRepository? _audioRepository;
 
+  /// Optional handle to the audio cache service. When supplied, the
+  /// favorite path runs the Hive-to-SQLite cache migration hook so a
+  /// track that is already sitting in the transient cache (because it
+  /// was pre-buffered or favorited earlier) gets registered in the
+  /// permanent library without forcing a duplicate re-download.
+  final AudioCacheService? _audioCacheService;
+
   PlaylistRepositoryImpl({
     required this.remoteDataSource,
     required this.localDatabase,
     AudioRepository? audioRepository,
-  }) : _audioRepository = audioRepository;
+    AudioCacheService? audioCacheService,
+  })  : _audioRepository = audioRepository,
+        _audioCacheService = audioCacheService;
 
   @override
   Future<Playlist> getPlaylist(String playlistId) async {
@@ -189,6 +199,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<void> toggleFavorite(Track track) async {
+    final wasFavorite = await localDatabase.isTrackFavorite(track.id);
     await localDatabase.toggleFavoriteTrack(TrackModel(
       id: track.id,
       title: track.title,
@@ -205,6 +216,38 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
     if (repo != null) {
       unawaited(repo.preloadTrackLyrics(track));
     }
+    // Hive-to-SQLite cache migration hook. When the user is *adding*
+    // the track as a favorite (not removing it), the migration has
+    // two branches:
+    //
+    //   • If the Hive transient cache already has the audio file
+    //     (the True branch in the cache migration spec), mirror the
+    //     tracking record into the permanent SQLite library, then
+    //     gently evict the Hive entry.
+    //   • If the Hive box has no record (the False branch), fire the
+    //     independent background downloader with the
+    //     "writeToLibraryOnSuccess" flag set so the verified success
+    //     token is committed to SQLite once the network fetch lands.
+    final cache = _audioCacheService;
+    if (!wasFavorite && cache != null) {
+      unawaited(_handleFavoritedTrack(track, cache));
+    }
+  }
+
+  /// Internal helper for [toggleFavorite] that runs the spec's
+  /// two-branch cache migration: try the True branch first, and if it
+  /// does not fire, fall through to the False branch.
+  Future<void> _handleFavoritedTrack(Track track, AudioCacheService cache) async {
+    final migrated = await cache.migrateToLibrary(track);
+    if (migrated) return;
+    // False branch: files are missing. Fire the decoupled
+    // background downloader so the verified success token gets
+    // written straight into SQLite once complete.
+    await cache.downloadTrackIndependent(
+      track,
+      playlistId: 'favorites',
+      writeToLibraryOnSuccess: true,
+    );
   }
 
   @override
@@ -225,12 +268,47 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<void> toggleFavoriteAlbum(Album album) async {
+    final wasFavorite = await localDatabase.isAlbumFavorite(album.id);
     await localDatabase.toggleFavoriteAlbum(
       album.id,
       album.title,
       album.thumbnailUrl,
       album.artistName,
       album.year,
+    );
+    // Spec §3 album array processing: when the user is *adding* the
+    // album as a favorite, run the two-branch cache migration for
+    // every track in the album. Tracks already in the Hive transient
+    // cache are migrated to SQLite (True branch); tracks that are
+    // missing are handed to the concurrent album downloader (False
+    // branch) so each one is processed through the decoupled
+    // background downloader simultaneously via Future.wait().
+    final cache = _audioCacheService;
+    if (!wasFavorite && cache != null) {
+      unawaited(_handleFavoritedAlbum(album, cache));
+    }
+  }
+
+  /// Internal helper for [toggleFavoriteAlbum] that runs the spec's
+  /// two-branch album-level cache migration: migrate every track the
+  /// Hive box has, then concurrently download the rest.
+  Future<void> _handleFavoritedAlbum(Album album, AudioCacheService cache) async {
+    final missing = await cache.migrateAlbumToLibrary(album);
+    if (missing.isEmpty) return;
+    // False branch for the surviving tracks: kick off the
+    // Future.wait()-driven album downloader with
+    // writeToLibraryOnSuccess so each completed download gets
+    // written into SQLite.
+    await cache.downloadEntireAlbum(
+      Album(
+        id: album.id,
+        title: album.title,
+        artistName: album.artistName,
+        year: album.year,
+        thumbnailUrl: album.thumbnailUrl,
+        tracks: missing,
+      ),
+      writeToLibraryOnSuccess: true,
     );
   }
 

@@ -12,6 +12,7 @@ import 'data/repositories/playlist_repository_impl.dart';
 import 'data/datasources/remote/charts_remote_datasource.dart';
 import 'data/repositories/charts_repository_impl.dart';
 import 'data/models/cache_tracker_model.dart';
+import 'core/services/audio_cache_service.dart';
 import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/queue_manager.dart';
@@ -65,6 +66,13 @@ Future<void> main() async {
 
     final lyricsDataSource = LyricsRemoteDataSource();
 
+    // The audio cache service is constructed as a top-level singleton so
+    // the audio repository, the playlist repository, and any future
+    // collaborators (e.g. the non-playing downloader icon) can share
+    // the same on-disk file layout and Hive tracker wiring. The
+    // repository no longer instantiates its own copy.
+    final audioCacheService = AudioCacheService();
+
     // Build the audio repository first with no live connectivity
     // reference; we patch it in via `attachConnectivity` after the
     // ConnectivityService is constructed. Until then the lyrics read
@@ -75,6 +83,7 @@ Future<void> main() async {
       lyricsDataSource: lyricsDataSource,
       handler: audioHandler,
       database: localDatabase,
+      cacheService: audioCacheService,
       hybridCache: hybridCache,
     );
 
@@ -100,6 +109,19 @@ Future<void> main() async {
       remoteDataSource: remoteDataSource,
       localDatabase: localDatabase,
       audioRepository: audioRepository,
+      audioCacheService: audioCacheService,
+    );
+
+    // Wire the collaborators required by the non-playing background
+    // downloader (`downloadTrackIndependent`) and the Hive-to-SQLite
+    // cache migration hook (`migrateToLibrary` /
+    // `migrateAlbumToLibrary`). Both methods no-op when these
+    // collaborators are unset, but the production wiring is the only
+    // place they get attached.
+    audioCacheService.attachDownloadCollaborators(
+      audioRepository: audioRepository,
+      hybridCache: hybridCache,
+      libraryDatabase: localDatabase,
     );
 
     final chartsDataSource = ChartsRemoteDataSource(youtubeDataSource: remoteDataSource);

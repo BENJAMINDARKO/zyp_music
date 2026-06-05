@@ -410,40 +410,6 @@ class BottomPlayer extends StatelessWidget {
                           );
                         },
                       ),
-                      // Auto DJ button — only present when the manual queue
-                      // still has items remaining. Tapping instantly engages
-                      // the hybrid AutoNext engine so the player keeps
-                      // rolling recommendations (or shuffled offline cache)
-                      // once the current track ends.
-                      if (_hasManualQueueRemaining(player))
-                        IconButton(
-                          icon: Icon(
-                            player.isAutoDJEnabled
-                                ? Icons.auto_awesome
-                                : Icons.auto_awesome_outlined,
-                            color: player.isAutoDJEnabled
-                                ? const Color(0xFFEAB308)
-                                : Colors.white54,
-                            size: 22,
-                          ),
-                          tooltip: player.isAutoDJEnabled
-                              ? 'Auto DJ engaged — tap to disengage'
-                              : 'Engage Auto DJ',
-                          onPressed: () {
-                            player.toggleAutoDJ();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  player.isAutoDJEnabled
-                                      ? 'Auto DJ engaged'
-                                      : 'Auto DJ disengaged',
-                                ),
-                              ),
-                            );
-                          },
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          constraints: const BoxConstraints(),
-                        ),
                       IconButton(
                         icon: const Icon(Icons.mic_none, color: Colors.white54, size: 18),
                         onPressed: () {
@@ -517,79 +483,92 @@ class BottomPlayer extends StatelessWidget {
               const SizedBox(height: 8),
 
               // Bottom Row: Controls
-              Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: Icon(Icons.shuffle, color: player.shuffleMode ? Colors.white : Colors.white54),
-                        onPressed: player.toggleShuffle,
+              // Seven controls in a single fluid row distributed by
+              // MainAxisAlignment.spaceBetween. Edge icons stay clear of
+              // the miniplayer's curved borders via the 16dp horizontal
+              // bounding inset; all hitboxes are >= 40dp.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.auto_awesome,
+                        color: player.isAutoDJEnabled
+                            ? const Color(0xFFEAB308)
+                            : Colors.white54,
                       ),
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.skip_previous, color: Colors.white),
-                        onPressed: player.currentIndex > 0 ? () => player.previous() : null,
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: player.togglePlayPause,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: activeColor,
-                            shape: BoxShape.circle,
+                      tooltip: player.isAutoDJEnabled
+                          ? 'Auto DJ engaged — tap to disengage'
+                          : 'Engage Auto DJ',
+                      onPressed: () {
+                        player.toggleAutoDJ();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              player.isAutoDJEnabled
+                                  ? 'Auto DJ engaged'
+                                  : 'Auto DJ disengaged',
+                            ),
                           ),
-                          child: player.isBuffering
-                              ? const Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
-                                  ),
-                                )
-                              : Icon(
-                                  player.isActuallyPlaying ? Icons.pause : Icons.play_arrow,
-                                  color: activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
-                                  size: 28,
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.shuffle, color: player.shuffleMode ? Colors.white : Colors.white54),
+                      onPressed: player.toggleShuffle,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.skip_previous, color: Colors.white),
+                      onPressed: player.currentIndex > 0 ? () => player.previous() : null,
+                    ),
+                    GestureDetector(
+                      onTap: player.togglePlayPause,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: activeColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: player.isBuffering
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
                                 ),
-                        ),
+                              )
+                            : Icon(
+                                player.isActuallyPlaying ? Icons.pause : Icons.play_arrow,
+                                color: activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                                size: 28,
+                              ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.skip_next, color: Colors.white),
-                        onPressed: player.currentIndex + 1 < player.queue.length
-                            ? () => player.next()
-                            : null,
-                      ),
-                    ],
-                  ),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            player.repeatMode == repeat.PlaybackRepeatMode.one 
-                                ? Icons.repeat_one 
-                                : Icons.repeat,
-                            color: player.repeatMode != repeat.PlaybackRepeatMode.none ? Colors.white : Colors.white54,
-                          ),
-                          onPressed: player.cycleRepeatMode,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.cast, color: Colors.white54),
-                          onPressed: () {},
-                        ),
-                      ],
                     ),
-                  ),
-                ],
+                    IconButton(
+                      icon: const Icon(Icons.skip_next, color: Colors.white),
+                      onPressed: player.currentIndex + 1 < player.queue.length
+                          ? () => player.next()
+                          : null,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        player.repeatMode == repeat.PlaybackRepeatMode.one
+                            ? Icons.repeat_one
+                            : Icons.repeat,
+                        color: player.repeatMode != repeat.PlaybackRepeatMode.none ? Colors.white : Colors.white54,
+                      ),
+                      onPressed: player.cycleRepeatMode,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.cast, color: Colors.white54),
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -629,15 +608,6 @@ class BottomPlayer extends StatelessWidget {
 
   void _showQueueFlyout(BuildContext context) {
     _showFlyout(context, const MiniplayerQueueView());
-  }
-
-  /// True iff there is at least one track still queued after the current
-  /// one. The Auto DJ button is hidden when the queue is empty (or the
-  /// current track is the only entry) so it never appears in the "single
-  /// play" state — explicit queue context is required.
-  bool _hasManualQueueRemaining(PlayerProvider player) {
-    if (player.currentTrack == null) return false;
-    return player.currentIndex + 1 < player.queue.length;
   }
 
 }

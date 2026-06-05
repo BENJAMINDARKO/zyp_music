@@ -35,7 +35,12 @@ class AudioRepositoryImpl implements AudioRepository {
   final PlaylistDatabase _database;
   final HybridCacheService? _hybridCache;
   ConnectivityService? _connectivity;
-  final AudioCacheService _cacheService = AudioCacheService();
+
+  /// The audio cache service is constructed in `main.dart` and shared
+  /// across the audio + playlist repositories so the non-playing
+  /// downloader and the Hive-to-SQLite cache migration hooks can reuse
+  /// the same on-disk file layout and Hive tracker wiring.
+  final AudioCacheService _cacheService;
 
   bool _isOffline = false;
   bool get isOffline => _isOffline;
@@ -45,9 +50,11 @@ class AudioRepositoryImpl implements AudioRepository {
     required this.lyricsDataSource,
     required MusicAudioHandler handler,
     required PlaylistDatabase database,
+    required AudioCacheService cacheService,
     HybridCacheService? hybridCache,
   })  : _handler = handler,
         _database = database,
+        _cacheService = cacheService,
         _hybridCache = hybridCache {
     // Forward every successful on-disk write to the Hive cache tracker so
     // pre-buffered tracks register themselves in the box. This is what makes

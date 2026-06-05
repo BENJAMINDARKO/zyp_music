@@ -14,6 +14,7 @@ class CustomAudioSeekbar extends StatefulWidget {
   final double secondaryValue;
   final ValueChanged<double> onChanged;
   final Color activeColor;
+  final Color inactiveColor;
   final SeekbarStyle style;
   final bool invertColor;
   /// Whether audio is actively playing. Drives the wave phase animation.
@@ -25,6 +26,7 @@ class CustomAudioSeekbar extends StatefulWidget {
     required this.secondaryValue,
     required this.onChanged,
     required this.activeColor,
+    this.inactiveColor = Colors.white24,
     this.style = SeekbarStyle.minimal,
     this.invertColor = false,
     this.isPlaying = false,
@@ -106,6 +108,7 @@ class _CustomAudioSeekbarState extends State<CustomAudioSeekbar>
                     value: widget.value,
                     secondaryValue: widget.secondaryValue,
                     activeColor: effectiveColor,
+                    inactiveColor: widget.inactiveColor,
                     style: widget.style,
                     // φ = controller.value × 2π  (full cycle per loop)
                     wavePhaseFraction: _phaseController.value,
@@ -124,6 +127,7 @@ class _SeekbarPainter extends CustomPainter {
   final double value;
   final double secondaryValue;
   final Color activeColor;
+  final Color inactiveColor;
   final SeekbarStyle style;
   /// Normalised phase in [0, 1] → mapped to [0, 2π] inside the painter.
   final double wavePhaseFraction;
@@ -132,6 +136,7 @@ class _SeekbarPainter extends CustomPainter {
     required this.value,
     required this.secondaryValue,
     required this.activeColor,
+    required this.inactiveColor,
     required this.style,
     this.wavePhaseFraction = 0.0,
   });
@@ -159,7 +164,7 @@ class _SeekbarPainter extends CustomPainter {
 
   void _paintMinimal(Canvas canvas, Size size) {
     final trackPaint = Paint()
-      ..color = Colors.white24
+      ..color = inactiveColor
       ..strokeWidth = 2;
     final activePaint = Paint()
       ..color = activeColor
@@ -185,7 +190,7 @@ class _SeekbarPainter extends CustomPainter {
     final activeWidth = size.width * value;
 
     final trackPaint = Paint()
-      ..color = Colors.white12
+      ..color = inactiveColor
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(Offset(0, cy), Offset(size.width, cy), trackPaint);
@@ -219,7 +224,7 @@ class _SeekbarPainter extends CustomPainter {
 
       bool isActive = x <= activeWidth;
       final p = Paint()
-        ..color = isActive ? activeColor : Colors.white24
+        ..color = isActive ? activeColor : inactiveColor
         ..strokeWidth = barWidth
         ..strokeCap = StrokeCap.round;
 
@@ -265,7 +270,7 @@ class _SeekbarPainter extends CustomPainter {
       ..isAntiAlias = true;
 
     final flatPaint = Paint()
-      ..color = Colors.white24
+      ..color = inactiveColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round
@@ -315,7 +320,7 @@ class _SeekbarPainter extends CustomPainter {
       bool isActive = x <= activeWidth;
 
       final p = Paint()
-        ..color = isActive ? activeColor : Colors.white24
+        ..color = isActive ? activeColor : inactiveColor
         ..strokeWidth = 4
         ..strokeCap = StrokeCap.round;
 
@@ -328,6 +333,7 @@ class _SeekbarPainter extends CustomPainter {
     return oldDelegate.value != value ||
         oldDelegate.secondaryValue != secondaryValue ||
         oldDelegate.activeColor != activeColor ||
+        oldDelegate.inactiveColor != inactiveColor ||
         oldDelegate.style != style ||
         oldDelegate.wavePhaseFraction != wavePhaseFraction;
   }

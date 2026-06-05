@@ -8,13 +8,16 @@ import '../../presentation/providers/download_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
 
 /// Reactive album download control. Aggregate state is derived from the
-/// per-track Hive entries inside [HybridCacheService].
+/// per-track Hive entries inside [HybridCacheService] AND the SQLite
+/// permanent library mirror (spec §5 dual-source check).
 ///
 /// State machine (spec §2 applied at album granularity):
-/// - idle    -> at least one track is not in Hive -> idle icon
+/// - idle    -> at least one track is not in Hive AND not in SQLite
+///              -> idle icon
 /// - caching -> a playlist-level download is in flight (byte stream active)
 ///              OR any per-track `_activeCaching` flag is set -> spinner
 /// - success -> every track is in Hive (or playlist is fully downloaded)
+///              **OR** every track is in the SQLite library
 ///              -> static checkmark
 class AlbumDownloadIcon extends StatefulWidget {
   final Album album;
@@ -71,6 +74,15 @@ class _AlbumDownloadIconState extends State<AlbumDownloadIcon> {
     super.dispose();
   }
 
+  /// Spec §5: a single track is "satisfied" if it is in the Hive
+  /// transient box OR in the SQLite permanent library. Used by the
+  /// aggregate success check below.
+  bool _isTrackSatisfied(Track t, HybridCacheService hybridCache) {
+    if (hybridCache.isCached(t.id)) return true;
+    if (hybridCache.isDownloadedInSqlite(t.id)) return true;
+    return false;
+  }
+
   CachedState _aggregateState(
     BuildContext context,
     DownloadProvider downloadProvider,
@@ -80,8 +92,7 @@ class _AlbumDownloadIconState extends State<AlbumDownloadIcon> {
       return CachedState.caching;
     }
     if (widget.album.tracks.isNotEmpty &&
-        widget.album.tracks
-            .every((Track t) => hybridCache.isCached(t.id))) {
+        widget.album.tracks.every((Track t) => _isTrackSatisfied(t, hybridCache))) {
       return CachedState.success;
     }
     if (widget.album.tracks

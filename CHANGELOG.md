@@ -2,6 +2,21 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.1.8] — 2026-06-04
+
+### Added
+- **`CustomAudioSeekbar.inactiveColor` Param:** New optional `Color inactiveColor` parameter (default `Colors.white24` for backward compatibility with the two `BottomPlayer` callers at `bottom_player.dart:184,499`). Threaded through `_SeekbarPainter` and used for every unplayed track segment across `_paintMinimal`, `_paintGradient`, `_paintWaveform`, `_paintWavy`, and `_paintSegmented`. `shouldRepaint` updated so color changes trigger a repaint.
+
+### Changed
+- **High-Contrast Monochrome Full-Screen Player Theme:** Reworked `PlayingScreen` into a layered, high-contrast monochrome look that strips out the dynamic palette-accent extraction. The body `Stack` now stacks three background layers beneath the existing UI — a full-bleed `CachedNetworkImage` of the current track's artwork, a 40/40 Gaussian `BackdropFilter` blur, and a `Colors.black.withOpacity(0.75)` dark scrim. All primary controls (play/pause) and the active toggle / accessory state (Auto DJ, Karaoke, Favorite heart, Shuffle, Repeat, Lyrics-mode mic, add-to-playlist, queue) render solid `Colors.white`; inactive toggles / accessories render `Colors.white.withOpacity(0.35)`. The play/pause primary control is now a solid white circle with a black icon and a white-tinted shadow. The seek bar's played segment is `Colors.white` and the unplayed segment is `Colors.white.withOpacity(0.30)` (or black @ 0.30 when `invertSeekbarColor` is on).
+- **Full-Screen Player `dominantColor` Consumption Stripped:** `player.dominantColor` is no longer read inside the `PlayingScreen` widget tree. The local `activeColor` resolves to `Colors.white`, the visualizer receives `Colors.white` directly, and the `PlayingScreen` no longer derives accent colors from album art. The `PaletteGenerator` call inside `PlayerProvider` is intentionally left intact for the other widgets that still consume it (bottom player, miniplayer lyrics view, miniplayer timer view, custom lyrics modal). The now-unused `Color activeColor` parameter on `_buildMediaControls` was removed.
+- **Miniplayer Icon Row Rearranged:** The Auto DJ button moved from the top row (between Favorite and Lyrics) to the far left of the bottom control row, ahead of Shuffle. Top row is now `heart → mic → playlist_add → timer → queue` (5 icons). Bottom row is `Auto DJ → Shuffle → Skip Previous → Play/Pause → Skip Next → Repeat → Cast`.
+- **Auto DJ Icon Always Visible, Color-Only Toggle:** The conditional `_hasManualQueueRemaining(player)` gate that hid the Auto DJ icon in the empty / single-play state was removed per user request. The icon is now always rendered, with a constant `Icons.auto_awesome` shape — the toggle state is communicated strictly through color (`0xFFEAB308` yellow when enabled, `Colors.white54` when disabled), as the spec requires. The unused `_hasManualQueueRemaining` helper was deleted.
+- **Home Tab Bar Aligned with Hamburger Icon:** Removed the inner `Scaffold > AppBar(bottom: TabBar)` from `HomeScreen`. The `DefaultTabController` now wraps a `Column` whose first child is a `Container(alignment: Alignment.centerLeft, child: TabBar(...))` and second child is the `TabBarView`. The tab row shares the same left edge as the `MainLayout`'s AppBar leading icon, so "Home", "Global Hot", and "Featured Albums" are visually aligned with the hamburger.
+- **Miniplayer Bottom Action Bar — Proportional Flex Spacing:** The bottom control row is now a single `Padding(horizontal: 16, vertical: 8)` wrapping a `Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: center)` with the 7 controls in spec order. Stripped the two `Expanded` wrappers, the inner `Row(mainAxisSize: MainAxisSize.min)` around the transport cluster, and the two `SizedBox(width: 8)` spacers flanking the play/pause circle. All hitboxes are ≥ 40dp (the five `IconButton`s default to 48dp; the play/pause `Container` is 48x48). State-dependent color logic is untouched.
+
+---
+
 ## [1.1.6] — 2026-06-04
 
 ### Added

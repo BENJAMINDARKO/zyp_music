@@ -122,11 +122,10 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
             ? player.bufferedPosition.inMilliseconds / player.duration.inMilliseconds
             : 0.0;
             
-        final activeColor = player.dominantColor ?? Colors.white;
+        final activeColor = Colors.white;
         final settings = context.watch<SettingsProvider>();
-        final seekbarColor = settings.invertSeekbarColor 
-            ? (activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white)
-            : activeColor;
+        final seekbarColor =
+            settings.invertSeekbarColor ? Colors.black : activeColor;
 
         return Scaffold(
           key: _scaffoldKey,
@@ -134,6 +133,30 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
           body: Stack(
             fit: StackFit.expand,
             children: [
+              // Layer 1: full-bleed album art (blurred backdrop)
+              Positioned.fill(
+                child: (track.thumbnailUrl?.isNotEmpty ?? false)
+                    ? CachedNetworkImage(
+                        imageUrl: track.thumbnailUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) =>
+                            Container(color: const Color(0xFF0A0A0A)),
+                      )
+                    : Container(color: const Color(0xFF0A0A0A)),
+              ),
+              // Layer 2: 40/40 Gaussian blur
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+                  child: const SizedBox.shrink(),
+                ),
+              ),
+              // Layer 3: dark scrim
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black.withOpacity(0.75),
+                ),
+              ),
               SafeArea(
                 child: Column(
                   children: [
@@ -159,8 +182,8 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                   ? Icons.auto_awesome
                                   : Icons.auto_awesome_outlined,
                               color: player.isAutoDJEnabled
-                                  ? const Color(0xFFEAB308)
-                                  : Colors.white,
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.35),
                             ),
                             tooltip: player.isAutoDJEnabled
                                 ? 'Auto DJ engaged — tap to disengage'
@@ -264,7 +287,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                             IconButton(
                               icon: Icon(
                                 Icons.mic_external_on,
-                                color: player.isKaraokeMode ? activeColor : Colors.white38,
+                                color: player.isKaraokeMode ? Colors.white : Colors.white.withOpacity(0.35),
                                 size: 22,
                               ),
                               onPressed: () => player.setKaraokeMode(!player.isKaraokeMode),
@@ -419,7 +442,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                         width: MediaQuery.of(context).size.width * 0.8,
                         child: AudioVisualizer(
                           style: settings.visualizerStyle,
-                          color: activeColor,
+                          color: Colors.white,
                           isPlaying: player.isActuallyPlaying,
                         ),
                       ),
@@ -492,7 +515,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                 return IconButton(
                                   icon: Icon(
                                     isFav ? Icons.favorite : Icons.favorite_border,
-                                    color: isFav ? Colors.red : Colors.white54,
+                                    color: isFav ? Colors.white : Colors.white.withOpacity(0.35),
                                     size: 26,
                                   ),
                                   onPressed: () => pp.toggleFavorite(
@@ -521,7 +544,6 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
             track,
             progress,
             bufferProgress,
-            activeColor,
             seekbarColor,
             settings,
           ),
@@ -536,7 +558,6 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
     Track track,
     double progress,
     double bufferProgress,
-    Color activeColor,
     Color seekbarColor,
     SettingsProvider settings,
   ) {
@@ -562,6 +583,9 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                     value: progress.clamp(0.0, 1.0),
                     secondaryValue: bufferProgress.clamp(0.0, 1.0),
                     activeColor: seekbarColor,
+                    inactiveColor: settings.invertSeekbarColor
+                        ? Colors.black.withOpacity(0.30)
+                        : Colors.white.withOpacity(0.30),
                     style: settings.seekbarStyle == 'Gradient' 
                         ? SeekbarStyle.gradient 
                         : (settings.seekbarStyle == 'Waveform' 
@@ -601,7 +625,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                   IconButton(
                     icon: Icon(Icons.shuffle,
                       size: 28,
-                      color: player.shuffleMode ? activeColor : Colors.white54,
+                      color: player.shuffleMode ? Colors.white : Colors.white.withOpacity(0.35),
                     ),
                     onPressed: player.toggleShuffle,
                   ),
@@ -616,30 +640,30 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
-                        color: activeColor,
+                        color: Colors.white,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: activeColor.withOpacity(0.3),
+                            color: Colors.white.withOpacity(0.3),
                             blurRadius: 15,
                             offset: const Offset(0, 4),
                           ),
                         ],
                       ),
                       child: player.isBuffering
-                          ? Center(
+                          ? const Center(
                               child: SizedBox(
                                 width: 32,
                                 height: 32,
                                 child: CircularProgressIndicator(
-                                  color: activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white, 
+                                  color: Colors.black,
                                   strokeWidth: 3,
                                 ),
                               ),
                             )
                           : Icon(
                               player.isActuallyPlaying ? Icons.pause : Icons.play_arrow,
-                              color: activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                              color: Colors.black,
                               size: 40,
                             ),
                     ),
@@ -657,8 +681,8 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                           : Icons.repeat,
                       size: 28,
                       color: player.repeatMode != repeat.PlaybackRepeatMode.none
-                          ? activeColor
-                          : Colors.white54,
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.35),
                     ),
                     onPressed: player.cycleRepeatMode,
                   ),
@@ -673,11 +697,11 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.mic_none, color: _isLyricsMode ? activeColor : Colors.white54, size: 22),
+                    icon: Icon(Icons.mic_none, color: _isLyricsMode ? Colors.white : Colors.white.withOpacity(0.35), size: 22),
                     onPressed: () => setState(() => _isLyricsMode = !_isLyricsMode),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.playlist_add, color: Colors.white54, size: 22),
+                    icon: Icon(Icons.playlist_add, color: Colors.white.withOpacity(0.35), size: 22),
                     onPressed: () {
                       showDialog(
                         context: context,
@@ -686,7 +710,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.queue_music, color: Colors.white54, size: 22),
+                    icon: Icon(Icons.queue_music, color: Colors.white.withOpacity(0.35), size: 22),
                     onPressed: () => _showUpNextModal(context, player),
                   ),
                 ],
@@ -760,7 +784,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                             title: Text(
                               t.title,
                               style: TextStyle(
-                                color: isPlaying ? (provider.dominantColor ?? const Color(0xFFEAB308)) : Colors.white,
+                                color: isPlaying ? Colors.white : Colors.white,
                                 fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
                               ),
                               maxLines: 1,

@@ -22,31 +22,35 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          toolbarHeight: 0, // Hide the standard app bar space
-          bottom: const TabBar(
-            isScrollable: true,
-            indicatorColor: Colors.white,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white54,
-            tabs: [
-              Tab(text: 'Home'),
-              Tab(text: 'Global Hot'),
-              Tab(text: 'Featured Albums'),
-            ],
+      child: Column(
+        children: [
+          // TabBar aligned with the hamburger icon in MainLayout's AppBar.
+          // We deliberately omit the inner Scaffold/AppBar so the tab row
+          // shares the same left edge as the main layout's leading icon.
+          Container(
+            alignment: Alignment.centerLeft,
+            child: const TabBar(
+              isScrollable: true,
+              indicatorColor: Colors.white,
+              labelColor: Colors.white,
+              unselectedLabelColor: Colors.white54,
+              tabs: [
+                Tab(text: 'Home'),
+                Tab(text: 'Global Hot'),
+                Tab(text: 'Featured Albums'),
+              ],
+            ),
           ),
-        ),
-        body: const TabBarView(
-          children: [
-            _HomeTab(),
-            _GlobalHotTab(),
-            _FeaturedAlbumsTab(),
-          ],
-        ),
+          const Expanded(
+            child: TabBarView(
+              children: [
+                _HomeTab(),
+                _GlobalHotTab(),
+                _FeaturedAlbumsTab(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
