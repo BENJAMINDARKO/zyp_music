@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/hybrid_cache_service.dart';
 import '../../domain/entities/video.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
@@ -177,6 +178,46 @@ class TrackContextMenu {
                         Navigator.pop(sheetContext);
                         ScaffoldMessenger.of(sheetContext).showSnackBar(
                           const SnackBar(content: Text('Already downloaded')),
+                        );
+                      }
+                    },
+                  );
+                },
+              ),
+              // Remove from Cache — only rendered when the track is
+              // actually held in either the Hive transient tracker or
+              // the SQLite library table. Dual-source check matches
+              // the spec used by the download icon (see
+              // `TrackDownloadIcon._isAlreadyDownloaded` and
+              // `HybridCacheService.isCached` / `isDownloadedInSqlite`).
+              Consumer2<DownloadProvider, HybridCacheService>(
+                builder: (context, downloadProvider, hybridCache, _) {
+                  final isCached = hybridCache.isCached(track.id) ||
+                      hybridCache.isDownloadedInSqlite(track.id) ||
+                      downloadProvider.downloadedTrackIds.contains(track.id);
+                  if (!isCached) return const SizedBox.shrink();
+                  return ListTile(
+                    leading: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
+                    title: const Text(
+                      'Remove from Cache',
+                      style: TextStyle(color: Color(0xFFEF4444)),
+                    ),
+                    subtitle: const Text(
+                      'Frees local storage; track will re-download next time',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      // Optimistic UI: show the snackbar first so the
+                      // user gets immediate feedback even if the file
+                      // delete takes a moment.
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        SnackBar(content: Text('Removing "${track.title}" from cache…')),
+                      );
+                      await downloadProvider.removeTrackFromCache(track);
+                      if (sheetContext.mounted) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          SnackBar(content: Text('Removed "${track.title}" from cache')),
                         );
                       }
                     },

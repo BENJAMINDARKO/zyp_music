@@ -4,6 +4,7 @@ import '../../domain/entities/album.dart';
 import '../../domain/entities/video.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
+import '../../presentation/providers/download_provider.dart';
 
 /// Long-press context menu for an Album card.
 ///
@@ -163,6 +164,47 @@ class AlbumContextMenu {
                           content: Text(isFav ? 'Removed ${album.title} from favorites' : 'Added ${album.title} to favorites'),
                         ),
                       );
+                    },
+                  );
+                },
+              ),
+              // Remove from Cache — iterates over the album's tracks
+              // and calls `removeTrackCompletely` for each. Only
+              // rendered when the album has at least one track in the
+              // Hive tracker, the SQLite library, or the in-memory
+              // download mirror.
+              Consumer<DownloadProvider>(
+                builder: (context, downloadProvider, _) {
+                  if (!downloadProvider.isAlbumCached(album)) {
+                    return const SizedBox.shrink();
+                  }
+                  return ListTile(
+                    leading: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
+                    title: const Text(
+                      'Remove from Cache',
+                      style: TextStyle(color: Color(0xFFEF4444)),
+                    ),
+                    subtitle: const Text(
+                      'Frees local storage for every cached track in this album',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        SnackBar(content: Text('Clearing cache for "${album.title}"…')),
+                      );
+                      final removed = await downloadProvider.removeAlbumFromCache(album);
+                      if (sheetContext.mounted) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              removed == 0
+                                  ? 'No cached tracks to remove'
+                                  : 'Removed $removed track(s) from cache',
+                            ),
+                          ),
+                        );
+                      }
                     },
                   );
                 },

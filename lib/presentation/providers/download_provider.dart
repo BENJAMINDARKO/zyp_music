@@ -236,6 +236,54 @@ class DownloadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Removes [track] from every cache tier — the on-disk audio file,
+  /// the lyrics file, the Hive tracker, and the SQLite
+  /// `downloaded_tracks` row. Wires the dual-source state
+  /// (provider-side `_downloadedTrackIds` and `HybridCacheService`
+  /// mirror) back to the unsatisfied state. The single call into
+  /// `HybridCacheService.removeTrackCompletely` is the source of
+  /// truth for the purge pipeline; this method exists so context
+  /// menus and any other UI can route through the standard provider
+  /// notification path.
+  Future<void> removeTrackFromCache(Track track) async {
+    await _hybridCache.removeTrackCompletely(track.id);
+    _downloadedTrackIds.remove(track.id);
+    _activeDownloads.remove(track.id);
+    notifyListeners();
+  }
+
+  /// Removes every downloadable track belonging to [album] from the
+  /// cache. We iterate via the album's `tracks` list because there is
+  /// no album-level aggregate in the SQLite schema — the unit of
+  /// storage is the track. A album with no tracks falls back to the
+  /// single placeholder `Track` synthesised in the album context
+  /// menu, which is safe (removeTrackCompletely is idempotent).
+  Future<int> removeAlbumFromCache(Album album) async {
+    final ids = album.tracks.map((t) => t.id).toSet();
+    int removed = 0;
+    for (final id in ids) {
+      if (_hybridCache.isCached(id) || _downloadedTrackIds.contains(id)) {
+        await _hybridCache.removeTrackCompletely(id);
+        _downloadedTrackIds.remove(id);
+        _activeDownloads.remove(id);
+        removed++;
+      }
+    }
+    notifyListeners();
+    return removed;
+  }
+
+  /// Returns true if any track in [album] is currently held in the
+  /// cache (Hive tracker or SQLite row). The context menu uses this
+  /// to decide whether to show the "Remove from Cache" entry.
+  bool isAlbumCached(Album album) {
+    for (final t in album.tracks) {
+      if (_hybridCache.isCached(t.id)) return true;
+      if (_downloadedTrackIds.contains(t.id)) return true;
+    }
+    return false;
+  }
+
   Future<int> getTotalCacheSize() => _downloadService.getTotalCacheSize();
 
   Future<int> getPlaylistCacheSize(String playlistId) =>

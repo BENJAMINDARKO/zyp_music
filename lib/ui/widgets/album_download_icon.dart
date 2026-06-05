@@ -145,6 +145,19 @@ class _AlbumDownloadIconState extends State<AlbumDownloadIcon> {
               size: widget.size,
             );
             break;
+          case CachedState.removed:
+            // Album-level eviction collapses to the idle /
+            // tap-to-download affordance so the user can re-download
+            // the album in one tap. Same glyph as `idle` — kept
+            // separate so future tweaks (e.g. an undo snackbar) can
+            // branch on it without re-deriving intent from the icon
+            // widget.
+            icon = Icon(
+              Icons.download_for_offline,
+              color: Colors.white54,
+              size: widget.size,
+            );
+            break;
         }
 
         return GestureDetector(

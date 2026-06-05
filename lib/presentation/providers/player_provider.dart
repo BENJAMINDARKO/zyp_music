@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +11,7 @@ import '../../core/constants/audio_quality.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../core/services/hybrid_cache_service.dart';
 import '../../core/services/queue_manager.dart';
+import '../../core/utils/app_logger.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../../service/audio_handler.dart';
@@ -49,20 +52,21 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queueManager?.metadataResolver = () => {
           for (final t in _recentlyPlayed) t.id: t,
         };
-    // Load recently played tracks on startup
-    loadRecentlyPlayed().then((_) {
-      _queueManager?.metadataResolver = () => {
-            for (final t in _recentlyPlayed) t.id: t,
-          };
-      if (_recentlyPlayed.isNotEmpty) {
-        notifyListeners();
-      }
-    });
     // Restore the persisted Auto Queue engagement flag and active track
     // metadata from disk so the engine and miniplayer resume their
     // previous state across cold launches.
     _loadAutoQueueState();
-    _loadActiveTrackState();
+    _loadActiveTrackState().then((_) {
+      // Load recently played tracks on startup
+      loadRecentlyPlayed().then((_) {
+        _queueManager?.metadataResolver = () => {
+              for (final t in _recentlyPlayed) t.id: t,
+            };
+        if (_recentlyPlayed.isNotEmpty) {
+          notifyListeners();
+        }
+      });
+    });
   }
 
   Track? _currentTrack;
@@ -115,11 +119,90 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   // toggle and on app termination (via WidgetsBindingObserver) so the
   // next launch can resume the previous engagement.
   static const _autoQueueActiveKey = 'auto_queue_active';
-  static const _activeTrackIdKey = 'active_track_id';
-  static const _activeTrackTitleKey = 'active_track_title';
-  static const _activeTrackAuthorKey = 'active_track_author';
-  static const _activeTrackThumbnailKey = 'active_track_thumbnail';
-  static const _activeTrackPositionKey = 'active_track_position_seconds';
+
+  /// Position to seek to on the first `togglePlayPause` after a cold launch.
+  /// Populated by `_loadActiveTrackState` and cleared by `togglePlayPause` /
+  /// `playTrack` once consumed. Distinct from `_position` because the in-memory
+  /// position is also driven by the audio stream — this flag tracks the
+  /// one-shot cold-launch resume.
+  Duration? _pendingResumePosition;
+  Duration? get pendingResumePosition => _pendingResumePosition;
+
+  Box? _mediaStateBox;
+  Future<Box> _getMediaStateBox() async {
+    if (_mediaStateBox != null && _mediaStateBox!.isOpen) {
+      return _mediaStateBox!;
+    }
+    _mediaStateBox = await Hive.openBox('media_state_persistence');
+    return _mediaStateBox!;
+  }
+
+  Map<String, dynamic> _serializeTrack(Track track) {
+    return {
+      'id': track.id,
+      'title': track.title,
+      'thumbnailUrl': track.thumbnailUrl,
+      'durationSeconds': track.duration.inSeconds,
+      'author': track.author,
+      'album': track.album,
+      'albumArtist': track.albumArtist,
+      'year': track.year,
+      'index': track.index,
+      'source': track.source.name,
+    };
+  }
+
+  Track _deserializeTrack(Map<String, dynamic> map) {
+    final sourceStr = map['source'] as String?;
+    final source = TrackSource.values.firstWhere(
+      (e) => e.name == sourceStr || e.toString().split('.').last == sourceStr,
+      orElse: () => TrackSource.youtube,
+    );
+    return Track(
+      id: map['id'] as String,
+      title: map['title'] as String,
+      thumbnailUrl: map['thumbnailUrl'] as String?,
+      duration: Duration(seconds: map['durationSeconds'] as int? ?? 0),
+      author: map['author'] as String?,
+      album: map['album'] as String?,
+      albumArtist: map['albumArtist'] as String?,
+      year: map['year'] as int?,
+      index: map['index'] as int? ?? 0,
+      source: source,
+    );
+  }
+
+  Future<void> _syncRestoredStateToAudioHandler() async {
+    final handler = _audioHandler;
+    if (handler == null || _queue.isEmpty) return;
+    try {
+      final mediaItems = _queue.map((track) => MediaItem(
+        id: track.id,
+        title: track.title,
+        artist: track.author ?? '',
+        album: track.album,
+        artUri: track.thumbnailUrl != null ? Uri.tryParse(track.thumbnailUrl!) : null,
+        duration: track.duration,
+        extras: {
+          'year': track.year,
+          'source': 'youtube',
+        },
+      )).toList();
+      await handler.setQueue(mediaItems, startIndex: _currentIndex);
+      if (_currentTrack != null && _currentIndex < mediaItems.length) {
+        final activeMediaItem = mediaItems[_currentIndex];
+        handler.mediaItem.add(activeMediaItem);
+      }
+    } catch (e) {
+      AppLogger.log('Error syncing restored state to audio handler: $e', name: 'PlayerProvider');
+    }
+  }
+
+  /// Wall-clock timestamp of the last persisted position write. Throttles the
+  /// position-tick persistence so we do not hammer SharedPreferences on every
+  /// stream frame (which fires multiple times per second).
+  DateTime _lastPositionWrite = DateTime.fromMillisecondsSinceEpoch(0);
+
   List<Track> _recentlyPlayed = [];
 
   List<Track> get recentlyPlayed => List.unmodifiable(_recentlyPlayed);
@@ -189,57 +272,103 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Persists the active track metadata + playback position. Invoked on
-  /// app termination (and any future explicit save points) so the
-  /// miniplayer can be restored on the next launch.
+  /// app termination, lifecycle pause, periodic position ticks, and any
+  /// explicit save points so the miniplayer can resume from the exact
+  /// spot on the next launch.
   Future<void> _saveActiveTrackState() async {
-    final track = _currentTrack;
-    final prefs = await SharedPreferences.getInstance();
-    if (track == null) {
-      await prefs.remove(_activeTrackIdKey);
-      await prefs.remove(_activeTrackTitleKey);
-      await prefs.remove(_activeTrackAuthorKey);
-      await prefs.remove(_activeTrackThumbnailKey);
-      await prefs.remove(_activeTrackPositionKey);
-      return;
+    try {
+      final track = _currentTrack;
+      final box = await _getMediaStateBox();
+      if (track == null) {
+        await box.clear();
+        return;
+      }
+      await box.put('track_id', track.id);
+      await box.put('position_ms', _position.inMilliseconds);
+      await box.put('duration_ms', _duration.inMilliseconds);
+      await box.put('current_index', _currentIndex);
+      
+      final queueIds = _queue.map((t) => t.id).toList();
+      await box.put('queue_ids', queueIds);
+      
+      final queueTracks = _queue.map((t) => _serializeTrack(t)).toList();
+      await box.put('queue_tracks', queueTracks);
+      
+      await box.put('current_track', _serializeTrack(track));
+      
+      _lastPositionWrite = DateTime.now();
+    } catch (e, stack) {
+      AppLogger.log('Error saving active track state: $e\n$stack', name: 'PlayerProvider');
     }
-    await prefs.setString(_activeTrackIdKey, track.id);
-    await prefs.setString(_activeTrackTitleKey, track.title);
-    await prefs.setString(_activeTrackAuthorKey, track.author ?? '');
-    await prefs.setString(_activeTrackThumbnailKey, track.thumbnailUrl ?? '');
-    await prefs.setInt(_activeTrackPositionKey, _position.inSeconds);
   }
 
   /// Restores the active track metadata from disk into the in-memory
   /// queue. Playback is NOT auto-resumed — the miniplayer just appears
-  /// populated, and the user can press play to pick up where they left
-  /// off.
+  /// populated at the saved position, and the first `togglePlayPause`
+  /// (play) will seek to the saved position before kicking off the
+  /// audio handler. The previously-saved position lives on
+  /// `_pendingResumePosition` so `togglePlayPause` can pick it up.
   Future<void> _loadActiveTrackState() async {
-    final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getString(_activeTrackIdKey);
-    if (id == null || id.isEmpty) return;
-    if (_currentTrack != null) return; // Already restored by recently-played.
-    final restored = Track(
-      id: id,
-      title: prefs.getString(_activeTrackTitleKey) ?? '',
-      author: prefs.getString(_activeTrackAuthorKey),
-      thumbnailUrl: prefs.getString(_activeTrackThumbnailKey),
-      duration: Duration(seconds: prefs.getInt(_activeTrackPositionKey) ?? 0),
-    );
-    _currentTrack = restored;
-    _queue = [restored];
-    _currentIndex = 0;
-    _processingState = ProcessingState.idle;
-    notifyListeners();
+    try {
+      final box = await _getMediaStateBox();
+      final id = box.get('track_id') as String?;
+      if (id == null || id.isEmpty) return;
+      if (_currentTrack != null) return; // Already restored by recently-played.
+      
+      final positionMs = box.get('position_ms') as int? ?? 0;
+      final durationMs = box.get('duration_ms') as int? ?? 0;
+      final restoredIndex = box.get('current_index') as int? ?? 0;
+      
+      // Restore queue
+      final queueTracksMaps = box.get('queue_tracks') as List<dynamic>?;
+      if (queueTracksMaps != null && queueTracksMaps.isNotEmpty) {
+        _queue = queueTracksMaps
+            .map((m) => _deserializeTrack(Map<String, dynamic>.from(m)))
+            .toList();
+      }
+      
+      _currentIndex = restoredIndex.clamp(0, _queue.isEmpty ? 0 : _queue.length - 1);
+      
+      // Restore current track
+      final currentTrackMap = box.get('current_track') as Map<dynamic, dynamic>?;
+      if (currentTrackMap != null) {
+        _currentTrack = _deserializeTrack(Map<String, dynamic>.from(currentTrackMap));
+      } else if (_queue.isNotEmpty) {
+        _currentTrack = _queue[_currentIndex];
+      }
+      
+      if (_currentTrack == null) return;
+      
+      _position = Duration(milliseconds: positionMs);
+      _duration = Duration(milliseconds: durationMs);
+      _isPlaying = false;
+      _processingState = ProcessingState.idle;
+      _pendingResumePosition = Duration(milliseconds: positionMs);
+      
+      AppLogger.log(
+        'Restored active track: ${_currentTrack!.id} at ${positionMs}ms in Paused state (queue size ${_queue.length})',
+        name: 'PlayerProvider',
+      );
+      
+      await _syncRestoredStateToAudioHandler();
+      
+      notifyListeners();
+    } catch (e, stack) {
+      AppLogger.log('Error loading active track state: $e\n$stack', name: 'PlayerProvider');
+    }
   }
 
   /// WidgetsBindingObserver hook. Persists the Auto Queue state and the
-  /// active track metadata on full app termination (iOS-style detached
-  /// state) so the next cold launch can resume. Other lifecycle
-  /// transitions (backgrounded, inactive) are intentionally ignored —
-  /// the OS may resume the process without a true cold start.
+  /// active track metadata on app backgrounding (`paused`) and full
+  /// termination (`detached`) so the next cold launch can resume from
+  /// the last known position. `paused` covers the common Android case
+  /// where the OS kills the process after sending it to the background
+  /// without ever firing `detached`.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.inactive) {
       _saveAutoQueueState();
       _saveActiveTrackState();
     }
@@ -516,16 +645,28 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> playTrack(Track track, {AudioQuality quality = AudioQuality.adaptive}) async {
+  Future<void> playTrack(
+    Track track, {
+    AudioQuality quality = AudioQuality.adaptive,
+    Duration? startAt,
+  }) async {
     _isLoading = true;
     _error = null;
     _stopPolling();
     _completionSubscription?.cancel();
     notifyListeners();
 
+    // Cold-launch resume: the pending position was captured by
+    // `_loadActiveTrackState` so the first play after restart picks up
+    // at the exact second the user left off instead of rewinding to
+    // 0. We honour whichever value is supplied (explicit `startAt`
+    // wins, falling back to the cold-launch flag).
+    final effectiveStartAt = startAt ?? _pendingResumePosition;
+    _pendingResumePosition = null;
+
     try {
       _currentTrack = track;
-      _position = Duration.zero;
+      _position = effectiveStartAt ?? Duration.zero;
       _bufferedPosition = Duration.zero;
       _addToRecentlyPlayed(track);
 
@@ -550,6 +691,21 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       await _audioRepository.playTrack(track, audioUrl);
+      if (effectiveStartAt != null && effectiveStartAt > Duration.zero) {
+        // Seek to the persisted position so the audio handler starts
+        // mid-track instead of rewinding to 0. The seek must happen
+        // AFTER playTrack so the underlying player is actually
+        // initialised; otherwise the seek is dropped on a not-yet-ready
+        // handler.
+        try {
+          await _audioRepository.seek(effectiveStartAt);
+        } catch (e) {
+          AppLogger.log(
+            'playTrack seek to $effectiveStartAt failed: $e',
+            name: 'PlayerProvider',
+          );
+        }
+      }
       _isPlaying = true;
       _startPolling();
       _listenForCompletion();
@@ -605,9 +761,24 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         await _audioRepository.pause();
         _isPlaying = false;
         _autoScroll = false;
+        // Persist immediately so a force-kill right after pause still
+        // restores the paused-at position on the next launch.
+        await _saveActiveTrackState();
       } else {
-        await _audioRepository.resume();
-        _isPlaying = true;
+        // Cold-launch path: `_pendingResumePosition` was set by
+        // `_loadActiveTrackState` if there is a saved position and
+        // the audio handler has never been started. In that case a
+        // plain `resume()` would be a no-op (the handler is idle), so
+        // we route through `playTrack` with `startAt` so the audio
+        // loads, seeks to the saved position, and starts playing in
+        // one go.
+        final pending = _pendingResumePosition;
+        if (pending != null && _currentTrack != null) {
+          await playTrack(_currentTrack!, startAt: pending);
+        } else {
+          await _audioRepository.resume();
+          _isPlaying = true;
+        }
       }
       notifyListeners();
     } catch (e) {
@@ -630,12 +801,16 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> seekTo(Duration position) async {
     try {
+      if (_pendingResumePosition != null) {
+        _pendingResumePosition = position;
+      }
       await _audioRepository.seek(position);
       _position = position;
       notifyListeners();
     } catch (e) {
-      _error = 'Failed to seek: ${e.toString()}';
+      _position = position;
       notifyListeners();
+      AppLogger.log('Silent seek error (ignored on boot): $e', name: 'PlayerProvider');
     }
   }
 
@@ -672,6 +847,16 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _playingSub?.cancel();
     _positionSub = _audioRepository.positionStream.listen((pos) {
       _position = pos;
+      // Throttled persistence: Hive writes on every audio
+      // frame (multiple per second) would thrash the disk. We coalesce
+      // to one write per 2 seconds while a track is actively playing.
+      if (_isPlaying) {
+        final now = DateTime.now();
+        if (now.difference(_lastPositionWrite).inMilliseconds >= 2000) {
+          _lastPositionWrite = now;
+          unawaited(_saveActiveTrackState());
+        }
+      }
       notifyListeners();
     });
     _bufferedPositionSub = _audioRepository.bufferedPositionStream.listen((pos) {
@@ -685,6 +870,15 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _playingSub = _audioRepository.playingStream.listen((isPlaying) {
       if (_isPlaying != isPlaying) {
         _isPlaying = isPlaying;
+        // Edge-triggered save: flipping playing→paused or paused→
+        // playing is a meaningful state change worth persisting
+        // immediately. togglePlayPause() also does this, but this
+        // catches the case where the OS paused us (audio focus loss,
+        // headphones unplugged, etc.) without going through the
+        // provider.
+        if (!isPlaying) {
+          unawaited(_saveActiveTrackState());
+        }
         notifyListeners();
       }
     });
@@ -785,6 +979,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queueManager?.disableAutoDJ();
     _audioHandler?.clearQueue();
     await stop();
+    unawaited(_saveActiveTrackState());
     notifyListeners();
   }
 
@@ -808,6 +1003,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void setAudioHandler(MusicAudioHandler handler) {
     _audioHandler = handler;
+    _syncRestoredStateToAudioHandler();
   }
 
   @override
@@ -821,6 +1017,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _positionSub?.cancel();
     _bufferedPositionSub?.cancel();
     _durationSub?.cancel();
+    // Final flush: capture the last position before the provider is
+    // torn down. We do not await — the OS gives us a few hundred ms at
+    // most and a fire-and-forget SharedPreferences write is fine.
+    unawaited(_saveActiveTrackState());
+    unawaited(_saveAutoQueueState());
     _queueManager?.removeListener(notifyListeners);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

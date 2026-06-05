@@ -2,6 +2,36 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.1.11] — 2026-06-05
+
+### Added
+- **Media State Persistence with Hive:** Implemented cold-start initialization boot recovery and active playback state persistence using a specialized metadata Hive box (`media_state_persistence`). Saves the active track, position in milliseconds, queue details, current index, and queue IDs.
+- **Silently Rebuild State on Boot:** Restores the player queue and track state silently in the background on startup, setting the cursor exactly to the last stopped position while resting in a stable `Paused` state to avoid lockups.
+- **Sync Restored Queue to Audio Handler:** Pushes the restored queue stack dynamically to `MusicAudioHandler` upon startup.
+
+### Changed
+- **Throttled Persistence Rate:** Updated active playback position persistence throttling from 5 seconds to 2 seconds.
+- **Race Condition Resolution:** Sequenced history loading after active track state restoration to ensure restored session is not overridden.
+- **Cleanup SharedPreferences:** Detached and removed old `SharedPreferences` active track persistence.
+
+## [1.1.10] — 2026-06-05
+
+### Fixed
+- **Active Track Position Persistence on Cold Launch:** Rewrote the `_saveActiveTrackState` / `_loadActiveTrackState` pipeline to correctly round-trip three distinct fields — `position`, `duration`, and `isPlaying` — via three new SharedPreferences keys (`active_track_position_seconds`, `active_track_duration_seconds`, `active_track_is_playing`). The previous implementation conflated the saved playback position with the track's duration, causing every restored track to report `00:00 → 00:00` (the seek bar could not display the true length) and the position itself was never restored. The restore path now also writes the saved position back to `_position` so the seek bar thumb lands at the correct offset on the very first frame of cold launch.
+- **First Play After Cold Launch Starts from the Saved Position:** `PlayerProvider.togglePlayPause` no longer calls a no-op `_audioRepository.resume()` on an idle audio handler. When a cold-launch restore left a `_pendingResumePosition` in memory, the play tap is routed through `playTrack(track, startAt: pending)` so the handler is initialised, the audio loads, and `seek(pending)` is invoked before playback begins — eliminating the "song loads but won't resume / position at 00:00" failure mode.
+- **Position Not Persisted When the App is Killed by the OS:** The previous implementation only flushed state on `AppLifecycleState.detached`, which Android rarely fires before a force-kill. `_saveActiveTrackState` is now also triggered on `AppLifecycleState.paused` and `AppLifecycleState.inactive`, on every manual `togglePlayPause` (pause side), on every audio-stream paused edge (catches OS-driven pauses like headphone unplugs), and on a throttled 5-second timer driven by the position tick. `dispose()` performs a final fire-and-forget flush so the last position survives a hot reload / process tear-down.
+
+### Added
+- **`PlayerProvider.playTrack(startAt: Duration?)` Parameter:** Optional `startAt` parameter on the existing `playTrack(Track, {quality})` signature. When supplied, the position is set to the supplied value (instead of `Duration.zero`) and `_audioRepository.seek(startAt)` is invoked immediately after the audio handler initialises. The cold-launch resume path is the canonical consumer; the parameter is also exposed for any future "play this track at chapter X" use case.
+- **`PlayerProvider._pendingResumePosition`:** New private field that carries the persisted playback position from `_loadActiveTrackState` to the first `togglePlayPause` (play) call. Cleared after consumption so subsequent plays do not seek to a stale value.
+- **"Remove from Cache" Track Context Menu Entry:** New `ListTile` in `TrackContextMenu` rendered only when the track is actually held in either the Hive transient tracker or the SQLite library (`HybridCacheService.isCached || isDownloadedInSqlite || DownloadProvider.downloadedTrackIds.contains`). Icon: `Icons.delete_outline` (red `0xFFEF4444`). Tap fires `DownloadProvider.removeTrackFromCache(track)` and shows a "Removed … from cache" snackbar. Track is re-downloadable on next play.
+- **"Remove from Cache" Album Context Menu Entry:** New `ListTile` in `AlbumContextMenu` rendered only when `DownloadProvider.isAlbumCached(album)` returns true (at least one track in the album is cached across the same dual-source check). Tap fires `DownloadProvider.removeAlbumFromCache(album)` which iterates over `album.tracks` and removes each one. Snackbar reports the actual number of tracks removed.
+- **`HybridCacheService.removeTrackCompletely(trackId)`:** Single-call pipeline that (1) deletes the on-disk audio file at `<docs>/audio_cache/<id>.<ext>`, (2) deletes the deterministic lyrics file at `<docs>/<id>-lyrics.lrc` plus any tracked lyrics path, (3) drops the Hive box entry via `evictFromTracker`, (4) removes the SQLite `downloaded_tracks` row via `libraryDatabase.removeDownloadedTrack`, (5) refreshes the sync SQLite mirror, and (6) emits a `CachedState.removed` state event so `Consumer2<DownloadProvider, HybridCacheService>` widgets in the context menu can re-render without a full provider refresh. Idempotent — missing files or non-existent rows are no-ops, not errors.
+- **`DownloadProvider.removeTrackFromCache(Track)`:** Public provider entry point for the track context menu. Wraps `HybridCacheService.removeTrackCompletely` and also drops the track from the in-memory `_downloadedTrackIds` / `_activeDownloads` mirrors before calling `notifyListeners`.
+- **`DownloadProvider.removeAlbumFromCache(Album)`:** Public provider entry point for the album context menu. Iterates over `album.tracks`, purges each via `HybridCacheService.removeTrackCompletely` (only for tracks that are actually cached — saves redundant disk I/O on tracks that were never downloaded), and returns the count of tracks actually removed.
+- **`DownloadProvider.isAlbumCached(Album)`:** Boolean helper that scans an album's tracks against the dual-source state. Used by the album context menu to decide whether the "Remove from Cache" entry should be visible.
+- **`CachedState.removed`:** New enum value on `CachedState` emitted when `removeTrackCompletely` runs. Downstream consumers can listen on `HybridCacheService.stateStream` to react to a cache eviction (the existing `removed` glyph on the download icon now lights up automatically because the icon's `isAlreadyDownloaded` check returns false once the entry is gone).
+
 ## [1.1.9] — 2026-06-04
 
 ### Added

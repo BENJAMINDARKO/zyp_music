@@ -8,7 +8,7 @@ import '../../data/models/cache_tracker_model.dart';
 import '../../core/utils/app_logger.dart';
 
 /// Public cache state exposed to the UI layer.
-enum CachedState { idle, caching, success }
+enum CachedState { idle, caching, success, removed }
 
 /// Lightweight event pushed whenever a track transitions between cache states.
 class CachedStateEvent {
@@ -593,6 +593,50 @@ class HybridCacheService extends ChangeNotifier {
         name: _logTag,
       );
     }
+  }
+
+  /// Removes a single track from every cache tier and the permanent
+  /// library at once. Called by the "Remove from Cache" entry in the
+  /// track and album context menus. The method is idempotent — a
+  /// missing file or a non-existent row is treated as a no-op rather
+  /// than an error so the caller does not have to special-case
+  /// "already removed" states.
+  ///
+  /// The pipeline is:
+  /// 1. Delete the on-disk audio file (`<docs>/audio_cache/<id>.<ext>`)
+  ///    and the deterministic lyrics file
+  ///    (`<docs>/<id>-lyrics.lrc`) plus any tracked lyrics path.
+  /// 2. Drop the Hive box entry.
+  /// 3. Remove the SQLite `downloaded_tracks` row (if any).
+  /// 4. Refresh the sync SQLite mirror.
+  /// 5. Emit a `removed` state event so the download icon switches
+  ///    back to the unsatisfied (white download) glyph without
+  ///    needing a full provider refresh.
+  Future<void> removeTrackCompletely(String trackId) async {
+    await deleteLocalAudioFile(trackId);
+    await deleteLocalLyricsFile(trackId);
+    await evictFromTracker(trackId);
+    final db = libraryDatabase;
+    if (db != null) {
+      try {
+        await db.removeDownloadedTrack(trackId);
+      } catch (e) {
+        AppLogger.log(
+          'removeTrackCompletely: SQLite row removal failed for $trackId: $e',
+          name: _logTag,
+        );
+      }
+    }
+    // Mirror is updated in-place by `evictFromTracker` for the Hive
+    // add path; we still drop the id defensively in case the row was
+    // SQLite-only and the Hive path was a no-op.
+    _sqliteDownloadedIds.remove(trackId);
+    _emit(trackId, CachedState.removed);
+    notifyListeners();
+    AppLogger.log(
+      'removeTrackCompletely: purged $trackId from cache + library',
+      name: _logTag,
+    );
   }
 
   // ---------------------------------------------------------------------------

@@ -142,6 +142,23 @@ class _TrackDownloadIconState extends State<TrackDownloadIcon> {
                 size: widget.size,
               ),
             );
+
+          case CachedState.removed:
+            // Eviction from the cache collapses back to the idle /
+            // tap-to-download affordance so the user can re-download
+            // the track if they want it back. Same glyph + tap path
+            // as `idle` — kept as a separate case so future tweaks
+            // (e.g. an undo snackbar) can branch on it without
+            // re-deriving intent from the icon widget.
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _onTap,
+              child: Icon(
+                Icons.download_for_offline_outlined,
+                color: Colors.white54,
+                size: widget.size,
+              ),
+            );
         }
       },
     );
