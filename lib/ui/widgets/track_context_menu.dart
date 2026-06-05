@@ -61,30 +61,55 @@ class TrackContextMenu {
                 ),
               ),
               const Divider(color: Colors.white24),
-              // Start Auto DJ — instantly replaces the active queue and
-              // engages the Auto DJ engine so the player continues
-              // generating recommendations (or shuffled offline cache) once
-              // the supplied track finishes.
+              // Start Auto DJ — slot kept open per the Auto Queue
+              // migration spec; functional block moved to the new
+              // "Auto Queue" item below. Tapping shows a placeholder
+              // toast so the section ordering is preserved.
               ListTile(
                 leading: const Icon(Icons.auto_awesome, color: Color(0xFFEAB308)),
                 title: const Text('Start Auto DJ', style: TextStyle(color: Colors.white)),
                 subtitle: const Text(
-                  'Play this track and continue with smart recommendations',
+                  'Coming soon — slot reserved for future logic',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    const SnackBar(content: Text('Start Auto DJ — coming soon')),
+                  );
+                },
+              ),
+              // Auto Queue — the migrated functional block. If a track
+              // is already playing or paused in memory, the existing
+              // recommendation engine is engaged and the predicted next
+              // track is appended after the current one. If the queue is
+              // empty, Auto Queue cold-starts from the seed track (full
+              // audio load + lyrics read + play) to eliminate dead-air.
+              ListTile(
+                leading: const Icon(Icons.auto_mode, color: Colors.white),
+                title: const Text('Auto Queue', style: TextStyle(color: Colors.white)),
+                subtitle: const Text(
+                  'Automatically queues and appends matching tracks seamlessly to the end of your active queue.',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 onTap: () {
                   final player = sheetContext.read<PlayerProvider>();
-                  player.startAutoDJ([track]);
-                  player.playFromQueue(0);
+                  player.startAutoQueue(track);
                   Navigator.pop(sheetContext);
                   ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    const SnackBar(content: Text('Auto DJ engaged')),
+                    SnackBar(
+                      content: Text(
+                        player.isAutoQueueActive
+                            ? 'Auto Queue engaged — queue extended'
+                            : 'Auto Queue engaged — cold-starting',
+                      ),
+                    ),
                   );
                 },
               ),
               // Add to Queue — appends to the existing queue without
-              // engaging Auto DJ. The manual queue is finite; once it ends
-              // the player stops.
+              // engaging Auto Queue. The manual queue is finite; once it
+              // ends the player stops.
               ListTile(
                 leading: const Icon(Icons.playlist_play, color: Colors.white),
                 title: const Text('Add to Queue', style: TextStyle(color: Colors.white)),

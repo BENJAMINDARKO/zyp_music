@@ -2,6 +2,26 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.1.9] — 2026-06-04
+
+### Added
+- **"Auto Queue" Context Menu Item:** New `ListTile` inserted between "Start Auto DJ" and "Add to Queue" in both `TrackContextMenu` and `AlbumContextMenu`. Icon: `Icons.auto_mode` (white). Display name: "Auto Queue". Business description: "Automatically queues and appends matching tracks seamlessly to the end of your active queue." The section ordering now matches the spec's exact layout rule (1. Start Auto DJ, 2. Auto Queue, 3. Add to Queue).
+- **`PlayerProvider.startAutoQueue(Track seedTrack)`:** The migrated functional entry point. If a track is already playing or paused in memory, the existing recommendation engine is armed so the next track is generated and appended to the queue after the current one finishes — playback is not interrupted. If the queue is empty, the engine cold-starts from `seedTrack` via `coldStartAutoQueue`.
+- **`PlayerProvider.coldStartAutoQueue(Track seedTrack)`:** Cold-start initializer. Resets the active queue to a single seed, enables the recommendation engine, and fires `playTrack(seedTrack)` so the audio is loaded, lyrics are fetched, and playback begins immediately. Eliminates the dead-air window the user would otherwise face when engaging Auto Queue from an empty queue.
+- **`PlayerProvider.isAutoQueueActive` Getter:** Boolean surface for the context-menu snackbar messaging — wording reflects whether the queue was extended or cold-started.
+- **Auto Queue State Persistence:** New `_saveAutoQueueState()` / `_loadAutoQueueState()` methods on `PlayerProvider` backed by a SharedPreferences key (`auto_queue_active`). The engine re-arms on cold launch if it was previously engaged.
+- **Active Track State Persistence:** New `_saveActiveTrackState()` / `_loadActiveTrackState()` methods persisting the current track's id, title, author, thumbnail, and playback position to SharedPreferences. On cold launch, the miniplayer is restored to the last-known active track (without auto-resuming playback — the user presses play to continue).
+- **`WidgetsBindingObserver` on `PlayerProvider`:** New `didChangeAppLifecycleState` hook persists both the Auto Queue state and the active track metadata on `AppLifecycleState.detached` (true cold termination). Other lifecycle transitions (backgrounded, inactive) are intentionally ignored — the OS may resume the process without a true cold start.
+
+### Changed
+- **`TrackContextMenu` Section Ordering:** The top action block now reads `Start Auto DJ → Auto Queue → Add to Queue`. The "Start Auto DJ" tile is retained as a placeholder for future logic and shows a "coming soon" snackbar on tap. The "Add to Queue" tile is unchanged.
+- **`AlbumContextMenu` Section Ordering:** Same restructuring as `TrackContextMenu`. The "Auto Queue" tile seeds the engine with `tracks.first` — cold-starts when `player.queue.isEmpty`, otherwise just arms the engine.
+- **Old `startAutoDJ(...)` Cleared to No-Op:** The previous Auto DJ background-song-selection / prediction-loop entry point on `PlayerProvider` is now a no-op. Its functional block has been migrated to `startAutoQueue` / `coldStartAutoQueue`. Kept as a no-op so any external callers (tests, legacy widgets) continue to compile and run without side-effects.
+- **`PlayerProvider` Lifecycle Registration:** The provider now mixes in `WidgetsBindingObserver` and registers / unregisters itself with `WidgetsBinding.instance` in the constructor / `dispose`. The persistent-state loaders fire right after the existing `loadRecentlyPlayed` block so the engine and miniplayer resume their previous state across cold launches.
+- **Context Menu Migration Spec Compliance:** The migration is strictly contained to the context menu content menu and the Auto Queue state controllers. The miniplayer layout, the full-screen monochrome theme, the audio output / mixers, and the existing `QueueManager.generateNextAutoDJTrack` loop are untouched. The miniplayer and full-screen Auto DJ toggle icons continue to call `toggleAutoDJ()` on the same `QueueManager` and drive the same engine the new "Auto Queue" context-menu entry arms.
+
+---
+
 ## [1.1.8] — 2026-06-04
 
 ### Added
