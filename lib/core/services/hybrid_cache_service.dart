@@ -395,10 +395,29 @@ class HybridCacheService extends ChangeNotifier {
     if (box == null) return;
     final existing = box.get(trackId);
     if (existing == null) return;
-    await box.put(
-      trackId,
-      existing.copyWith(cachedAt: DateTime.now().millisecondsSinceEpoch),
-    );
+    await box.put(trackId, existing.copyWith(
+      cachedAt: DateTime.now().millisecondsSinceEpoch,
+    ));
+    await evaluateAndEvictCasualCache();
+  }
+
+  /// Phase 5: records the per-track `genre` string in the
+  /// Hive tracker box. Called by
+  /// `AudioRepository.getUpNexts` so the AI DJ routing layer
+  /// can score Hive-only candidates without a SQLite round
+  /// trip per lookup. Idempotent: if the track is not yet in
+  /// Hive, the call is a no-op (the Hive tier is built
+  /// opportunistically as files are cached, not by the fetch
+  /// path).
+  Future<void> setGenre(String trackId, String? genre) async {
+    final box = _box;
+    if (box == null) return;
+    final existing = box.get(trackId);
+    if (existing == null) return;
+    await box.put(trackId, existing.copyWith(
+      genre: genre,
+      clearGenre: genre == null,
+    ));
   }
 
   /// Persists timed-lyrics text against a track. If the track is not yet

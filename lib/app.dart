@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
+import 'core/audio/dsp_crossfade_engine.dart';
 import 'domain/repositories/audio_repository.dart';
 import 'domain/repositories/playlist_repository.dart';
 import 'presentation/providers/player_provider.dart';
@@ -15,9 +16,12 @@ import 'ui/layout/main_layout.dart';
 import 'ui/widgets/bottom_player.dart';
 import 'ui/widgets/global_background.dart';
 import 'core/navigation/navigator_key.dart';
+import 'core/services/auto_dj_routing_service.dart';
 import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
+import 'core/services/dj_history_ledger.dart';
 import 'core/services/queue_manager.dart';
+import 'core/audio/gapless_queue_mixer.dart';
 
 class MonochromeApp extends StatelessWidget {
   final PlaylistRepository playlistRepository;
@@ -29,6 +33,17 @@ class MonochromeApp extends StatelessWidget {
   final HybridCacheService hybridCache;
   final ConnectivityService connectivityService;
   final QueueManager queueManager;
+  final DJHistoryLedger historyLedger;
+  final GaplessQueueMixer mixer;
+  final DspCrossfadeEngine dspEngine;
+
+  /// Smart-DJ bootstrap-fusion wiring: the routing service
+  /// is built in `main.dart` and handed down here so the
+  /// [PlayerProvider] can chain `setRoutingService(...)`
+  /// after construction. Nullable so unit tests that
+  /// exercise [MonochromeApp] in isolation can run without
+  /// the AI DJ engine.
+  final AutoDjRoutingService? routingService;
 
   const MonochromeApp({
     super.key,
@@ -41,6 +56,10 @@ class MonochromeApp extends StatelessWidget {
     required this.hybridCache,
     required this.connectivityService,
     required this.queueManager,
+    required this.historyLedger,
+    required this.mixer,
+    required this.dspEngine,
+    this.routingService,
   });
 
   @override
@@ -58,12 +77,33 @@ class MonochromeApp extends StatelessWidget {
           create: (_) => ChartsProvider(chartsRepository),
         ),
         ChangeNotifierProvider(
-          create: (_) => PlayerProvider(
-            audioRepository,
-            settingsProvider,
-            hybridCache,
-            queueManager: queueManager,
-          )..setAudioHandler(audioHandler),
+          create: (_) {
+            final provider = PlayerProvider(
+              audioRepository,
+              settingsProvider,
+              hybridCache,
+              queueManager: queueManager,
+            )
+              ..setAudioHandler(audioHandler)
+              ..setHistoryLedger(historyLedger)
+              ..setMixer(mixer)
+              ..setDspEngine(dspEngine)
+              ..setChartsRepository(chartsRepository)
+              ..setConnectivityService(connectivityService);
+            // Smart-DJ bootstrap-fusion: bind the routing
+            // service and the playlist repository AFTER the
+            // base wiring so the bootstrap method's
+            // ordering guard fires only after both
+            // dependencies are in place. The chain-call
+            // pattern is split out here because we need
+            // explicit null handling on the routing service
+            // (it's optional in [MonochromeApp]).
+            if (routingService != null) {
+              provider.setRoutingService(routingService!);
+            }
+            provider.setPlaylistRepository(playlistRepository);
+            return provider;
+          },
         ),
         ChangeNotifierProvider.value(
           value: downloadProvider,

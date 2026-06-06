@@ -5,23 +5,26 @@ import '../../domain/entities/video.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/download_provider.dart';
+import 'auto_dj_mode_picker.dart';
 import 'playlist_picker_dialog.dart';
 
 class TrackContextMenu {
   static void show(BuildContext context, Track track) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.grey[900],
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
                 child: Row(
                   children: [
                     if (track.thumbnailUrl != null)
@@ -62,50 +65,22 @@ class TrackContextMenu {
                 ),
               ),
               const Divider(color: Colors.white24),
-              // Start Auto DJ — slot kept open per the Auto Queue
-              // migration spec; functional block moved to the new
-              // "Auto Queue" item below. Tapping shows a placeholder
-              // toast so the section ordering is preserved.
+              // Start Auto DJ — phase 0 binding: opens the Auto DJ mode
+              // picker (Off / Shuffle Library / Similar Songs / Same
+              // Genre / Same Artist / Smart DJ). The actual per-mode
+              // engine behaviour lands in Phase 1; for now the picker
+              // records the choice and lights up the miniplayer /
+              // fullscreen AUTODJ icon.
               ListTile(
                 leading: const Icon(Icons.auto_awesome, color: Color(0xFFEAB308)),
                 title: const Text('Start Auto DJ', style: TextStyle(color: Colors.white)),
                 subtitle: const Text(
-                  'Coming soon — slot reserved for future logic',
+                  'Pick a mode — Off, Shuffle Library, Similar Songs, Same Genre, Same Artist, Smart DJ',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 onTap: () {
-                  Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    const SnackBar(content: Text('Start Auto DJ — coming soon')),
-                  );
-                },
-              ),
-              // Auto Queue — the migrated functional block. If a track
-              // is already playing or paused in memory, the existing
-              // recommendation engine is engaged and the predicted next
-              // track is appended after the current one. If the queue is
-              // empty, Auto Queue cold-starts from the seed track (full
-              // audio load + lyrics read + play) to eliminate dead-air.
-              ListTile(
-                leading: const Icon(Icons.auto_mode, color: Colors.white),
-                title: const Text('Auto Queue', style: TextStyle(color: Colors.white)),
-                subtitle: const Text(
-                  'Automatically queues and appends matching tracks seamlessly to the end of your active queue.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                onTap: () {
-                  final player = sheetContext.read<PlayerProvider>();
-                  player.startAutoQueue(track);
-                  Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        player.isAutoQueueActive
-                            ? 'Auto Queue engaged — queue extended'
-                            : 'Auto Queue engaged — cold-starting',
-                      ),
-                    ),
-                  );
+                  debugPrint('TrackContextMenu: Start Auto DJ tapped for ${track.title}');
+                  AutoDJModePicker.show(sheetContext);
                 },
               ),
               // Add to Queue — appends to the existing queue without
@@ -227,7 +202,7 @@ class TrackContextMenu {
               const SizedBox(height: 8),
             ],
           ),
-        );
+        ),);
       },
     );
   }

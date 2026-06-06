@@ -5,6 +5,7 @@ import '../../domain/entities/video.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/download_provider.dart';
+import 'auto_dj_mode_picker.dart';
 
 /// Long-press context menu for an Album card.
 ///
@@ -82,52 +83,26 @@ class AlbumContextMenu {
                 ),
               ),
               const Divider(color: Colors.white24),
-              // Start Auto DJ — slot kept open per the Auto Queue
-              // migration spec; functional block moved to the new
-              // "Auto Queue" item below.
+              // Start Auto DJ — phase 0 binding: opens the Auto DJ mode
+              // picker (Off / Shuffle Library / Similar Songs / Same
+              // Genre / Same Artist / Smart DJ). The album context menu
+              // does not pre-seed the engine with a track — the user
+              // picks the mode and the engine arms against whatever
+              // track is currently loaded (or has just been queued via
+              // the "Add to Queue" tile below). The actual per-mode
+              // engine behaviour lands in Phase 1; for now the picker
+              // records the choice and lights up the miniplayer /
+              // fullscreen AUTODJ icon.
               ListTile(
                 leading: const Icon(Icons.auto_awesome, color: Color(0xFFEAB308)),
                 title: const Text('Start Auto DJ', style: TextStyle(color: Colors.white)),
                 subtitle: const Text(
-                  'Coming soon — slot reserved for future logic',
+                  'Pick a mode — Off, Shuffle Library, Similar Songs, Same Genre, Same Artist, Smart DJ',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 onTap: () {
-                  Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    const SnackBar(content: Text('Start Auto DJ — coming soon')),
-                  );
-                },
-              ),
-              // Auto Queue — migrated functional block. Seeds the
-              // engine with the supplied album tracks. If the queue is
-              // empty, cold-starts from the first album track; otherwise
-              // appends the predicted next track after the current one.
-              ListTile(
-                leading: const Icon(Icons.auto_mode, color: Colors.white),
-                title: const Text('Auto Queue', style: TextStyle(color: Colors.white)),
-                subtitle: const Text(
-                  'Automatically queues and appends matching tracks seamlessly to the end of your active queue.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                onTap: () {
-                  final player = sheetContext.read<PlayerProvider>();
-                  final seed = tracks.first;
-                  if (player.queue.isEmpty) {
-                    player.coldStartAutoQueue(seed);
-                  } else {
-                    player.startAutoQueue(seed);
-                  }
-                  Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        player.isAutoQueueActive
-                            ? 'Auto Queue engaged — queue extended'
-                            : 'Auto Queue engaged — cold-starting',
-                      ),
-                    ),
-                  );
+                  debugPrint('AlbumContextMenu: Start Auto DJ tapped for album "${album.title}"');
+                  AutoDJModePicker.show(sheetContext);
                 },
               ),
               ListTile(

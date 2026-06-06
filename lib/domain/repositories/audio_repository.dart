@@ -28,4 +28,5 @@ abstract class AudioRepository {
   Future<List<Track>> getUpNexts(Track track);
   Future<void> preloadTrack(Track track);
   Future<void> preloadTrackLyrics(Track track);
+  Future<AudioSource> buildAudioSource(Track track);
 }

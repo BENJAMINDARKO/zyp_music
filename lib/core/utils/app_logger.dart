@@ -28,13 +28,22 @@ class AppLogger {
   }
 
   static void log(String message, {String name = 'AppLogger'}) {
-    // Print to debug console
+    _write(message, name: name);
+  }
+
+  /// Warning-level log. Same sink as [log] but prefixes the
+  /// line with `[WARN]` so triage can grep for it. The
+  /// `dart:developer` level is `WARNING` (900) so the
+  /// debug console renders it as a warning-level entry.
+  static void warning(String message, {String name = 'AppLogger'}) {
+    _write('[WARN] $message', name: name, level: 900);
+  }
+
+  static void _write(String message, {required String name, int level = 700}) {
     if (kDebugMode) {
-      developer.log(message, name: name);
+      developer.log(message, name: name, level: level);
       print('[$name] $message');
     }
-    
-    // Append to file if initialized
     if (_logFile != null) {
       try {
         final timestamp = DateTime.now().toIso8601String();

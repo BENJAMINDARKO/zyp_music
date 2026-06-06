@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../domain/entities/auto_dj_mode.dart';
 import '../../presentation/providers/miniplayer_visibility_provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../domain/entities/video.dart';
+import '../widgets/auto_dj_mode_picker.dart';
 import '../widgets/playlist_picker_dialog.dart';
 import '../widgets/synced_lyrics_widget.dart';
 import '../widgets/audio_visualizer.dart';
@@ -178,27 +180,29 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                           ),
                           IconButton(
                             icon: Icon(
-                              player.isAutoDJEnabled
-                                  ? Icons.auto_awesome
-                                  : Icons.auto_awesome_outlined,
+                              // Same per-mode glyph morph as the
+                              // miniplayer icon. The off mode uses the
+                              // outlined variant; every other mode uses
+                              // its own [AutoDJMode.icon] so the user
+                              // can tell at a glance which engine is
+                              // armed.
+                              player.autoDJMode == AutoDJMode.off
+                                  ? Icons.auto_awesome_outlined
+                                  : player.autoDJMode.icon,
                               color: player.isAutoDJEnabled
                                   ? Colors.white
                                   : Colors.white.withOpacity(0.35),
                             ),
                             tooltip: player.isAutoDJEnabled
-                                ? 'Auto DJ engaged — tap to disengage'
+                                ? 'Auto DJ: ${player.autoDJMode.label} — tap to change'
                                 : 'Engage Auto DJ',
                             onPressed: () {
-                              player.toggleAutoDJ();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    player.isAutoDJEnabled
-                                        ? 'Auto DJ engaged'
-                                        : 'Auto DJ disengaged',
-                                  ),
-                                ),
-                              );
+                              // Phase 0: opens the mode picker so the
+                              // user can pick / change / disengage the
+                              // engine. The picker writes through to
+                              // PlayerProvider.setAutoDJMode; the
+                              // per-mode engine logic lands in Phase 1.
+                              AutoDJModePicker.show(context);
                             },
                           ),
                         ],
@@ -266,75 +270,78 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                       // Lyrics Utility Toolbar
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
-                              onPressed: () async {
-                                await player.refreshLyrics();
-                              },
-                              tooltip: 'Refresh Lyrics',
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                player.autoScroll ? Icons.pause_circle_outline : Icons.play_circle_outline,
-                                color: Colors.white70,
-                                size: 22,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
+                                onPressed: () async {
+                                  await player.refreshLyrics();
+                                },
+                                tooltip: 'Refresh Lyrics',
                               ),
-                              onPressed: () => player.setAutoScroll(!player.autoScroll),
-                              tooltip: 'Toggle Auto-Scroll',
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.mic_external_on,
-                                color: player.isKaraokeMode ? Colors.white : Colors.white.withOpacity(0.35),
-                                size: 22,
+                              IconButton(
+                                icon: Icon(
+                                  player.autoScroll ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                                  color: Colors.white70,
+                                  size: 22,
+                                ),
+                                onPressed: () => player.setAutoScroll(!player.autoScroll),
+                                tooltip: 'Toggle Auto-Scroll',
                               ),
-                              onPressed: () => player.setKaraokeMode(!player.isKaraokeMode),
-                              tooltip: 'Karaoke Mode',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.stop_circle_outlined, color: Colors.white70, size: 22),
-                              onPressed: () {
-                                player.pause();
-                              },
-                              tooltip: 'Stop Playback',
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.white24),
-                                borderRadius: BorderRadius.circular(16),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.mic_external_on,
+                                  color: player.isKaraokeMode ? Colors.white : Colors.white.withOpacity(0.35),
+                                  size: 22,
+                                ),
+                                onPressed: () => player.setKaraokeMode(!player.isKaraokeMode),
+                                tooltip: 'Karaoke Mode',
                               ),
-                              child: const Text('Auto v', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.remove, color: Colors.white70, size: 20),
-                              onPressed: () => setState(() => _syncOffsetMs -= 500),
-                            ),
-                            Text(
-                              '${_syncOffsetMs >= 0 ? '+' : ''}${(_syncOffsetMs / 1000).toStringAsFixed(1)}s',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.add, color: Colors.white70, size: 20),
-                              onPressed: () => setState(() => _syncOffsetMs += 500),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.sync, color: Colors.white70, size: 20),
-                              onPressed: () => setState(() => _syncOffsetMs = 0),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.download_outlined, color: Colors.white70, size: 20),
-                              onPressed: () {
-                                if (player.lyrics != null) {
-                                  _downloadLyrics(context, player.lyrics!, track.title);
-                                }
-                              },
-                            ),
-                          ],
+                              IconButton(
+                                icon: const Icon(Icons.stop_circle_outlined, color: Colors.white70, size: 22),
+                                onPressed: () {
+                                  player.pause();
+                                },
+                                tooltip: 'Stop Playback',
+                              ),
+                              const SizedBox(width: 16),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.white24),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Text('Auto v', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.remove, color: Colors.white70, size: 20),
+                                onPressed: () => setState(() => _syncOffsetMs -= 500),
+                              ),
+                              Text(
+                                '${_syncOffsetMs >= 0 ? '+' : ''}${(_syncOffsetMs / 1000).toStringAsFixed(1)}s',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.add, color: Colors.white70, size: 20),
+                                onPressed: () => setState(() => _syncOffsetMs += 500),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.sync, color: Colors.white70, size: 20),
+                                onPressed: () => setState(() => _syncOffsetMs = 0),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.download_outlined, color: Colors.white70, size: 20),
+                                onPressed: () {
+                                  if (player.lyrics != null) {
+                                    _downloadLyrics(context, player.lyrics!, track.title);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
 

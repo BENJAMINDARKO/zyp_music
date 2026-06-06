@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../data/datasources/local/playlist_database.dart';
+import '../../domain/entities/auto_dj_mode.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
+import '../../presentation/providers/player_provider.dart';
 import '../constants/network_state.dart';
 import '../utils/app_logger.dart';
+import 'auto_dj_routing_service.dart';
 import 'connectivity_service.dart';
 import 'hybrid_cache_service.dart';
 
@@ -42,6 +45,116 @@ class QueueManager extends ChangeNotifier {
   NetworkState _networkState = NetworkState.unknown;
   StreamSubscription<NetworkState>? _connectivitySub;
 
+  /// Late-bound reverse reference to the host [PlayerProvider]. Set after
+  /// construction (in `PlayerProvider`'s constructor) to break the
+  /// `PlayerProvider ⇄ QueueManager` circular wiring at build time. Used
+  /// exclusively by [toggleAutoDJ] to forward arm/disarm calls into the
+  /// Phase 0 `startAutoQueue` / `disarmAutoQueue` API. Nullable so unit
+  /// tests can construct `QueueManager` without spinning up a full
+  /// `PlayerProvider`.
+  PlayerProvider? _playerProvider;
+
+  /// Phase 2: the per-mode router that drives the 5 active
+  /// `AutoDJMode` strategies. Optional so legacy callers and unit
+  /// tests can run without it. When bound, [generateNextAutoDJTrack]
+  /// consults the router first; when unbound, the original online
+  /// / offline shuffle path remains the fallback.
+  AutoDjRoutingService? _router;
+
+  /// The currently-selected Auto DJ mode, mirrored from
+  /// [PlayerProvider.setAutoDJMode] so [generateNextAutoDJTrack] can
+  /// pass the right mode to the router. Defaults to
+  /// [AutoDJMode.off] so a router call before any mode selection
+  /// is a clean null-return.
+  AutoDJMode _currentMode = AutoDJMode.off;
+  AutoDJMode get currentMode => _currentMode;
+
+  /// Session-recently-played track id memory. Backs the spec's
+  /// "runtime session memory array tracking recently played song
+  /// IDs — never choose a track that has already been heard within
+  /// the current active listening index". Bounded so the set
+  /// doesn't grow without limit during long sessions.
+  final Set<String> _recentSessionIds = <String>{};
+  static const int _maxRecentSessionIds = 50;
+
+  /// Session-recently-played **track** history (insertion order
+  /// — most recent at index 0). Backs the Same-Genre
+  /// 3-track extended memory artist-penalization matrix in
+  /// [AutoDjRoutingService._sameGenre]. The matrix walks this
+  /// list with index 0 = immediate last track, index 1 = two
+  /// tracks ago, index 2 = three tracks ago. We deliberately
+  /// do NOT expose a public setter: the engine fills this
+  /// list itself via [rememberPlayedTrack] every time a track
+  /// is committed to the history pipeline, so the matrix is
+  /// always exactly the last 3 tracks played under the
+  /// routing service's supervision.
+  final List<Track> _sessionHistory = <Track>[];
+  static const int _maxSessionHistoryLength = 3;
+
+  void setRouter(AutoDjRoutingService router) {
+    _router = router;
+  }
+
+  void setCurrentMode(AutoDJMode mode) {
+    _currentMode = mode;
+  }
+
+  /// Re-anchors the Auto DJ engine's active seed parameters to
+  /// [newTrack]. Called by [PlayerProvider.setQueue] when the user
+  /// manually loads a new track (tile tap, context menu, search
+  /// selection, playlist open) while Auto DJ is armed.
+  ///
+  /// Per the Manual Interruption Preservation rule:
+  ///
+  ///   * The engine state (`_isAutoDJEnabled`) is left untouched —
+  ///     the miniplayer / fullscreen AUTODJ icon stays lit and the
+  ///     continuation loop keeps running.
+  ///   * The active seed parameters (artist / genre / sub-genre)
+  ///     are forwarded to the routing service so the next
+  ///     15-second-lookahead trigger parses the fresh target keys
+  ///     and continues uninterrupted music generation in the
+  ///     user-selected mode (Same Artist, Similar Songs, ...).
+  ///   * The session dedupe set ([_recentSessionIds]) and the
+  ///     per-mode rolling window held on the router are intentionally
+  ///     preserved — the user's intent is "pivot the seed mid
+  ///     session", not "start fresh".
+  ///
+  /// Safe to call when no router is bound (legacy / test path):
+  /// the call is silently skipped.
+  void updateActiveSeedProfile(Track newTrack) {
+    _router?.updateActiveSeedProfile(newTrack);
+  }
+
+  void rememberPlayed(String trackId) {
+    _recentSessionIds.add(trackId);
+    if (_recentSessionIds.length > _maxRecentSessionIds) {
+      // Drop the oldest insertion order entry. Set iteration order
+      // is insertion order in Dart, so the first element is the
+      // oldest.
+      final oldest = _recentSessionIds.first;
+      _recentSessionIds.remove(oldest);
+    }
+  }
+
+  /// Pushes [track] onto the front of the session history
+  /// (newest-first ordering) and trims the list to the last
+  /// 3 entries. Backs the Same-Genre artist-decay matrix in
+  /// [AutoDjRoutingService._sameGenre].
+  ///
+  /// The list is internal — the routing service reads it via
+  /// the [resolveNext] `history` parameter — so callers should
+  /// use the existing [rememberPlayed] path (which calls this
+  /// method) instead of touching the field directly.
+  void rememberPlayedTrack(Track track) {
+    _sessionHistory.insert(0, track);
+    if (_sessionHistory.length > _maxSessionHistoryLength) {
+      _sessionHistory.removeRange(
+        _maxSessionHistoryLength,
+        _sessionHistory.length,
+      );
+    }
+  }
+
   bool get isAutoDJEnabled => _isAutoDJEnabled;
   bool get isOffline => _networkState == NetworkState.offline;
   bool get isOnline => _networkState == NetworkState.online;
@@ -53,6 +166,15 @@ class QueueManager extends ChangeNotifier {
     required this.connectivity,
     this.libraryDatabase,
   });
+
+  /// Late-binding setter. The host [PlayerProvider] calls this from its
+  /// constructor (right after the [QueueManager] is handed in) so the
+  /// `QueueManager.toggleAutoDJ` chain can route arm/disarm calls back
+  /// into the new `PlayerProvider` API. Idempotent — calling more than
+  /// once simply rebinds to the latest reference.
+  void setPlayerProvider(PlayerProvider playerProvider) {
+    _playerProvider = playerProvider;
+  }
 
   /// Wires the connectivity listener so the offline / online mode of
   /// [generateNextAutoDJTrack] flips automatically when the device
@@ -89,12 +211,40 @@ class QueueManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Flips the Auto DJ engine state. Returns the new state for convenience.
+  /// Flips the Auto DJ engine state, then forwards the flip into the
+  /// Phase 0 `PlayerProvider` API:
+  ///
+  /// * **Arming** — calls `PlayerProvider.startAutoQueue(currentTrack)`
+  ///   so the new predictive engine flag is raised against the
+  ///   currently-loaded track. Skipped if no track is loaded (e.g. the
+  ///   user tapped the icon before any track started playing).
+  /// * **Disarming** — calls `PlayerProvider.disarmAutoQueue()` so the
+  ///   predictive engine flag drops. The manual queue is preserved and
+  ///   playback is NOT interrupted, per the spec.
+  ///
+  /// Returns the new visual state for convenience (mirrors the legacy
+  /// `isAutoDJEnabled` getter so `PlayerProvider.toggleAutoDJ` can keep
+  /// its existing return contract).
   bool toggleAutoDJ() {
+    debugPrint('QueueManager.toggleAutoDJ: wasEnabled=$_isAutoDJEnabled');
     if (_isAutoDJEnabled) {
       disableAutoDJ();
+      // Disarm — do not clear the queue, just stop the engine from
+      // appending. Uses the `?.` operator so unit tests that
+      // construct QueueManager without a PlayerProvider don't crash.
+      _playerProvider?.disarmAutoQueue();
     } else {
       enableAutoDJ();
+      // Arm — point the predictive engine at whatever track is
+      // currently loaded. If nothing is loaded, the arm is a no-op
+      // (the flag flips to enabled but the engine has no seed).
+      final provider = _playerProvider;
+      if (provider != null) {
+        final currentTrack = provider.currentTrack;
+        if (currentTrack != null) {
+          provider.startAutoQueue(currentTrack);
+        }
+      }
     }
     return _isAutoDJEnabled;
   }
@@ -103,14 +253,47 @@ class QueueManager extends ChangeNotifier {
   /// [generateNextAutoDJTrack] when the current track completes.
   bool get isActive => _isAutoDJEnabled;
 
-  /// Produces the next track for the Auto DJ engine. Selects the online
-  /// or offline source based on the current network state, with a graceful
-  /// fallback if the online path throws.
+  /// Produces the next track for the Auto DJ engine. The Phase 2
+  /// flow is:
   ///
-  /// Returns `null` when no candidate is available (e.g. an empty offline
-  /// pool with no network).
+  ///   1. **Off mode** → return `null` immediately so the parent
+  ///      service halts the queue.
+  ///   2. **Router is bound** → ask the [AutoDjRoutingService] to
+  ///      pick the next track for [_currentMode], passing
+  ///      [_recentSessionIds] as the dedupe set.
+  ///   3. **Router is unbound** (legacy / test) → fall back to the
+  ///      pre-Phase-2 online AutoNext path, then the offline
+  ///      shuffle pool. Kept intact so existing call sites (and
+  ///      the regression tests for the original spec) keep
+  ///      working without any router wiring.
+  ///
+  /// The returned `Track?` is fed to `PlayerProvider._generateAutoDJNext`
+  /// unchanged, so the Phase 0 contract — "resolve the upcoming
+  /// item token" — is preserved.
   Future<Track?> generateNextAutoDJTrack(Track currentTrack) async {
     if (!_isAutoDJEnabled) return null;
+    rememberPlayed(currentTrack.id);
+    rememberPlayedTrack(currentTrack);
+
+    if (_currentMode == AutoDJMode.off) return null;
+
+    final router = _router;
+    if (router != null) {
+      try {
+        final pick = await router.resolveNext(
+          mode: _currentMode,
+          current: currentTrack,
+          recentIds: Set<String>.from(_recentSessionIds),
+          history: List<Track>.unmodifiable(_sessionHistory),
+        );
+        if (pick != null) return pick;
+      } catch (e) {
+        AppLogger.log(
+          'Router failed (${_currentMode.name}); falling back to legacy path: $e',
+          name: _logTag,
+        );
+      }
+    }
 
     if (_networkState == NetworkState.online) {
       try {

@@ -7,8 +7,112 @@ import '../core/utils/network_utils.dart';
 import 'auth_service.dart';
 
 class MusicAudioHandler extends BaseAudioHandler {
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayer _player = AudioPlayer();
   final AuthService _authService = AuthService();
+
+  /// Exposed for the gapless queue mixer (Phase 3) so it can
+  /// wrap the same persistent player in a
+  /// [ConcatenatingAudioSource] without spawning a second
+  /// decoder. Production callers should go through the
+  /// [play], [pause], [seek] methods; raw access is reserved
+  /// for engine wiring.
+  AudioPlayer get player => _player;
+
+  /// Phase 4: replaces the internal player with [newPlayer]
+  /// (typically the secondary `playerB` produced by the DSP
+  /// crossfade engine). All active subscriptions are torn
+  /// down, the new player's streams are re-wired, the current
+  /// [playbackState] is re-emitted from the new player's
+  /// state, and the old player is disposed.
+  ///
+  /// Callers (the DSP engine) must ensure [newPlayer] is
+  /// already prepared, playing, and at the correct volume /
+  /// speed before the swap — this method is a transport
+  /// rebind, not a state reset.
+  Future<void> replacePlayer(AudioPlayer newPlayer) async {
+    // Capture the playback position / playing flag from the
+    // old player so we can re-emit a state that is consistent
+    // with the new player's state. The new player is the
+    // source of truth for "is playing" — the engine has
+    // already configured its speed + volume.
+    final wasPosition = _player.position;
+    final wasPlaying = _player.playing;
+    await _playerStateSub?.cancel();
+    await _processingSub?.cancel();
+    await _positionSub?.cancel();
+    await _durationSub?.cancel();
+    await _currentIndexSub?.cancel();
+    final oldPlayer = _player;
+    _player = newPlayer;
+    _playerStateSub = _player.playerStateStream.listen(_onPlayerState);
+    _processingSub = _player.processingStateStream.listen(_onProcessingState);
+    _positionSub = _player.positionStream.listen((pos) {
+      final current = playbackState.valueOrNull ?? _defaultPlaybackState;
+      playbackState.add(current.copyWith(
+        updatePosition: pos,
+        controls: _controls,
+        systemActions: _systemActions,
+        androidCompactActionIndices: [1, 0, 3],
+      ));
+    });
+    _durationSub = _player.durationStream.listen((dur) {
+      if (dur != null) {
+        final item = mediaItem.value;
+        if (item != null) {
+          mediaItem.add(item.copyWith(duration: dur));
+        }
+      }
+    });
+    _currentIndexSub = _player.currentIndexStream.listen((index) {
+      if (index != null && index >= 0) {
+        final sequence = _player.sequence;
+        if (sequence != null && index < sequence.length) {
+          final source = sequence[index];
+          if (source.tag is MediaItem) {
+            final item = source.tag as MediaItem;
+            if (mediaItem.valueOrNull?.id != item.id) {
+              mediaItem.add(item);
+            }
+            _currentIndex = index;
+          }
+        }
+      }
+    });
+    // Re-emit a playback state derived from the new player
+    // so any UI listeners that just received the last
+    // old-player position flush don't latch onto a stale
+    // "playing=false" state.
+    playbackState.add((playbackState.valueOrNull ?? _defaultPlaybackState)
+        .copyWith(
+      updatePosition: wasPosition,
+      playing: wasPlaying,
+      controls: _controls,
+      systemActions: _systemActions,
+      androidCompactActionIndices: [1, 0, 3],
+    ));
+
+    // Force-push the current MediaItem so the OS lockscreen
+    // notification, media slider seekbar, and global album art
+    // cache immediately attach to the active player thread
+    // context instead of lingering on the old player's state.
+    final sequence = _player.sequence;
+    if (sequence != null && sequence.isNotEmpty) {
+      final index = _player.currentIndex ?? 0;
+      if (index >= 0 && index < sequence.length) {
+        final source = sequence[index];
+        if (source.tag is MediaItem) {
+          mediaItem.add(source.tag as MediaItem);
+          AppLogger.log(
+            '[MediaSessionSync] Re-anchored MediaItem to active player: '
+            '${(source.tag as MediaItem).id}',
+            name: 'MusicAudioHandler',
+          );
+        }
+      }
+    }
+
+    await oldPlayer.dispose();
+  }
 
   final skipNextRequested = StreamController<void>.broadcast();
   final skipPreviousRequested = StreamController<void>.broadcast();
@@ -42,6 +146,7 @@ class MusicAudioHandler extends BaseAudioHandler {
   StreamSubscription? _processingSub;
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
+  StreamSubscription? _currentIndexSub;
 
   MusicAudioHandler() {
     playbackState.add(_defaultPlaybackState);
@@ -61,6 +166,21 @@ class MusicAudioHandler extends BaseAudioHandler {
         final item = mediaItem.value;
         if (item != null) {
           mediaItem.add(item.copyWith(duration: dur));
+        }
+      }
+    });
+    _currentIndexSub = _player.currentIndexStream.listen((index) {
+      if (index != null && index >= 0) {
+        final sequence = _player.sequence;
+        if (sequence != null && index < sequence.length) {
+          final source = sequence[index];
+          if (source.tag is MediaItem) {
+            final item = source.tag as MediaItem;
+            if (mediaItem.valueOrNull?.id != item.id) {
+              mediaItem.add(item);
+            }
+            _currentIndex = index;
+          }
         }
       }
     });
@@ -265,6 +385,7 @@ class MusicAudioHandler extends BaseAudioHandler {
     _processingSub?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
+    _currentIndexSub?.cancel();
     _player.dispose();
   }
 }

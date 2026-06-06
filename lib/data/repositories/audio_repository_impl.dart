@@ -536,14 +536,36 @@ class AudioRepositoryImpl implements AudioRepository {
   Future<List<Track>> getUpNexts(Track track) async {
     try {
       final upNexts = await remoteDataSource.getUpNexts(track.id);
-      final tracks = upNexts.map((e) => Track(
-        id: e.videoId ?? '',
-        title: e.title ?? 'Unknown',
-        author: e.artists?.name ?? 'Unknown',
-        thumbnailUrl: e.thumbnails?.last.url,
-        duration: Duration(seconds: e.duration ?? 0),
-        source: TrackSource.youtube,
-      )).where((t) => t.id.isNotEmpty).toList();
+      final tracks = <Track>[];
+      for (final e in upNexts) {
+        if (e.videoId == null || e.videoId!.isEmpty) continue;
+        // Phase 5: capture the genre signal at fetch time. The
+        // YouTube Music `UpNextsDetails` payload does NOT expose
+        // a `genre` field, so the strongest signal on the wire
+        // is `album.name`. We record whatever we have (album
+        // name or "Unknown") so the AI DJ routing service can
+        // score candidates with zero extra round trips; the
+        // crate miner still falls back to
+        // `dj_listening_history.primary_genre` when this
+        // proxy is weak or null.
+        final genre = _captureGenreSignal(e);
+        final t = Track(
+          id: e.videoId!,
+          title: e.title ?? 'Unknown',
+          author: e.artists?.name ?? 'Unknown',
+          thumbnailUrl: e.thumbnails?.last.url,
+          duration: Duration(seconds: e.duration ?? 0),
+          source: TrackSource.youtube,
+          genre: genre,
+        );
+        tracks.add(t);
+        // Synchronize the captured genre into both stores so
+        // the routing service can read it back with zero
+        // latency. Fire-and-forget: a write failure is
+        // non-fatal (the routing service falls back to the
+        // history ledger on miss).
+        unawaited(_persistGenreCapture(t.id, genre));
+      }
       if (tracks.isNotEmpty) return tracks;
     } catch (e) {
       AppLogger.log('Failed to fetch Up Nexts: $e', name: 'AudioRepository');
@@ -556,6 +578,53 @@ class AudioRepositoryImpl implements AudioRepository {
     } catch (e) {
       AppLogger.log('Fallback search for Up Nexts failed: $e', name: 'AudioRepository');
       return [];
+    }
+  }
+
+  /// Phase 5: extracts the strongest available genre signal
+  /// from a `UpNextsDetails` payload. The YouTube Music API
+  /// does not expose a structured `genre` field; the only
+  /// metadata available on the wire is `album.name`, which
+  /// is a weak proxy (often a release title like "Greatest
+  /// Hits"). We record whatever is there so the AI DJ routing
+  /// layer can short-circuit when present; the crate miner
+  /// still consults the listening-history ledger as a
+  /// fallback for tracks where the proxy is empty.
+  String? _captureGenreSignal(dynamic upNext) {
+    try {
+      final album = upNext.album;
+      if (album == null) return null;
+      final name = album.name as String?;
+      if (name == null || name.trim().isEmpty) return null;
+      return name.trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Phase 5: persists a captured genre into both the SQLite
+  /// `track_metadata.genre` column AND the Hive tracker box
+  /// (when the track happens to be cached). Fire-and-forget;
+  /// never throws.
+  Future<void> _persistGenreCapture(String trackId, String? genre) async {
+    try {
+      await _database.setTrackGenre(trackId, genre);
+    } catch (e) {
+      AppLogger.log(
+        'Genre capture (SQLite) failed for $trackId: $e',
+        name: 'AudioRepository',
+      );
+    }
+    final cache = _hybridCache;
+    if (cache != null) {
+      try {
+        await cache.setGenre(trackId, genre);
+      } catch (e) {
+        AppLogger.log(
+          'Genre capture (Hive) failed for $trackId: $e',
+          name: 'AudioRepository',
+        );
+      }
     }
   }
 
@@ -575,5 +644,58 @@ class AudioRepositoryImpl implements AudioRepository {
     } catch (e) {
       AppLogger.log('Failed to preload next track: $e', name: 'AudioRepository');
     }
+  }
+
+  @override
+  Future<AudioSource> buildAudioSource(Track track) async {
+    final url = await getAudioUrl(track);
+    var finalUrl = url;
+
+    // YouTube Stream URL Expiry Fix: Always re-fetch a fresh stream URL immediately before playback
+    if ((track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) &&
+        finalUrl.contains('googlevideo.com')) {
+      try {
+        AppLogger.log('Fetching fresh YouTube stream URL at build time', name: 'AudioRepository');
+        final rawId = _stripPrefixes(track.id);
+        final freshUrl = await remoteDataSource.getAudioUrl(rawId, quality: 'adaptive');
+        if (freshUrl.isNotEmpty) {
+          finalUrl = freshUrl;
+        }
+      } catch (e) {
+        AppLogger.log('Fresh fetch failed: $e, falling back to original URL', name: 'AudioRepository');
+      }
+    }
+
+    if (finalUrl.startsWith('http')) {
+      // Start caching the stream in the background
+      _cacheService.cacheStream(track.id, finalUrl);
+    }
+
+    final headers = await _handler.getHeaders();
+    final uri = finalUrl.startsWith('file://') || !finalUrl.startsWith('http')
+        ? (finalUrl.startsWith('file://') ? Uri.parse(finalUrl) : Uri.file(finalUrl))
+        : Uri.parse(finalUrl);
+
+    final item = MediaItem(
+      id: track.id,
+      title: track.title,
+      artist: track.author ?? '',
+      album: track.album,
+      artUri: track.thumbnailUrl != null
+          ? Uri.tryParse(track.thumbnailUrl!)
+          : null,
+      duration: track.duration,
+      extras: {
+        'year': track.year,
+        'source': 'youtube',
+      },
+    );
+
+    final finalHeaders = uri.host.contains('googlevideo.com') ? null : headers;
+    return AudioSource.uri(
+      uri,
+      headers: finalHeaders,
+      tag: item,
+    );
   }
 }

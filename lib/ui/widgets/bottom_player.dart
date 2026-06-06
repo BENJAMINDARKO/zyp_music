@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mini_music_visualizer/mini_music_visualizer.dart';
+import '../../domain/entities/auto_dj_mode.dart';
 import '../../domain/entities/video.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
@@ -11,6 +12,7 @@ import '../../presentation/providers/download_provider.dart';
 import '../screens/playing_screen.dart';
 import '../screens/artist_screen.dart';
 import '../screens/album_screen.dart';
+import 'auto_dj_mode_picker.dart';
 import 'playlist_picker_dialog.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../presentation/providers/settings_provider.dart';
@@ -495,25 +497,30 @@ class BottomPlayer extends StatelessWidget {
                   children: [
                     IconButton(
                       icon: Icon(
-                        Icons.auto_awesome,
+                        // Reflect the picked mode in the icon glyph:
+                        // each [AutoDJMode] carries its own leading
+                        // icon, so the miniplayer icon morphs from the
+                        // generic "auto_awesome" to the specific
+                        // mode's glyph (shuffle, queue_music, etc.).
+                        // The off mode falls back to the outlined
+                        // variant for the "disengaged" look.
+                        player.autoDJMode == AutoDJMode.off
+                            ? Icons.auto_awesome_outlined
+                            : player.autoDJMode.icon,
                         color: player.isAutoDJEnabled
                             ? const Color(0xFFEAB308)
                             : Colors.white54,
                       ),
                       tooltip: player.isAutoDJEnabled
-                          ? 'Auto DJ engaged — tap to disengage'
+                          ? 'Auto DJ: ${player.autoDJMode.label} — tap to change'
                           : 'Engage Auto DJ',
                       onPressed: () {
-                        player.toggleAutoDJ();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              player.isAutoDJEnabled
-                                  ? 'Auto DJ engaged'
-                                  : 'Auto DJ disengaged',
-                            ),
-                          ),
-                        );
+                        // Phase 0: tapping the icon opens the mode
+                        // picker instead of toggling. The picker
+                        // records the choice on PlayerProvider and
+                        // shows a "Phase 0 placeholder" snackbar — the
+                        // per-mode engine logic lands in Phase 1.
+                        AutoDJModePicker.show(context);
                       },
                     ),
                     IconButton(

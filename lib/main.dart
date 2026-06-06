@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:just_audio/just_audio.dart';
 import 'app.dart';
 import 'core/utils/app_logger.dart';
+import 'domain/entities/video.dart';
 import 'data/datasources/local/playlist_database.dart';
 import 'data/datasources/remote/youtube_remote_datasource.dart';
 import 'data/datasources/remote/lyrics_remote_datasource.dart';
@@ -13,9 +15,16 @@ import 'data/datasources/remote/charts_remote_datasource.dart';
 import 'data/repositories/charts_repository_impl.dart';
 import 'data/models/cache_tracker_model.dart';
 import 'core/services/audio_cache_service.dart';
+import 'core/services/auto_dj_routing_service.dart';
+import 'core/services/dj_history_ledger.dart';
 import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
+import 'core/services/local_crate_miner.dart';
 import 'core/services/queue_manager.dart';
+import 'core/constants/network_state.dart';
+import 'core/audio/gapless_queue_mixer.dart';
+import 'core/audio/silence_scan_worker.dart';
+import 'core/audio/dsp_crossfade_engine.dart';
 import 'service/auth_service.dart';
 import 'service/audio_handler.dart';
 import 'service/download_service.dart';
@@ -150,7 +159,96 @@ Future<void> main() async {
     );
     queueManager.start();
 
+    // Phase 1: AI DJ history ledger. Bound to the shared
+    // PlaylistDatabase singleton so the 80% playback interceptor
+    // inside PlayerProvider can persist listening events on
+    // every track completion. The ledger is also the source of
+    // truth for the cold-start fallback (rows < 3 → genre match
+    // → random) queried by the Auto DJ engine.
+    final historyLedger = await DJHistoryLedger.create();
+
+    // Phase 2: assemble the 5-mode AI DJ routing stack. Each
+    // collaborator is constructed in dependency order:
+    //   * CrateMiner reads from SQLite (downloaded_tracks) + Hive
+    //     (cache_tracker_box) with a strict File.exists() filter.
+    //   * RoutingService wires the per-mode strategies on top of
+    //     the miner + the genre-proximity graph + the history
+    //     ledger. The online similar-songs path delegates to the
+    //     existing AudioRepository.getUpNexts endpoint.
+    final crateMiner = LocalCrateMiner(
+      libraryDatabase: localDatabase,
+      hybridCache: hybridCache,
+      historyLedger: historyLedger,
+    );
+    final routingService = AutoDjRoutingService(
+      crateMiner: crateMiner,
+      historyLedger: historyLedger,
+      onlineFetcher: (t) => audioRepository.getUpNexts(t),
+      connectivityProbe: () {
+        switch (connectivityService.state) {
+          case NetworkState.online:
+            return NetworkAvailability.online;
+          case NetworkState.offline:
+            return NetworkAvailability.offline;
+          case NetworkState.unknown:
+            return NetworkAvailability.unknown;
+        }
+      },
+    );
+    queueManager.setRouter(routingService);
+
+    // Phase 3: silence-scan scheduler. Bound to the shared
+    // PlaylistDatabase so the worker can persist scan results,
+    // and registered on the database itself so
+    // `markTrackDownloaded` can fire scans on download commit.
+    final scanScheduler = await SilenceScanScheduler.create();
+    PlaylistDatabase.setSilenceScanScheduler(scanScheduler);
+
+    // Phase 3: gapless queue mixer. The mixer wraps the
+    // just_audio player in a ConcatenatingAudioSource so the
+    // PlayerProvider's 15-second-lookahead trigger can append
+    // the next track to a pre-buffered timeline (gapless
+    // handoff, no second decoder). The mixer is constructed
+    // lazily once the MusicAudioHandler is ready; we wire it
+    // into the player provider from `app.dart` after construction.
+    final mixer = GaplessQueueMixer(
+      player: audioHandler.player,
+      sourceBuilder: (track) => audioRepository.buildAudioSource(track),
+      nextTrackResolver: (current) => routingService.resolveNext(
+        mode: queueManager.currentMode,
+        current: current,
+        recentIds: const <String>{},
+        // The mixer's gapless-lookahead trigger fires before the
+        // QueueManager has had a chance to register the upcoming
+        // track into its session history. The artist-penalty
+        // matrix therefore runs with an empty feed from this
+        // path; the QueueManager-driven call site
+        // (`generateNextAutoDJTrack`) is the canonical pipeline
+        // and supplies a populated history.
+        history: const <Track>[],
+      ),
+      silenceResolver: (trackId) => localDatabase.getSilenceStartMs(trackId),
+      durationStream: (_) => audioHandler.player.durationStream,
+    );
+    await mixer.attach();
+
+    // Phase 4: Smart DJ DSP engine. Subscribes to the
+    // mixer's `crossfadeReadyStream` and, on each event,
+    // drives the dual-player equal-power crossfade, the
+    // bar-quantized beat alignment, and the post-crossfade
+    // tempo normalization ramp. The engine takes over
+    // playback of the next track (playerB) and hands it back
+    // to the audio handler / mixer at the end of the window.
+    final dspEngine = DspCrossfadeEngine(
+      mixer: mixer,
+      audioHandler: audioHandler,
+      db: localDatabase,
+    );
+    dspEngine.start();
+
     runApp(MonochromeApp(
+      mixer: mixer,
+      dspEngine: dspEngine,
       playlistRepository: playlistRepository,
       audioRepository: audioRepository,
       chartsRepository: chartsRepository,
@@ -160,6 +258,8 @@ Future<void> main() async {
       hybridCache: hybridCache,
       connectivityService: connectivityService,
       queueManager: queueManager,
+      historyLedger: historyLedger,
+      routingService: routingService,
     ));
   } catch (e) {
     runApp(

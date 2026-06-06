@@ -15,6 +15,7 @@ class CacheTrackerModel {
   static const int kFieldTimedLyrics = 3;
   static const int kFieldLyricsFilePath = 4;
   static const int kFieldLyricsVerified = 5;
+  static const int kFieldGenre = 6;
 
   final String trackId;
   final int cachedAt;
@@ -23,6 +24,14 @@ class CacheTrackerModel {
   final String? lyricsFilePath;
   final bool lyricsVerified;
 
+  /// Phase 5: per-track genre string captured at fetch time
+  /// (mirrored from `track_metadata.genre` in SQLite). Used by
+  /// the AI DJ routing layer so it can score candidates
+  /// without a Hive round-trip per lookup. Nullable on
+  /// records written before this field was added (handled by
+  /// the adapter's null-safe read).
+  final String? genre;
+
   CacheTrackerModel({
     required this.trackId,
     required this.cachedAt,
@@ -30,6 +39,7 @@ class CacheTrackerModel {
     this.timedLyrics,
     this.lyricsFilePath,
     this.lyricsVerified = true,
+    this.genre,
   });
 
   CacheTrackerModel copyWith({
@@ -39,8 +49,10 @@ class CacheTrackerModel {
     String? timedLyrics,
     String? lyricsFilePath,
     bool? lyricsVerified,
+    String? genre,
     bool clearLyrics = false,
     bool clearLyricsFilePath = false,
+    bool clearGenre = false,
   }) {
     return CacheTrackerModel(
       trackId: trackId ?? this.trackId,
@@ -51,6 +63,7 @@ class CacheTrackerModel {
           ? null
           : (lyricsFilePath ?? this.lyricsFilePath),
       lyricsVerified: lyricsVerified ?? this.lyricsVerified,
+      genre: clearGenre ? null : (genre ?? this.genre),
     );
   }
 }
@@ -83,13 +96,18 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       lyricsFilePath: fields[CacheTrackerModel.kFieldLyricsFilePath] as String?,
       lyricsVerified:
           (fields[CacheTrackerModel.kFieldLyricsVerified] as bool?) ?? true,
+      // Phase 5: field 6 is optional; records written before
+      // this migration surface with `genre = null`, which the
+      // routing service treats as "no signal — fall back to
+      // the listening-history ledger".
+      genre: fields[CacheTrackerModel.kFieldGenre] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CacheTrackerModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(CacheTrackerModel.kFieldTrackId)
       ..write(obj.trackId)
       ..writeByte(CacheTrackerModel.kFieldCachedAt)
@@ -101,6 +119,8 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       ..writeByte(CacheTrackerModel.kFieldLyricsFilePath)
       ..write(obj.lyricsFilePath)
       ..writeByte(CacheTrackerModel.kFieldLyricsVerified)
-      ..write(obj.lyricsVerified);
+      ..write(obj.lyricsVerified)
+      ..writeByte(CacheTrackerModel.kFieldGenre)
+      ..write(obj.genre);
   }
 }

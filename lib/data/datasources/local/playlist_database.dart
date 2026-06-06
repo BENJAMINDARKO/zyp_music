@@ -5,11 +5,34 @@ import '../../models/playlist_model.dart';
 import '../../models/video_model.dart';
 
 class PlaylistDatabase {
+  /// Test-only factory: instantiates a fresh [PlaylistDatabase]
+  /// backed by [path] (caller is responsible for the file's
+  /// lifecycle — the test uses a tmp path and deletes it in
+  /// tearDown). Production callers should use the default
+  /// `PlaylistDatabase()` constructor which uses the static
+  /// singleton shared by all DAO consumers.
+  factory PlaylistDatabase.forTesting(String path) {
+    return PlaylistDatabase._withPath(path);
+  }
+
+  PlaylistDatabase._withPath(this._customPath);
+
+  PlaylistDatabase() : _customPath = null;
+
   static Database? _database;
-  static final Completer<void> _initCompleter = Completer<void>();
+  static Completer<void> _initCompleter = Completer<void>();
   static bool _initStarted = false;
 
+  final String? _customPath;
+
   Future<Database> get database async {
+    // Test instances use their own database (no shared state).
+    if (_customPath != null) {
+      if (_database == null) {
+        _database = await _initDatabase();
+      }
+      return _database!;
+    }
     if (_database != null) return _database!;
     if (!_initStarted) {
       _initStarted = true;
@@ -21,12 +44,32 @@ class PlaylistDatabase {
     return _database!;
   }
 
+  /// Closes the underlying database. The test harness uses
+  /// this in tearDown. Production code does not close the
+  /// singleton.
+  Future<void> close() async {
+    final db = _database;
+    _database = null;
+    if (_customPath == null) {
+      // Reset the singleton init guard so a subsequent
+      // `PlaylistDatabase()` can re-initialize after a test.
+      _initStarted = false;
+      _initCompleter = Completer<void>();
+    }
+    await db?.close();
+  }
+
   Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'ytmusix.db');
+    final String path;
+    if (_customPath != null) {
+      path = _customPath!;
+    } else {
+      final dbPath = await getDatabasesPath();
+      path = join(dbPath, 'ytmusix.db');
+    }
     return openDatabase(
       path,
-      version: 8,
+      version: 12,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -130,6 +173,30 @@ class PlaylistDatabase {
       'sizeBytes INTEGER NOT NULL, '
       'cachedAt INTEGER NOT NULL, '
       'lastAccessed INTEGER NOT NULL'
+      ')'
+    );
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS dj_listening_history ('
+      'id           INTEGER PRIMARY KEY AUTOINCREMENT, '
+      'track_id     TEXT    NOT NULL, '
+      'artist_name  TEXT    NOT NULL, '
+      'primary_genre TEXT   DEFAULT \'Unknown\', '
+      'bpm          REAL    DEFAULT 0.0, '
+      'energy_level REAL    DEFAULT 0.5, '
+      'timestamp    INTEGER NOT NULL'
+      ')'
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_dj_history_artist '
+      'ON dj_listening_history(artist_name)'
+    );
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS track_metadata ('
+      'track_id          TEXT PRIMARY KEY, '
+      'silence_start_ms  INTEGER DEFAULT NULL, '
+      'bpm               REAL    DEFAULT NULL, '
+      'genre             TEXT    DEFAULT NULL, '
+      'scanned_at        INTEGER NOT NULL'
       ')'
     );
   }
@@ -245,6 +312,75 @@ class PlaylistDatabase {
         ')'
       );
     }
+    if (oldVersion < 9) {
+      // Phase 1 of the AI DJ engine: listening-history ledger that
+      // serves as the baseline training corpus for the pattern engine.
+      // Trimmed to 300 rows after each write by the application layer
+      // (see DJHistoryLedger). BPM/energy/genre are sourced from the
+      // local library metadata; unknown values fall back to the
+      // DEFAULT clauses below.
+      await db.execute(
+        'CREATE TABLE IF NOT EXISTS dj_listening_history ('
+        'id           INTEGER PRIMARY KEY AUTOINCREMENT, '
+        'track_id     TEXT    NOT NULL, '
+        'artist_name  TEXT    NOT NULL, '
+        'primary_genre TEXT   DEFAULT \'Unknown\', '
+        'bpm          REAL    DEFAULT 0.0, '
+        'energy_level REAL    DEFAULT 0.5, '
+        'timestamp    INTEGER NOT NULL'
+        ')'
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_dj_history_artist '
+        'ON dj_listening_history(artist_name)'
+      );
+    }
+    if (oldVersion < 10) {
+      // Phase 3 of the AI DJ engine: per-track audio metadata
+      // (silence boundary, future BPM/energy/mood vectors). The
+      // silence boundary is computed off-thread by
+      // SilenceScanWorker and written here so the gapless mixer
+      // can pre-trigger crossfades before the trailing dead-air
+      // padding. BPM/energy/mood columns are intentionally
+      // reserved for future phases — this migration only adds
+      // the silence boundary column the spec calls out.
+      await db.execute(
+        'CREATE TABLE IF NOT EXISTS track_metadata ('
+        'track_id          TEXT PRIMARY KEY, '
+        'silence_start_ms  INTEGER DEFAULT NULL, '
+        'scanned_at        INTEGER NOT NULL'
+        ')'
+      );
+    }
+    if (oldVersion < 11) {
+      // Phase 4 of the AI DJ engine: per-track BPM marker used
+      // by the DSP crossfade engine for tempo matching. The
+      // column is added without a default value so existing rows
+      // stay NULL; future writes from the crate miner / manual
+      // user BPM edits populate it. The DSP engine falls back
+      // to the listening-history ledger (dj_listening_history.bpm)
+      // when this column is NULL.
+      await db.execute(
+        'ALTER TABLE track_metadata ADD COLUMN bpm REAL DEFAULT NULL'
+      );
+    }
+    if (oldVersion < 12) {
+      // Phase 5 of the AI DJ engine: per-track `genre` marker
+      // captured at fetch time so the routing service can score
+      // candidates without re-querying the remote scraper. The
+      // column is intentionally nullable: the YouTube Music
+      // `UpNextsDetails` payload exposes `album.name` only as a
+      // weak proxy, so we record whatever signal was on the
+      // wire and let the crate miner / listening-history ledger
+      // fill the gap when the column is NULL.
+      await db.execute(
+        'ALTER TABLE track_metadata ADD COLUMN genre TEXT DEFAULT NULL'
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_track_metadata_genre '
+        'ON track_metadata(genre)'
+      );
+    }
   }
 
   Future<void> insertPlaylist(PlaylistModel playlist) async {
@@ -348,6 +484,10 @@ class PlaylistDatabase {
       'filePath': filePath,
       'downloadedAt': DateTime.now().millisecondsSinceEpoch,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+    // Phase 3: fire-and-forget silence scan for the freshly
+    // committed file. Runs in an isolate; never blocks the
+    // download commit.
+    _scheduleSilenceScan(trackId, filePath);
   }
 
   Future<bool> isTrackDownloaded(String trackId) async {
@@ -355,6 +495,38 @@ class PlaylistDatabase {
     final result = await db.query('downloaded_tracks',
         where: 'id = ?', whereArgs: [trackId], limit: 1);
     return result.isNotEmpty;
+  }
+
+  /// Setter for the silence-scan scheduler. Late-bound (not in
+  /// the constructor) to avoid a cycle between the data and
+  /// audio layers. The host wires this from `main.dart` after
+  /// constructing the scheduler.
+  /// ignore: prefer_final_fields
+  static dynamic _scanScheduler;
+
+  static void setSilenceScanScheduler(dynamic scheduler) {
+    _scanScheduler = scheduler;
+  }
+
+  /// Fires a silence scan for the freshly-cached file. Called
+  /// from [markTrackDownloaded] after the SQL row is written so
+  /// the spec's "trigger in the background immediately following
+  /// any new stream cache commit or file download task" hook is
+  /// satisfied. Fire-and-forget; never throws.
+  void _scheduleSilenceScan(String trackId, String filePath) {
+    final scheduler = _scanScheduler;
+    if (scheduler == null) return;
+    try {
+      // Duck-typed enqueue: the scheduler exposes an
+      // `enqueue(trackId, filePath)` method (see
+      // SilenceScanScheduler). The duck-typed call keeps the
+      // data layer decoupled from the audio layer.
+      // ignore: avoid_dynamic_calls
+      scheduler.enqueue(trackId, filePath);
+    } catch (_) {
+      // Scan scheduling is best-effort; failures must not
+      // bubble up into the download commit path.
+    }
   }
 
   Future<String?> getDownloadedFilePath(String trackId) async {
@@ -369,6 +541,15 @@ class PlaylistDatabase {
     final db = await database;
     return db.query('downloaded_tracks',
         where: 'playlistId = ?', whereArgs: [playlistId]);
+  }
+
+  /// Returns every row in `downloaded_tracks` (no playlist filter).
+  /// Used by the AI DJ crate miner in Phase 2 to assemble the local
+  /// candidate pool. Returns an empty list if the table is empty or
+  /// not yet provisioned.
+  Future<List<Map<String, dynamic>>> rawQueryDownloadedTracks() async {
+    final db = await database;
+    return db.query('downloaded_tracks');
   }
 
   Future<void> removeDownloadedTrack(String trackId) async {
@@ -511,5 +692,163 @@ class PlaylistDatabase {
   Future<List<Map<String, dynamic>>> getFavoriteArtists() async {
     final db = await database;
     return db.query('favorite_artists', orderBy: 'favoritedAt DESC');
+  }
+
+  // ---------------------------------------------------------------------------
+  // track_metadata (Phase 3: silence boundary scanner)
+  // ---------------------------------------------------------------------------
+
+  /// Upserts a single row of track metadata. The worker calls this
+  /// after a successful RMS scan to persist the silence boundary.
+  /// The `conflictAlgorithm.replace` clause means re-scanning a
+  /// track overwrites its previous row.
+  Future<void> upsertTrackMetadata(
+      String trackId, int? silenceStartMs) async {
+    final db = await database;
+    await db.insert(
+      'track_metadata',
+      {
+        'track_id': trackId,
+        'silence_start_ms': silenceStartMs,
+        'scanned_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns the silence boundary (in milliseconds from track
+  /// start) for [trackId], or `null` if the row does not exist
+  /// yet (i.e. the worker has not scanned this track). The mixer
+  /// uses the spec's "duration - 5000ms" fallback when the
+  /// returned value is null.
+  Future<int?> getSilenceStartMs(String trackId) async {
+    final db = await database;
+    final rows = await db.query(
+      'track_metadata',
+      columns: ['silence_start_ms'],
+      where: 'track_id = ?',
+      whereArgs: [trackId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['silence_start_ms'] as int?;
+  }
+
+  /// Returns the full metadata row (trackId, silence boundary,
+  /// scan timestamp) for the given track. Used by the validation
+  /// gate tests to assert the worker wrote a sensible value.
+  Future<Map<String, Object?>?> getTrackMetadata(String trackId) async {
+    final db = await database;
+    final rows = await db.query(
+      'track_metadata',
+      where: 'track_id = ?',
+      whereArgs: [trackId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  /// Phase 4: per-track BPM marker used by the DSP crossfade
+  /// engine for tempo matching.
+  ///
+  /// Returns the authoritative reading for [trackId] in this
+  /// priority order:
+  ///   1. `track_metadata.bpm` — the per-track authoritative
+  ///      marker (set by the crate miner, the user's manual
+  ///      BPM editor, or future automated analyzers).
+  ///   2. `MAX(bpm) FROM dj_listening_history WHERE track_id = ?`
+  ///      — the highest non-zero reading captured by the
+  ///      history ledger (Phase 1). Multiple history rows
+  ///      can accumulate per track as the user listens
+  ///      repeatedly; the highest is the best signal.
+  ///   3. `null` — no BPM is known. The DSP engine treats a
+  ///      null BPM as "skip tempo matching, run a vanilla
+  ///      equal-power crossfade at 1.0x".
+  Future<double?> getTrackBpm(String trackId) async {
+    final db = await database;
+    final metaRows = await db.query(
+      'track_metadata',
+      columns: ['bpm'],
+      where: 'track_id = ? AND bpm IS NOT NULL',
+      whereArgs: [trackId],
+      limit: 1,
+    );
+    if (metaRows.isNotEmpty) {
+      final v = metaRows.first['bpm'];
+      if (v is num && v > 0) return v.toDouble();
+    }
+    final histRows = await db.rawQuery(
+      'SELECT MAX(bpm) AS m FROM dj_listening_history '
+      'WHERE track_id = ? AND bpm > 0',
+      [trackId],
+    );
+    if (histRows.isEmpty) return null;
+    final v = histRows.first['m'];
+    if (v is num && v > 0) return v.toDouble();
+    return null;
+  }
+
+  /// Sets the per-track BPM marker (Phase 4). Pass `null` to
+  /// clear. The DSP engine reads the marker on every
+  /// `crossfadeReady` event so this method is intentionally
+  /// cheap and overwrite-only.
+  Future<void> setTrackBpm(String trackId, double? bpm) async {
+    final db = await database;
+    await db.insert(
+      'track_metadata',
+      {
+        'track_id': trackId,
+        'bpm': bpm,
+        'scanned_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 5: per-track `genre` marker.
+  //
+  // Populated at fetch time by `AudioRepository.getUpNexts`
+  // (the web-scraping pass) so the routing service can score
+  // candidates against `current.genre` with zero extra round
+  // trips. The crate miner also consults this column for tracks
+  // that were never streamed through the YouTube Music endpoint
+  // (e.g. local downloads imported before this migration).
+  // -------------------------------------------------------------------------
+
+  /// Sets the per-track genre marker. Pass `null` to clear.
+  /// Overwrite-only: this is the canonical write surface for
+  /// the genre capture hook. The `scanned_at` column is
+  /// repurposed to record the last-write timestamp so the
+  /// schema stays single-table.
+  Future<void> setTrackGenre(String trackId, String? genre) async {
+    final db = await database;
+    await db.insert(
+      'track_metadata',
+      {
+        'track_id': trackId,
+        'genre': genre,
+        'scanned_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns the genre string for [trackId], or `null` if no
+  /// genre has been recorded. The crate miner / routing
+  /// service use this to enrich candidates without re-querying
+  /// the remote scraper.
+  Future<String?> getTrackGenre(String trackId) async {
+    final db = await database;
+    final rows = await db.query(
+      'track_metadata',
+      columns: ['genre'],
+      where: 'track_id = ? AND genre IS NOT NULL',
+      whereArgs: [trackId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['genre'] as String?;
   }
 }

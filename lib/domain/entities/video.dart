@@ -28,6 +28,25 @@ class Track {
   final List<SourceRef> sources;
   final SourceRef? activeSource;
 
+  /// Primary genre tag for the AI DJ routing layer. Sourced from
+  /// `dj_listening_history` by the [LocalCrateMiner] when mining the
+  /// candidate pool; the rest of the codebase leaves it null. The
+  /// routing service in Phase 2 reads this field to score candidates
+  /// for the Same-Genre, Same-Artist, Similar-Songs, and Smart-DJ
+  /// modes. Stored on the entity (not the history ledger) so the
+  /// crate miner can populate it per-mine-call without an extra DB
+  /// round-trip per candidate.
+  final String? genre;
+
+  /// Per-track tempo marker (beats per minute) used by the
+  /// Phase 4 DSP crossfade engine for pitch-corrected tempo
+  /// matching. Populated lazily by [PlaylistDatabase.getTrackBpm]
+  /// (authoritative `track_metadata.bpm`, falling back to
+  /// `MAX(dj_listening_history.bpm)`); the rest of the codebase
+  /// leaves it null. The DSP engine treats a null BPM as
+  /// "no tempo matching" — the crossfade runs at 1.0x.
+  final double? bpm;
+
   const Track({
     required this.id,
     required this.title,
@@ -41,6 +60,8 @@ class Track {
     this.source = TrackSource.youtube,
     this.sources = const [],
     this.activeSource,
+    this.genre,
+    this.bpm,
   });
 
   Track copyWith({
@@ -56,6 +77,8 @@ class Track {
     TrackSource? source,
     List<SourceRef>? sources,
     SourceRef? activeSource,
+    String? genre,
+    double? bpm,
   }) {
     return Track(
       id: id ?? this.id,
@@ -70,6 +93,8 @@ class Track {
       source: source ?? this.source,
       sources: sources ?? this.sources,
       activeSource: activeSource ?? this.activeSource,
+      genre: genre ?? this.genre,
+      bpm: bpm ?? this.bpm,
     );
   }
 }

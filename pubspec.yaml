@@ -1,7 +1,7 @@
 name: zyp_music
 description: Monochrome - Native Audio Streamer
 publish_to: 'none'
-version: 1.1.11+9
+version: 1.1.12+10
 
 environment:
   sdk: ^3.12.0
@@ -44,6 +44,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   flutter_native_splash: ^2.4.4
   rename: ^3.1.0
+  sqflite_common_ffi: ^2.3.4
 
 flutter_launcher_icons:
   android: true
