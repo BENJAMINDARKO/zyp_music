@@ -2,6 +2,68 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.2.0] — 2026-06-07
+
+### feat(auto-dj): overhaul recommendation engine across all six modes
+
+Implements an eight-spec series (2A–2H) that rebuilds the Auto DJ
+recommendation engine from the data layer up. Addresses the
+user-reported bug where Smart DJ produced five consecutive same-artist
+tracks, plus broader improvements to all five active modes.
+
+#### What changed by mode
+
+- **Smart DJ:** rewritten scoring formula
+  (0.40 artist_diversity + 0.40 genre_similarity + 0.20 temporal),
+  with post-scoring artist hard cap and cold-start handling. The
+  same-artist run bug is now structurally impossible.
+
+- **Same Genre:** added country/region similarity bonus
+  (1.0 same-country / 0.85 same-region / 0.7 different-region).
+  Black Sherif now chains to Sarkodie and Burna Boy ahead of Drake.
+
+- **Same Artist:** year-distance scoring spreads picks across the
+  artist's career instead of clustering by release era.
+
+- **Shuffle Library:** optional genre filter with discoverable sub-menu UI
+  showing genres ranked by track count.
+
+- **Similar Songs:** benefits passively from reliable normalized genre
+  data; existing logic now hits real matches instead of falling
+  through to first-result.
+
+- **Off:** unchanged.
+
+#### Infrastructure added
+
+- MusicBrainz genre normalization with 130-entry dictionary
+- Genre proximity matrix with 81 clusters, 219 edges
+- Country/region asset with 235 ISO codes across 16 regions
+- Background enrichment service with debounced refresh
+- Top-Liked-Songs cache refresh on favorite/unfavorite changes
+- Mixer pipeline now propagates session history for diversity scoring
+
+#### Data pipeline fixes
+
+- `dj_listening_history.primary_genre` now populated with normalized
+  matrix keys (was always "Unknown", making the genre signal dead)
+- Artist genres cached with confidence scores and country codes
+- Schema migrations 13→14→15 with backward compatibility
+
+#### Test coverage
+
+210 tests passing (was ~100). Includes exhaustive 219-edge graph
+validation, Black Sherif bug regression test, and Gate 7b
+cross-consistency check between dictionary and matrix.
+
+#### Deferred (filed as follow-up tickets)
+
+- BPM extraction for crossfade tempo matching
+- `display_name` column cleanup migration
+- `TrackCandidate` metadata audit (genre + country)
+
+---
+
 ## [1.1.13] — 2026-06-06
 
 ### Added
