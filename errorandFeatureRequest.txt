@@ -7,6 +7,7 @@
 | YouTube mixes may fail to load | Medium | Occasional mix playback failure | ✅ Fixed |
 | Pub cache patch overwritten on upgrade | Low | Requires manual re-application | |
 | Samsung GPU BufferQueue timeout | Low | Harmless logcat spam | |
+| Smart DJ: first auto-pick after Armed Standby exits lands in attribute-intersection fallback (no artist-diversity logic) — same-artist churn possible for Track 2 of a fresh session | Low | Minor regression vs. fully-cold-started case; for users who start fresh often, the first auto-pick after any cold start can be a same-artist track. Cause: 80% interceptor hasn't fired for Track 1 when lookahead triggers, so SQL ledger is empty; existing `if (fullHistory.isEmpty)` guard at `_smartDj` line ~994 short-circuits to attribute intersection BEFORE the new diversity formula + cap run. Fix: change the guard to try the new formula path with empty state (cold-start formula already handles empty state by skipping the temporal term); attribute intersection becomes fallback only when the new formula returns null (empty candidate pool). Estimate: 10-line change, mirrors the cold-start formula path that already exists. | 📝 Filed (post-Spec-2C) |
 
 ## Feature Candidates (from futureroadmap.txt)
 - Auto-play recommended videos after track ends — MusicPiped-style infinite radio

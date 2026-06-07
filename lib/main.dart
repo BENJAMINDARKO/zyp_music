@@ -19,6 +19,9 @@ import 'core/services/audio_cache_service.dart';
 import 'core/services/auto_dj_routing_service.dart';
 import 'core/services/dj_history_ledger.dart';
 import 'core/services/genre_enrichment_service.dart';
+import 'core/services/country_bonus_service.dart';
+import 'core/services/genre_normalization_service.dart';
+import 'core/services/genre_similarity_engine.dart';
 import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/local_crate_miner.dart';
@@ -74,10 +77,26 @@ Future<void> main() async {
   // owned by the service so the 1-req/sec rate gate is shared
   // between Auto DJ background enrichment and the per-track
   // enqueue fired by PlayerProvider.
+  // Spec 2A: load the genre normalization dictionary before
+  // constructing the enrichment service — the service
+  // synchronously normalizes tags at write time, so a missing
+  // dictionary would silently produce empty normalized lists.
+  // Spec 2B: load the proximity matrix before any score()
+  // call, same reasoning.
   final musicBrainz = MusicBrainzDataSource();
+  final genreNormalization = GenreNormalizationService();
+  await genreNormalization.initialize();
+  final genreSimilarity = GenreSimilarityEngine();
+  await genreSimilarity.initialize();
+  // Spec 2E: load the country→region map before any
+  // _sameGenre scoring runs. The asset is small (~5KB) and
+  // the service is purely additive on the hot path.
+  final countryBonus = CountryBonusService();
+  await countryBonus.initialize();
   final genreEnrichment = GenreEnrichmentService(
     mb: musicBrainz,
     db: localDatabase,
+    normalization: genreNormalization,
   );
 
   try {
@@ -232,6 +251,9 @@ Future<void> main() async {
       crateMiner: crateMiner,
       historyLedger: historyLedger,
       genreEnrichment: genreEnrichment,
+      similarityEngine: genreSimilarity,
+      genreNormalization: genreNormalization,
+      countryBonusService: countryBonus,
       onlineFetcher: (t) => audioRepository.getUpNexts(t),
       connectivityProbe: () {
         switch (connectivityService.state) {
@@ -267,14 +289,15 @@ Future<void> main() async {
         mode: queueManager.currentMode,
         current: current,
         recentIds: const <String>{},
-        // The mixer's gapless-lookahead trigger fires before the
-        // QueueManager has had a chance to register the upcoming
-        // track into its session history. The artist-penalty
-        // matrix therefore runs with an empty feed from this
-        // path; the QueueManager-driven call site
-        // (`generateNextAutoDJTrack`) is the canonical pipeline
-        // and supplies a populated history.
-        history: const <Track>[],
+        // Spec 2G Fix #5: the gapless mixer's 15-second
+        // lookahead now consumes the QueueManager's
+        // session-history snapshot (capped at 3 tracks,
+        // newest-first) instead of a hard-coded empty list.
+        // The artist-diversity term in Smart DJ and the
+        // artist-decay matrix in Same Genre therefore see
+        // real recent-pick context when the lookahead
+        // fires mid-track.
+        history: queueManager.sessionHistory,
       ),
       silenceResolver: (trackId) => localDatabase.getSilenceStartMs(trackId),
       durationStream: (_) => audioHandler.player.durationStream,
@@ -309,6 +332,7 @@ Future<void> main() async {
       queueManager: queueManager,
       historyLedger: historyLedger,
       genreEnrichmentService: genreEnrichment,
+      playlistDatabase: localDatabase,
       routingService: routingService,
     ));
   } catch (e) {

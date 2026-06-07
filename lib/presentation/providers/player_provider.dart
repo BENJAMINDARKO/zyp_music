@@ -392,38 +392,14 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     final topGenres = <String>[];
     try {
       final favs = await repo.getFavoriteTracks();
-      // In-memory aggregation: count occurrences of each
-      // author, then take the top 5. Mirrors the spec's
-      // `GROUP BY author ORDER BY COUNT(*) DESC LIMIT 5`
-      // shape but runs in Dart over the existing
-      // `getFavoriteTracks()` result so we do not need
-      // a new raw-SQL helper in the database layer.
-      final artistCounts = <String, int>{};
-      final genreCounts = <String, int>{};
-      for (final t in favs) {
-        final a = t.author?.trim();
-        if (a != null && a.isNotEmpty) {
-          artistCounts.update(a, (v) => v + 1, ifAbsent: () => 1);
-        }
-        final g = t.genre?.trim();
-        if (g != null && g.isNotEmpty && g != 'Unknown') {
-          genreCounts.update(g, (v) => v + 1, ifAbsent: () => 1);
-        }
-      }
-      final artistEntries = artistCounts.entries.toList()
-        ..sort((a, b) {
-          final byCount = b.value.compareTo(a.value);
-          if (byCount != 0) return byCount;
-          return a.key.compareTo(b.key);
-        });
-      topArtists.addAll(artistEntries.take(5).map((e) => e.key));
-      final genreEntries = genreCounts.entries.toList()
-        ..sort((a, b) {
-          final byCount = b.value.compareTo(a.value);
-          if (byCount != 0) return byCount;
-          return a.key.compareTo(b.key);
-        });
-      topGenres.addAll(genreEntries.take(5).map((e) => e.key));
+      // Spec 2G Fix #6: extraction to the shared helper so
+      // the boot-time path and the post-favorite debounced
+      // refresh in PlaylistProvider share one canonical
+      // implementation.
+      final computed =
+          AutoDjRoutingService.computeTopLikedArtistsAndGenres(favs);
+      topArtists.addAll(computed.artists);
+      topGenres.addAll(computed.genres);
     } catch (e) {
       AppLogger.log(
         '[SmartDJFusion] getFavoriteTracks() failed during bootstrap: $e',
@@ -1557,20 +1533,47 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Builds a [DJHistoryEntry] from the current track metadata and
   /// hands it to the ledger. The artist name is [Track.author]
   /// (the public-facing "artist" field on the YouTube Music /
-  /// YouTube track model); genre / bpm / energy are not yet
-  /// sourced from the local library (no metadata source exists
-  /// in the current codebase), so they fall through to the
-  /// schema defaults ('Unknown' / 0.0 / 0.5). The Markov engine
-  /// can later enrich these from the AudioDB / MusicBrainz lookup
-  /// service without changing the schema.
+  /// YouTube track model). Spec 2C: the primary genre is read
+  /// from the enrichment service's normalized cache so the
+  /// Smart DJ scoring engine has real genre data to work with
+  /// (audit §9.1, §9.2). BPM and energy are not yet sourced
+  /// from the local library, so they keep the schema defaults.
   Future<void> _logCurrentTrackHistory(Track track) async {
     final ledger = _historyLedger;
     if (ledger == null) return;
+
+    // Read normalized genres without triggering enrichment.
+    // The enrichment service's readNormalized() is cache-only;
+    // misses return an empty list, not a network call.
+    String primaryGenre = 'Unknown';
+    final enrichment = _genreEnrichment;
+    if (enrichment != null) {
+      try {
+        final normalized = await enrichment.readNormalized(track);
+        if (normalized.isNotEmpty) {
+          primaryGenre = normalized.first;
+        } else if (track.genre != null && track.genre!.isNotEmpty) {
+          // Secondary fallback: use the track's existing genre
+          // field if it happens to be populated (rare but
+          // possible — e.g. a track that arrived pre-tagged).
+          primaryGenre = track.genre!;
+        }
+      } catch (e) {
+        // Enrichment read failed; fall through to 'Unknown'.
+        // Do not block ledger write on enrichment errors.
+        AppLogger.log(
+          '[HistoryLog] enrichment read failed for ${track.id}: $e',
+          name: 'PlayerProvider',
+        );
+      }
+    }
+
     try {
       await ledger.logTrack(
         DJHistoryEntry(
           trackId: track.id,
           artistName: track.author ?? 'Unknown',
+          primaryGenre: primaryGenre,
           timestampMs: DateTime.now().millisecondsSinceEpoch,
         ),
       );

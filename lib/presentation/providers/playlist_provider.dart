@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:zyp_music/core/utils/app_logger.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/constants/playlist_sort_mode.dart';
+import '../../core/services/auto_dj_routing_service.dart';
 import '../../domain/entities/playlist.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
@@ -16,9 +18,70 @@ import 'download_provider.dart';
 class PlaylistProvider extends ChangeNotifier {
   final PlaylistRepository _repository;
 
+  /// Spec 2G Fix #6: late-bound routing service reference
+  /// for refreshing the Smart-DJ Liked-Songs cache after
+  /// a user favorites or unfavorites a track. Set via
+  /// [setRoutingService] from `app.dart`. Idempotent.
+  AutoDjRoutingService? _routingService;
+
+  /// Spec 2G Fix #6: debounce timer for the liked-cache
+  /// refresh. 500ms after the last favorite action
+  /// collapses a bulk-favorite operation (e.g., favoriting
+  /// an entire album) into a single refresh.
+  Timer? _likedCacheRefreshTimer;
+  static const Duration _likedCacheRefreshDebounce =
+      Duration(milliseconds: 500);
+
   PlaylistProvider(this._repository) {
     loadSavedPlaylists();
     loadFavorites();
+  }
+
+  /// Spec 2G Fix #6: late-binding setter for the routing
+  /// service. Called from `app.dart` so the debounced
+  /// refresh triggered by favorite actions can reach the
+  /// engine's [AutoDjRoutingService.refreshLikedSongsCache].
+  void setRoutingService(AutoDjRoutingService routingService) {
+    _routingService = routingService;
+  }
+
+  /// Spec 2G Fix #6: schedules a debounced refresh of the
+  /// Smart-DJ Liked-Songs cache. Called at the end of every
+  /// favorite / unfavorite / bulk-favorite method. The 500ms
+  /// debounce collapses a bulk-favorite operation into a
+  /// single refresh — favoriting an album with 12 tracks
+  /// fires [_refreshLikedSongsCache] once at the end, not
+  /// 12 times during the loop.
+  void _scheduleLikedCacheRefresh() {
+    _likedCacheRefreshTimer?.cancel();
+    _likedCacheRefreshTimer =
+        Timer(_likedCacheRefreshDebounce, () {
+      _refreshLikedSongsCache();
+    });
+  }
+
+  /// Spec 2G Fix #6: re-reads the favorites table, recomputes
+  /// the Top 5 Liked Artists and Genres, and pushes the new
+  /// values into [AutoDjRoutingService.refreshLikedSongsCache].
+  /// Failures are logged and swallowed — a stale cache is
+  /// preferable to a hot-path crash on a favorite action.
+  Future<void> _refreshLikedSongsCache() async {
+    final routingService = _routingService;
+    if (routingService == null) return;
+    try {
+      final favs = await _repository.getFavoriteTracks();
+      final computed =
+          AutoDjRoutingService.computeTopLikedArtistsAndGenres(favs);
+      routingService.refreshLikedSongsCache(
+        topLikedArtists: computed.artists,
+        topLikedGenres: computed.genres,
+      );
+    } catch (e) {
+      AppLogger.log(
+        '[FavoritesRefresh] Failed to refresh liked cache: $e',
+        name: 'PlaylistProvider',
+      );
+    }
   }
 
   List<Playlist> _playlists = [];
@@ -223,6 +286,10 @@ class PlaylistProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
+    // Spec 2G Fix #6: debounced refresh of the Smart-DJ
+    // Liked-Songs cache so a fresh favorite is reflected
+    // in Smart DJ's affinity bias within ~500ms.
+    _scheduleLikedCacheRefresh();
   }
 
   bool isAlbumFavorite(String albumId) => _favoriteAlbumIds.contains(albumId);
@@ -273,6 +340,9 @@ class PlaylistProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
+    // Spec 2G Fix #6: debounced refresh (see toggleFavorite
+    // for the same call).
+    _scheduleLikedCacheRefresh();
   }
 
   bool isArtistFavorite(String artistId) => _favoriteArtistIds.contains(artistId);
@@ -299,6 +369,8 @@ class PlaylistProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
+    // Spec 2G Fix #6: debounced refresh (see toggleFavorite).
+    _scheduleLikedCacheRefresh();
   }
 
   Future<Playlist?> getFavoritesPlaylist() async {
@@ -714,5 +786,16 @@ class PlaylistProvider extends ChangeNotifier {
       // Return null on failure so caller can handle it gracefully
       return null;
     }
+  }
+
+  /// Spec 2G Fix #6: cancel any pending debounced refresh
+  /// before the provider is torn down. Without this, the
+  /// timer could fire after dispose, calling
+  /// [AutoDjRoutingService.refreshLikedSongsCache] on a
+  /// service whose owner has been released.
+  @override
+  void dispose() {
+    _likedCacheRefreshTimer?.cancel();
+    super.dispose();
   }
 }

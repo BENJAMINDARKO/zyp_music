@@ -22,6 +22,7 @@ import 'core/services/connectivity_service.dart';
 import 'core/services/dj_history_ledger.dart';
 import 'core/services/queue_manager.dart';
 import 'core/services/genre_enrichment_service.dart';
+import 'data/datasources/local/playlist_database.dart';
 import 'core/audio/gapless_queue_mixer.dart';
 
 class MonochromeApp extends StatelessWidget {
@@ -52,6 +53,11 @@ class MonochromeApp extends StatelessWidget {
   /// track transition fires background enrichment.
   final GenreEnrichmentService genreEnrichmentService;
 
+  /// Spec 2H: the [PlaylistDatabase] singleton is exposed
+  /// to the widget tree so the Shuffle Library filter
+  /// sub-menu can query `getGenreClusterCounts()` on open.
+  final PlaylistDatabase playlistDatabase;
+
   const MonochromeApp({
     super.key,
     required this.playlistRepository,
@@ -67,6 +73,7 @@ class MonochromeApp extends StatelessWidget {
     required this.mixer,
     required this.dspEngine,
     required this.genreEnrichmentService,
+    required this.playlistDatabase,
     this.routingService,
   });
 
@@ -74,12 +81,22 @@ class MonochromeApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<PlaylistDatabase>.value(value: playlistDatabase),
         ChangeNotifierProvider.value(value: settingsProvider),
         ChangeNotifierProvider.value(value: hybridCache),
         ChangeNotifierProvider.value(value: connectivityService),
         ChangeNotifierProvider.value(value: queueManager),
         ChangeNotifierProvider(
-          create: (_) => PlaylistProvider(playlistRepository),
+          create: (_) {
+            // Spec 2G Fix #6: wire the routing service into
+            // the PlaylistProvider so debounced post-favorite
+            // refreshes can reach [AutoDjRoutingService.refreshLikedSongsCache].
+            final provider = PlaylistProvider(playlistRepository);
+            if (routingService != null) {
+              provider.setRoutingService(routingService!);
+            }
+            return provider;
+          },
         ),
         ChangeNotifierProvider(
           create: (_) => ChartsProvider(chartsRepository),

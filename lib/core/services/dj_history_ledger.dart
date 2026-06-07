@@ -20,11 +20,21 @@ class DJHistoryEntry {
   final double energyLevel;
   final int timestampMs;
 
+  /// Spec 2C: `primaryGenre` is now required. The previous default
+  /// of `'Unknown'` masked the data-pipeline bug at audit §9.1, §9.2
+  /// (every history row wrote `'Unknown'` because the production
+  /// writer at `player_provider._logCurrentTrackHistory` never set
+  /// it). Forcing the parameter at the Dart level ensures any new
+  /// caller that forgets the genre gets a compile error, not a
+  /// silently degraded row. The ledger's `logTrack` accepts the
+  /// explicit `'Unknown'` literal for cache-miss fallback rows —
+  /// see the spec's Section A.2 producer code in
+  /// `player_provider._logCurrentTrackHistory`.
   const DJHistoryEntry({
     this.id,
     required this.trackId,
     required this.artistName,
-    this.primaryGenre = 'Unknown',
+    required this.primaryGenre,
     this.bpm = 0.0,
     this.energyLevel = 0.5,
     required this.timestampMs,

@@ -64,6 +64,15 @@ class Track {
   /// "no tempo matching" — the crossfade runs at 1.0x.
   final double? bpm;
 
+  /// ISO 3166-1 alpha-2 country code for the track's primary
+  /// artist, sourced from MusicBrainz's `country` field at enrichment
+  /// time and looked up at mine-time by [LocalCrateMiner] against
+  /// the `artist_genres.country_code` column. Nullable for bands,
+  /// historical artists, and any pre-Spec 2E cache row. Used by
+  /// [CountryBonusService] in Same-Genre scoring — Smart DJ
+  /// deliberately ignores it. Spec 2E §2.
+  final String? country;
+
   const Track({
     required this.id,
     required this.title,
@@ -79,6 +88,7 @@ class Track {
     this.activeSource,
     this.genre,
     this.bpm,
+    this.country,
   });
 
   Track copyWith({
@@ -96,6 +106,7 @@ class Track {
     SourceRef? activeSource,
     String? genre,
     double? bpm,
+    String? country,
   }) {
     return Track(
       id: id ?? this.id,
@@ -112,6 +123,7 @@ class Track {
       activeSource: activeSource ?? this.activeSource,
       genre: genre ?? this.genre,
       bpm: bpm ?? this.bpm,
+      country: country ?? this.country,
     );
   }
 }

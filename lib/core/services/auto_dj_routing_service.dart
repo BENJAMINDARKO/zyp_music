@@ -5,9 +5,12 @@ import 'package:flutter/foundation.dart';
 import '../../domain/entities/auto_dj_mode.dart';
 import '../../domain/entities/video.dart';
 import '../utils/app_logger.dart';
+import 'country_bonus_service.dart';
 import 'dj_history_ledger.dart';
 import 'genre_enrichment_service.dart';
+import 'genre_normalization_service.dart';
 import 'genre_proximity_graph.dart';
+import 'genre_similarity_engine.dart';
 import 'local_crate_miner.dart';
 
 /// Network-connectivity signal used by the routing service. The
@@ -32,10 +35,11 @@ typedef ConnectivityProbe = NetworkAvailability Function();
 /// into this primitive-only structure before crossing into the
 /// background isolate. Reconstruction of the lightweight
 /// `Map<String, dynamic>` shapes happens inside
-/// [_smartDjIsolateScore], and the engine's core
+/// [smartDjIsolateScore], and the engine's core
 /// [AutoDjRoutingService] (which holds the database references)
 /// is never reachable from the isolate thread.
-class _SmartDjScoreInput {
+@visibleForTesting
+class SmartDjScoreInput {
   final List<Map<String, dynamic>> candidates;
   final List<Map<String, dynamic>> stateEntries;
   final List<Map<String, dynamic>> fullHistory;
@@ -43,81 +47,149 @@ class _SmartDjScoreInput {
   final List<String> topLikedGenres;
   final double beta;
 
-  const _SmartDjScoreInput({
+  /// Spec 2C: precomputed per-candidate genre similarity, looked
+  /// up on the main isolate where the [GenreSimilarityEngine]
+  /// lives (the matrix cannot cross the `compute()` boundary).
+  /// Keyed by `candidate['id']`. Missing keys fall through to
+  /// 0.0 — same as the `_similarityEngine` null-degradation path.
+  final Map<String, double> precomputedGenreSimilarity;
+
+  /// Spec 2C: lowercased artist names from the QueueManager
+  /// session history (the `history` parameter of [resolveNext]).
+  /// Used by the new `artist_diversity` term — a candidate whose
+  /// artist appears in this set gets 0.3 (recent), the seed
+  /// artist gets 0.0, and anything else gets 1.0.
+  final List<String> recentArtists;
+
+  /// Spec 2C: cold-start indicator. When the ledger has < 3
+  /// rows of history, the temporal term is dropped entirely and
+  /// the formula degrades to `0.5·diversity + 0.5·genre_similarity`.
+  final bool useColdStart;
+
+  const SmartDjScoreInput({
     required this.candidates,
     required this.stateEntries,
     required this.fullHistory,
     required this.topLikedArtists,
     required this.topLikedGenres,
     required this.beta,
+    required this.precomputedGenreSimilarity,
+    required this.recentArtists,
+    required this.useColdStart,
   });
 }
 
 /// Top-level entry point for the Smart-DJ scoring
 /// `compute()` isolate. Reconstructs the lightweight scoring
-/// context from the serialised payload, runs the Markov +
-/// Liked-Song fusion per candidate, and returns a flat
+/// context from the serialised payload, runs the corrected
+/// three-term formula per candidate, and returns a flat
 /// `List<Map<String, dynamic>>` of `{trackId, score}` so the
 /// caller can pair it back with the in-memory candidate pool
 /// without exposing any model objects across the boundary.
-List<Map<String, dynamic>> _smartDjIsolateScore(
-    _SmartDjScoreInput input) {
+///
+/// Spec 2C formula:
+///
+///   score = 0.40·artist_diversity
+///         + 0.40·genre_similarity (precomputed on main isolate)
+///         + 0.20·temporal_pattern   (Laplace-smoothed transition
+///                                    frequency over the seed artist)
+///
+/// Cold-start (history < 3 rows): drops the temporal term,
+///   score = 0.50·diversity + 0.50·genre_similarity
+///
+/// All artist comparisons are lowercased on both sides to
+/// prevent the "Black Sherif" vs "black sherif" case-sensitivity
+/// trap flagged in the spec's "what could still go wrong" notes.
+@visibleForTesting
+List<Map<String, dynamic>> smartDjIsolateScore(
+    SmartDjScoreInput input) {
   final topLikedArtistsLower =
       input.topLikedArtists.map((a) => a.toLowerCase()).toSet();
   final topLikedGenresLower = input.topLikedGenres.toSet();
 
   // Reconstruct the state + fullHistory as `Map<String, dynamic>`
-  // lookups compatible with the existing `_markovScore` shape
-  // (the engine reads `state[i].trackId`, `state[i].artistName`,
-  // `state[i].primaryGenre`).
+  // lookups compatible with the seed/temporal logic (the engine
+  // reads `state[i].trackId`, `state[i].artistName`).
   final state = input.stateEntries;
   final fullHistory = input.fullHistory;
+  final recentArtistSet = input.recentArtists.toSet();
+
+  // Seed = most recent history row. Lowercased once for
+  // case-insensitive comparison with the candidate artist
+  // (which is also lowercased in `_smartDj` before serialisation).
+  final seedArtistLower = state.isNotEmpty
+      ? (state.first['artistName'] as String?)?.toLowerCase()
+      : null;
+
+  // Precompute temporal denominator once across all candidates.
+  // The formula counts how often in `fullHistory` the seed artist
+  // was followed by some other artist, then Laplace-smoothed by
+  // the number of distinct successor artists. This is an
+  // empirical transition frequency, not a state-context lookup —
+  // i.e. "across the last 50 rows, how often has the seed
+  // artist's slot transitioned into artist X?"
+  final Map<String, int> transitionFreq = <String, int>{};
+  int totalTransitionsFromSeed = 0;
+  if (!input.useColdStart && seedArtistLower != null) {
+    for (int i = 0; i < fullHistory.length - 1; i++) {
+      final current =
+          (fullHistory[i]['artistName'] as String?)?.toLowerCase();
+      final next =
+          (fullHistory[i + 1]['artistName'] as String?)?.toLowerCase();
+      if (current == seedArtistLower && next != null && next != seedArtistLower) {
+        transitionFreq[next] = (transitionFreq[next] ?? 0) + 1;
+        totalTransitionsFromSeed++;
+      }
+    }
+  }
+  // Laplace smoothing: denominator = (count + distinct_successors)
+  // so an unseen artist gets 1 / (N + |S|), not 0. Falls back to
+  // 1 if there are zero observed transitions.
+  final distinctSuccessors = transitionFreq.length;
+  final temporalDenominator = totalTransitionsFromSeed +
+      (distinctSuccessors > 0 ? distinctSuccessors : 1);
 
   final results = <Map<String, dynamic>>[];
   for (final c in input.candidates) {
-    // Re-implement `_markovScore` here because the static
-    // boundary cannot reach the engine's instance method.
-    // The arithmetic mirrors the instance helper 1:1.
-    final a = state.isEmpty ? null : state.first;
+    final candidateId = c['id'] as String;
     final candidateArtistLower = (c['author'] as String?)?.toLowerCase();
-    final artistMatch = a != null &&
-        candidateArtistLower != null &&
-        (a['artistName'] as String).toLowerCase() == candidateArtistLower;
-    final genreMatch = a != null &&
-        (a['primaryGenre'] as String) != 'Unknown' &&
-        (a['primaryGenre'] as String) == c['genre'];
 
-    int matchingContext = 0;
-    int transitionsToCandidate = 0;
-    if (fullHistory.length > state.length) {
-      for (var i = 0; i + state.length < fullHistory.length; i++) {
-        final window = fullHistory.sublist(i, i + state.length);
-        bool ok = true;
-        for (var j = 0; j < state.length; j++) {
-          if (window[j]['trackId'] != state[j]['trackId']) {
-            ok = false;
-            break;
-          }
-        }
-        if (!ok) continue;
-        matchingContext++;
-        final next = fullHistory[i + state.length];
-        if (next['trackId'] == c['id'] ||
-            (candidateArtistLower != null &&
-                (next['artistName'] as String).toLowerCase() ==
-                    candidateArtistLower &&
-                next['primaryGenre'] == c['genre'])) {
-          transitionsToCandidate++;
-        }
-      }
+    // Term 1: artist diversity
+    //   0.0 if candidate == seed artist (avoid immediate repeats)
+    //   0.3 if candidate is in the recent session history
+    //   1.0 otherwise
+    //   0.5 for unknown/empty artist — neutral, neither
+    //   penalised nor rewarded.
+    double diversity;
+    if (candidateArtistLower == null || candidateArtistLower.isEmpty) {
+      diversity = 0.5;
+    } else if (seedArtistLower != null &&
+        candidateArtistLower == seedArtistLower) {
+      diversity = 0.0;
+    } else if (recentArtistSet.contains(candidateArtistLower)) {
+      diversity = 0.3;
+    } else {
+      diversity = 1.0;
     }
-    final temporal = matchingContext == 0
-        ? 0.0
-        : transitionsToCandidate / matchingContext;
 
-    final markov = (artistMatch ? 0.5 : 0.0) +
-        (genreMatch ? 0.3 : 0.0) +
-        0.2 * temporal;
+    // Term 2: genre similarity (precomputed on the main isolate).
+    // Missing key = 0.0 (graceful degradation when
+    // `_similarityEngine` is null).
+    final genreSim = input.precomputedGenreSimilarity[candidateId] ?? 0.0;
+
+    // Term 3: temporal pattern (skipped in cold-start).
+    double temporal = 0.0;
+    if (!input.useColdStart && candidateArtistLower != null) {
+      final freq = transitionFreq[candidateArtistLower] ?? 0;
+      temporal = (freq + 1) / temporalDenominator;
+    }
+
+    // Apply the formula weights.
+    final markov = input.useColdStart
+        ? (diversity * 0.50) + (genreSim * 0.50)
+        : (diversity * 0.40) +
+            (genreSim * 0.40) +
+            (temporal * 0.20);
 
     // Liked-Song affinity with the null-genre reallocation
     // guard. The static helper is exposed as a top-level
@@ -131,7 +203,7 @@ List<Map<String, dynamic>> _smartDjIsolateScore(
 
     final blended = (1.0 - input.beta) * markov + input.beta * affinity;
     results.add(<String, dynamic>{
-      'trackId': c['id'],
+      'trackId': candidateId,
       'score': blended,
     });
   }
@@ -185,6 +257,44 @@ class AutoDjRoutingService {
   /// fallback.
   final GenreEnrichmentService? _genreEnrichment;
 
+  /// Spec 2B / 2C: the proximity-matrix-backed similarity
+  /// engine. The new Smart-DJ scoring formula precomputes
+  /// per-candidate genre similarity on the main isolate (where
+  /// the matrix lives) and passes a scalar `Map<id, score>` to
+  /// the scoring isolate — the matrix itself never crosses the
+  /// `compute()` boundary. Optional so test rigs that don't need
+  /// it can omit it; when null, every candidate's
+  /// `genre_similarity` term collapses to 0.0 (the 0.40 weight
+  /// is unused, equivalent to running the old pure-Markov
+  /// engine). Graceful degradation, not a crash.
+  final GenreSimilarityEngine? _similarityEngine;
+
+  /// Spec 2D: optional normalization service used by the
+  /// Shuffle Library genre filter. When a filter is active,
+  /// every crate track's raw `genre` is passed through
+  /// [GenreNormalizationService.normalize] so the comparison
+  /// is matrix-key-to-matrix-key (not raw-MB-tag-to-matrix
+  /// key). Optional so legacy call sites that build the
+  /// engine without a normalization service can omit it;
+  /// when null AND a filter is set, the engine logs and
+  /// silently falls back to the unfiltered pool (same as
+  /// the `<5 matches` fallback). Graceful degradation, not
+  /// a crash.
+  final GenreNormalizationService? _genreNormalization;
+
+  /// Spec 2E: country-aware Same-Genre bonus. Reads the
+  /// seed and candidate `Track.country` values (populated by
+  /// the crate miner from `artist_genres.country_code`) and
+  /// multiplies the final candidate score by
+  /// `CountryBonusService.scoreFor(...)`. Optional so legacy
+  /// rigs that don't need it can omit it; when null, the
+  /// bonus is bypassed entirely (treated as 1.0). The
+  /// service is purely additive — the rest of the scoring
+  /// shape is preserved. Smart DJ deliberately ignores this
+  /// bonus to keep the genre-similarity signal unweighted by
+  /// geography.
+  final CountryBonusService? _countryBonusService;
+
   /// Smart DJ bootstrap-fusion cache: the number of rows in
   /// `dj_listening_history` at last invalidation. Read directly
   /// by [likedAffinityWeight] (the linear-decay matrix) so
@@ -222,6 +332,26 @@ class AutoDjRoutingService {
   /// from any caller.
   static const int _likedBiasWindow = 150;
 
+  /// Spec 2D: minimum size of the genre-filtered pool before
+  /// the Shuffle Library engine silently falls back to the
+  /// unfiltered crate. Below this threshold, the user has
+  /// filtered so aggressively that any further restriction
+  /// would degrade to a single-track re-pick loop, which
+  /// defeats the purpose of a "shuffle". Tunable: bump to
+  /// 10+ for users with large libraries who want stricter
+  /// matching; lower to 3 for users with small libraries
+  /// who still want genre-based narrowing.
+  static const int _minFilteredPoolSize = 5;
+
+  /// Spec 2D: active filter for Shuffle Library mode. When
+  /// non-null, the engine restricts the crate to tracks
+  /// whose normalized genre (matrix key) matches this value.
+  /// Set via [setShuffleLibraryGenreFilter]; cleared via
+  /// passing null. Thread-local state (no isolate hop
+  /// required) — the filter is applied on the main isolate
+  /// before the rolling-window block is generated.
+  String? _shuffleLibraryGenreFilter;
+
   /// The peak β at cold start. The spec defines the 60%
   /// Liked / 40% Live ratio at H=0; this is the upper bound
   /// of the linear decay.
@@ -234,6 +364,9 @@ class AutoDjRoutingService {
     OnlineSimilarFetcher? onlineFetcher,
     ConnectivityProbe? connectivityProbe,
     GenreEnrichmentService? genreEnrichment,
+    GenreSimilarityEngine? similarityEngine,
+    GenreNormalizationService? genreNormalization,
+    CountryBonusService? countryBonusService,
     Random? random,
     int initialHistoryCount = 0,
     List<String> topLikedArtists = const <String>[],
@@ -244,6 +377,9 @@ class AutoDjRoutingService {
         _onlineFetcher = onlineFetcher,
         _connectivityProbe = connectivityProbe ?? (() => NetworkAvailability.unknown),
         _genreEnrichment = genreEnrichment,
+        _similarityEngine = similarityEngine,
+        _genreNormalization = genreNormalization,
+        _countryBonusService = countryBonusService,
         _random = random ?? Random(),
         _cachedHistoryCount = initialHistoryCount,
         _topLikedArtists = List<String>.unmodifiable(topLikedArtists),
@@ -272,6 +408,56 @@ class AutoDjRoutingService {
       'historyCount=$initialHistoryCount '
       'topArtists=$topLikedArtists '
       'topGenres=$topLikedGenres',
+      name: _logTag,
+    );
+  }
+
+  /// Spec 2G Fix #6: refreshes the Top 5 Liked Artists /
+  /// Genres cache. Called by the favorites layer (e.g.,
+  /// `PlaylistProvider`) after the user favorites or
+  /// unfavorites a track. Upstream debounce (500ms) handles
+  /// bulk-favoriting an album efficiently — this method
+  /// runs once per debounced batch, not per action.
+  ///
+  /// The pushed values replace the existing caches
+  /// immediately. The caller is responsible for
+  /// recomputing the top-N lists from the current
+  /// `favorite_tracks` table state; this method does not
+  /// query the database.
+  void refreshLikedSongsCache({
+    required List<String> topLikedArtists,
+    required List<String> topLikedGenres,
+  }) {
+    _topLikedArtists = List<String>.unmodifiable(topLikedArtists);
+    _topLikedGenres = List<String>.unmodifiable(topLikedGenres);
+    AppLogger.log(
+      '[SmartDJFusion] Refreshed liked-songs cache: '
+      'topArtists=${_topLikedArtists.length} '
+      'topGenres=${_topLikedGenres.length}',
+      name: _logTag,
+    );
+  }
+
+  /// Spec 2D: get the active Shuffle Library genre filter
+  /// (a matrix key, e.g. `"Afrobeats"` or `"Hip-Hop"`), or
+  /// null if no filter is active. Surfaced as a getter so
+  /// the UI can display the current filter in the bottom
+  /// sheet.
+  String? get shuffleLibraryGenreFilter => _shuffleLibraryGenreFilter;
+
+  /// Spec 2D: set the active Shuffle Library genre filter
+  /// (a matrix key) or clear it by passing null. The change
+  /// takes effect on the next [resolveNext] call. Calling
+  /// this method does NOT re-shuffle the current block —
+  /// the rolling-window block continues to consume from
+  /// the OLD pool until exhaustion, then regenerates from
+  /// the new pool. This matches the spec's "silent
+  /// fallback" intent: a mid-block filter change should
+  /// never produce a jarring cut to a different artist.
+  void setShuffleLibraryGenreFilter(String? matrixKey) {
+    _shuffleLibraryGenreFilter = matrixKey;
+    AppLogger.log(
+      '[ShuffleLibraryFilter] Filter set to: $matrixKey',
       name: _logTag,
     );
   }
@@ -413,10 +599,10 @@ class AutoDjRoutingService {
         return _sameGenre(current, exclude, history);
 
       case AutoDJMode.sameArtist:
-        return _sameArtist(current, exclude);
+        return _sameArtist(current, exclude, history);
 
       case AutoDJMode.smartDj:
-        return _smartDj(current, exclude);
+        return _smartDj(current, exclude, history);
     }
   }
 
@@ -486,7 +672,36 @@ class AutoDjRoutingService {
       AppLogger.log('Shuffle Library: crate is empty.', name: _logTag);
       return null;
     }
-    final allIds = crate.map((t) => t.id).toList();
+
+    // Spec 2D: apply the active genre filter (if any) to
+    // produce a `pool` that drives the rolling-window block.
+    // The unfiltered `crate` stays available as the
+    // fallback target when the filter is too narrow. The
+    // filter is a matrix key (e.g. "Afrobeats"), not a raw
+    // MB tag — we run every candidate's raw `genre` through
+    // [GenreNormalizationService.normalize] to get a
+    // matrix-key-to-matrix-key comparison.
+    final pool = _applyShuffleLibraryGenreFilter(crate);
+    final isFiltered =
+        _shuffleLibraryGenreFilter != null && pool != crate;
+    final List<Track> blockSource;
+    if (isFiltered) {
+      // Inside the filtered branch, both the filter key
+      // and the filtered pool are non-null by construction
+      // (see `isFiltered = filter != null && pool != crate`
+      // above), so we can read them without further guards.
+      final filterKey = _shuffleLibraryGenreFilter;
+      final filteredPool = pool;
+      AppLogger.log(
+        'Shuffle Library: filter "$filterKey" matched '
+        '${filteredPool.length}/${crate.length} tracks',
+        name: _logTag,
+      );
+      blockSource = filteredPool;
+    } else {
+      blockSource = crate;
+    }
+    final allIds = blockSource.map((t) => t.id).toList();
 
     if (_currentBlockTrackIds.isEmpty) {
       _generateNextBlock(allIds);
@@ -513,7 +728,9 @@ class AutoDjRoutingService {
     }
 
     if (pickedId == null) {
-      final fallback = crate.where((t) => !exclude.contains(t.id)).toList();
+      final fallbackSource =
+          isFiltered ? crate : blockSource;
+      final fallback = fallbackSource.where((t) => !exclude.contains(t.id)).toList();
       if (fallback.isEmpty) {
         AppLogger.log('Shuffle Library: No fallback tracks available.', name: _logTag);
         return null;
@@ -528,6 +745,57 @@ class AutoDjRoutingService {
     final track = crate.firstWhere((t) => t.id == pickedId);
     AppLogger.log('Shuffle Library: Picked track: ${track.title} (${track.id}), remaining in block: ${_currentBlockTrackIds.length}', name: _logTag);
     return track;
+  }
+
+  /// Spec 2D: applies [_shuffleLibraryGenreFilter] (if set)
+  /// to [crate], normalising each track's raw `genre`
+  /// through [GenreNormalizationService.normalize] and
+  /// keeping only tracks whose normalised genre matches the
+  /// filter matrix key. Returns the original [crate]
+  /// unchanged when:
+  ///   * no filter is set (the common case),
+  ///   * the filter is set but [GenreNormalizationService]
+  ///     was not injected (graceful degradation),
+  ///   * the filtered pool would have fewer than
+  ///     [_minFilteredPoolSize] matches (silent fallback to
+  ///     avoid degenerate single-track shuffle loops).
+  ///
+  /// The returned reference is either `crate` (no
+  /// filtering happened) or a new `List<Track>` (filter
+  /// applied). The caller checks reference identity to
+  /// detect the filtered case for logging.
+  List<Track> _applyShuffleLibraryGenreFilter(List<Track> crate) {
+    final filter = _shuffleLibraryGenreFilter;
+    if (filter == null) return crate;
+    final normalizer = _genreNormalization;
+    if (normalizer == null) {
+      AppLogger.warning(
+        '[ShuffleLibraryFilter] Filter "$filter" requested but no '
+        'GenreNormalizationService injected; falling back to '
+        'unfiltered pool.',
+        name: _logTag,
+      );
+      return crate;
+    }
+    final filtered = <Track>[];
+    for (final track in crate) {
+      final raw = track.genre;
+      if (raw == null || raw.isEmpty) continue;
+      final canonical = normalizer.normalize(raw);
+      if (canonical == filter) {
+        filtered.add(track);
+      }
+    }
+    if (filtered.length < _minFilteredPoolSize) {
+      AppLogger.warning(
+        '[ShuffleLibraryFilter] Filter "$filter" matched '
+        '${filtered.length} tracks (< $_minFilteredPoolSize); '
+        'silent fallback to unfiltered pool.',
+        name: _logTag,
+      );
+      return crate;
+    }
+    return filtered;
   }
 
   Future<Track?> _similarSongs(Track current, Set<String> exclude) async {
@@ -695,21 +963,30 @@ class AutoDjRoutingService {
 
     // Score every harvested candidate with the
     // 3-track extended memory artist-penalization matrix.
-    // S_final = W_path * A_penalty where:
+    // S_final = W_path * A_penalty * C_bonus where:
     //   * W_path comes from the genre graph (1-hop lookup with
     //     a 0.55 floor for multi-hop genres).
     //   * A_penalty is 0.15 / 0.40 / 0.65 / 1.0 depending on
     //     whether the candidate's artist matches history[0],
     //     history[1], history[2], or none of them.
+    //   * C_bonus is 1.0 / 0.85 / 0.7 / 1.0 (same country /
+    //     same region / different region / either side
+    //     unknown) — Spec 2E. Multiplicative, applied last so
+    //     it can't mask a strong artist-already-played penalty
+    //     and can't revive a zero-score path.
     // The list is walked in BFS priority order so the
     // cumulative-sum anchor stays deterministic; the roulette
     // pointer is the only stochastic component.
     final scoredPool = <MapEntry<Track, double>>[];
     double cumulativeScoreSum = 0.0;
+    final countryBonus = _countryBonusService;
     for (final track in rawCandidates) {
       final wPath = _pathProximity(current.genre, track.genre);
       final aPenalty = _artistDecayPenalty(track, history);
-      final finalScore = wPath * aPenalty;
+      final cBonus = countryBonus == null
+          ? 1.0
+          : countryBonus.scoreFor(current.country, track.country);
+      final finalScore = wPath * aPenalty * cBonus;
       if (finalScore > 0.0) {
         cumulativeScoreSum += finalScore;
         scoredPool.add(MapEntry<Track, double>(track, cumulativeScoreSum));
@@ -903,51 +1180,97 @@ class AutoDjRoutingService {
     return a.toLowerCase() == b.toLowerCase();
   }
 
+  /// Spec 2F: same-artist year-distance bonus. Multiplicative
+  /// soft scoring — a candidate that is far in years from
+  /// [anchorYear] is still selectable, just with a lower
+  /// roulette weight. This rewards album-adjacent playback
+  /// (e.g. track 1 of 2019 album followed by track 2 of the
+  /// same album) without hard-excluding deluxe reissues or
+  /// later-period B-sides.
+  ///
+  /// Mapping (linear interpolation between the spec's four
+  /// anchor points):
+  ///   distance 0  → 1.0   (same year / deluxe edition)
+  ///   distance 1  → 0.7   (closely related — e.g. deluxe vs
+  ///                        standard of the same album cycle)
+  ///   distance 2  → 0.55  (interpolated)
+  ///   distance 3  → 0.4   (moderate — next album)
+  ///   distance 4  → 0.3   (interpolated)
+  ///   distance 5+ → 0.2   (floor — far catalogue entry)
+  ///
+  /// Either year null returns 1.0 (neutral — the bonus is
+  /// "unknown", not "zero"). The Track.year column is nullable
+  /// in the schema; bands and pre-1980 catalogue entries
+  /// frequently lack a release year, so we never penalise
+  /// missing data.
+  double _yearDistanceBonus(int? anchorYear, int? trackYear) {
+    if (anchorYear == null || trackYear == null) return 1.0;
+    final distance = (trackYear - anchorYear).abs();
+    if (distance == 0) return 1.0;
+    if (distance == 1) return 0.7;
+    if (distance == 2) return 0.55;
+    if (distance == 3) return 0.4;
+    if (distance == 4) return 0.3;
+    return 0.2;
+  }
+
   /// Same Artist: strict artist match (the spec's "Every single
-  /// appended song must belong to the said artist"). The genre
-  /// graph is consulted only to expand the **search breadth** of
-  /// the candidate pool — the artist filter is still applied to
-  /// every candidate, so a candidate from a neighbouring genre is
-  /// only accepted if its `author` string equals the current
-  /// track's `author`.
-  Future<Track?> _sameArtist(Track current, Set<String> exclude) async {
+  /// appended song must belong to the said artist"). Spec 2F
+  /// adds a soft year-distance bonus — the pool is every
+  /// same-artist candidate (online + local crate), and the
+  /// roulette wheel is biased toward tracks closer in
+  /// [Track.year] to the most recent same-artist play in
+  /// [history] (falling back to the seed's year). The genre
+  /// BFS sweep from the pre-2F implementation is dropped: with
+  /// year-distance scoring, "any same-artist track" is the
+  /// right shape for the pool — genre adjacency is no longer
+  /// the priority signal.
+  Future<Track?> _sameArtist(
+    Track current,
+    Set<String> exclude,
+    List<Track> history,
+  ) async {
     final artist = current.author;
     if (artist == null || artist.isEmpty) {
       AppLogger.log('Same Artist: Seed artist is null or empty.', name: _logTag);
       return null;
     }
-    final seedGenre = current.genre;
+
+    // Spec 2F: find the anchor year. If the user just played
+    // another track by the same artist (history[0] is a
+    // same-artist hit), use that track's year so the
+    // year-distance is measured from the "current album
+    // session" the user is in, not from the track that just
+    // ended. If no recent same-artist play exists, fall
+    // back to the seed's own year.
+    int? anchorYear = current.year;
+    for (final h in history) {
+      if (_artistMatches(h.author, artist)) {
+        anchorYear = h.year ?? anchorYear;
+        break;
+      }
+    }
+
+    // Collect every candidate (online + local crate). Dedupe
+    // by track id so an online-favoured track isn't
+    // double-counted if the miner also surfaces it.
+    final seenIds = <String>{};
+    final uniqueCandidates = <Track>[];
     final fetcher = _onlineFetcher;
-    final isOnline = fetcher != null && _connectivityProbe() == NetworkAvailability.online;
-
-    AppLogger.log('Same Artist: artist=$artist, seedGenre=$seedGenre, isOnline=$isOnline', name: _logTag);
-
+    final isOnline =
+        fetcher != null && _connectivityProbe() == NetworkAvailability.online;
     if (isOnline) {
       try {
         final online = await fetcher(current);
         if (online != null && online.isNotEmpty) {
-          final onlineCandidates = online.where((t) => !exclude.contains(t.id)).toList();
-          AppLogger.log('Same Artist: online track pool: ${onlineCandidates.length} tracks', name: _logTag);
-          
-          for (final g in _graph.searchBreadth(seedGenre)) {
-            final match = onlineCandidates.firstWhere(
-              (t) => _artistMatches(t.author, artist) && (t.genre ?? 'Unknown') == g,
-              orElse: () => const _SentinelTrack(),
-            );
-            if (match is! _SentinelTrack) {
-              AppLogger.log('Same Artist: Online match found in neighboring genre "$g": ${match.title} (${match.id})', name: _logTag);
-              return match;
-            }
+          for (final t in online) {
+            if (exclude.contains(t.id)) continue;
+            if (seenIds.add(t.id)) uniqueCandidates.add(t);
           }
-          
-          final matchAny = onlineCandidates.firstWhere(
-            (t) => _artistMatches(t.author, artist),
-            orElse: () => const _SentinelTrack(),
+          AppLogger.log(
+            'Same Artist: online track pool: ${uniqueCandidates.length} tracks',
+            name: _logTag,
           );
-          if (matchAny is! _SentinelTrack) {
-            AppLogger.log('Same Artist: Online match found in any genre: ${matchAny.title} (${matchAny.id})', name: _logTag);
-            return matchAny;
-          }
         }
       } catch (e) {
         AppLogger.log('Online same-artist fetch failed: $e', name: _logTag);
@@ -955,34 +1278,96 @@ class AutoDjRoutingService {
     }
 
     final crate = await _crateMiner.mine(excludeIds: exclude);
-    AppLogger.log('Same Artist: local crate pool: ${crate.length} tracks', name: _logTag);
-    if (crate.isEmpty) return null;
+    AppLogger.log(
+      'Same Artist: local crate pool: ${crate.length} tracks',
+      name: _logTag,
+    );
+    for (final t in crate) {
+      if (seenIds.add(t.id)) uniqueCandidates.add(t);
+    }
+    if (uniqueCandidates.isEmpty) {
+      AppLogger.log('Same Artist: candidate pool is empty.', name: _logTag);
+      return null;
+    }
 
-    for (final g in _graph.searchBreadth(seedGenre)) {
-      final match = crate.firstWhere(
-        (t) => _artistMatches(t.author, artist) && (t.genre ?? 'Unknown') == g,
-        orElse: () => const _SentinelTrack(),
+    // Filter to same-artist only — the spec is strict: "Every
+    // single appended song must belong to the said artist".
+    final sameArtist = uniqueCandidates
+        .where((t) => _artistMatches(t.author, artist))
+        .toList(growable: false);
+    if (sameArtist.isEmpty) {
+      AppLogger.log(
+        'Same Artist: No matching track found for artist "$artist".',
+        name: _logTag,
       );
-      if (match is! _SentinelTrack) {
-        AppLogger.log('Same Artist: Local match found in neighboring genre "$g": ${match.title} (${match.id})', name: _logTag);
-        return match;
+      return null;
+    }
+
+    // Score by year distance from the anchor. Pool order
+    // is the dedupe order (online first, then crate), so
+    // the cumulative-sum anchor is deterministic. Only
+    // candidates with a strictly positive bonus enter the
+    // wheel — and since the bonus floor is 0.2, every
+    // same-artist candidate qualifies (assuming both
+    // years are known).
+    final scoredPool = <MapEntry<Track, double>>[];
+    double cumulativeScoreSum = 0.0;
+    for (final track in sameArtist) {
+      final yBonus = _yearDistanceBonus(anchorYear, track.year);
+      cumulativeScoreSum += yBonus;
+      scoredPool.add(MapEntry<Track, double>(track, cumulativeScoreSum));
+    }
+
+    // Random-zero-sum fallback: if the bonus collapsed to
+    // 0.0 (impossible with the current 0.2 floor, but
+    // future-proofed), pick a random same-artist candidate
+    // via the injected RNG to preserve unpredictable
+    // variance — never deterministically alphabetise.
+    if (cumulativeScoreSum == 0.0) {
+      final fallbackIndex = _random.nextInt(sameArtist.length);
+      final fallbackTrack = sameArtist[fallbackIndex];
+      AppLogger.log(
+        'Same Artist: Cumulative score collapsed to 0; random fallback '
+        'selected index $fallbackIndex -> ${fallbackTrack.title} (${fallbackTrack.id})',
+        name: _logTag,
+      );
+      return fallbackTrack;
+    }
+
+    // Proportional fitness wheel: generate a uniform double
+    // in [0, ΣS) and walk the cumulative array until the
+    // running sum crosses the pointer. The first
+    // same-artist candidate to do so wins. Because `_random`
+    // is injected with a seeded instance in tests, the
+    // selection is fully reproducible.
+    final rouletteTarget = _random.nextDouble() * cumulativeScoreSum;
+    for (final entry in scoredPool) {
+      if (entry.value >= rouletteTarget) {
+        final picked = entry.key;
+        AppLogger.log(
+          'Same Artist: Roulette wheel landed on '
+          '${picked.title} (${picked.id}) at pointer=$rouletteTarget '
+          '(cumulative=${entry.value}, anchorYear=${anchorYear ?? "null"}, '
+          'trackYear=${picked.year ?? "null"}, yBonus='
+          '${_yearDistanceBonus(anchorYear, picked.year).toStringAsFixed(2)}).',
+          name: _logTag,
+        );
+        return picked;
       }
     }
-
-    final matchAny = crate.firstWhere(
-      (t) => _artistMatches(t.author, artist),
-      orElse: () => const _SentinelTrack(),
-    );
-    if (matchAny is! _SentinelTrack) {
-      AppLogger.log('Same Artist: Local match found in any genre: ${matchAny.title} (${matchAny.id})', name: _logTag);
-      return matchAny;
-    }
-
-    AppLogger.log('Same Artist: No matching track found for artist "$artist".', name: _logTag);
-    return null;
+    // Defensive tail-return: floating-point rounding can
+    // leave the last cumulative entry just below the
+    // pointer; the trailing candidate is the
+    // lowest-priority same-artist match and is the safest
+    // pick in that edge case.
+    return scoredPool.last.key;
   }
 
-  Future<Track?> _smartDj(Track current, Set<String> exclude) async {
+  Future<Track?> _smartDj(
+    Track current,
+    Set<String> exclude,
+    List<Track> history,
+  ) async {
     final ledger = _historyLedger;
     if (ledger == null) {
       AppLogger.log(
@@ -991,12 +1376,30 @@ class AutoDjRoutingService {
       );
       return _attributeIntersection(current, exclude);
     }
-    final history = await ledger.getRecent(limit: 50);
-    if (history.isEmpty) {
-      AppLogger.log('Smart DJ: History is empty; falling back to attribute intersection', name: _logTag);
-      return _attributeIntersection(current, exclude);
+    final fullHistory = await ledger.getRecent(limit: 50);
+    // Spec 2G Fix #1: the previous early-return to
+    // `_attributeIntersection` on empty history produced
+    // same-artist runs for Track 2 of fresh sessions (the
+    // attribute-intersection path has no artist-diversity
+    // logic). The Spec 2C cold-start formula already handles
+    // empty state correctly: `useColdStart = _cachedHistoryCount
+    // < 3` switches to 50/50 diversity + genre_similarity
+    // weights, dropping the temporal term. Let execution
+    // continue into the candidate harvest + scoring loop
+    // below — the cold-start path runs the new formula.
+    if (fullHistory.isEmpty) {
+      AppLogger.log(
+        'Smart DJ: History is empty; entering cold-start formula '
+        '(50/50 diversity + genre_similarity, no temporal term).',
+        name: _logTag,
+      );
+      // No return — flow continues into candidate harvest and
+      // scoring below. The cold-start branch is detected
+      // later via `useColdStart = _cachedHistoryCount < 3`
+      // (or, when the ledger is fresh and the bootstrap
+      // count is also 0, the very same comparison).
     }
-    final state = _extractMarkovState(history);
+    final state = _extractMarkovState(fullHistory);
     AppLogger.log('Smart DJ: Extracted Markov state containing ${state.length} entries. Seed: ${current.title} (${current.id})', name: _logTag);
 
     List<Track> candidates = [];
@@ -1028,12 +1431,25 @@ class AutoDjRoutingService {
     final currentGenre = current.genre;
     final neighbors = _graph.neighborsOf(currentGenre);
 
+    // Spec 2C Section B.4: loosened pre-filter from AND to OR.
+    // The new diversity scoring inside the isolate does the
+    // fine-grained filtering — the pre-filter only needs to
+    // exclude clearly out-of-context candidates (same artist
+    // AND unrelated genre). Diverse-artist exact-genre matches
+    // are explicitly admitted so the new formula has a chance
+    // to rank them.
     var filtered = candidates.where((t) {
-      final differentArtist = currentArtist == null || t.author?.toLowerCase() != currentArtist;
-      final relatedGenre = currentGenre == null || neighbors.containsKey(t.genre);
-      return differentArtist && relatedGenre;
+      final differentArtist = currentArtist == null ||
+          t.author?.toLowerCase() != currentArtist;
+      final relatedGenre = currentGenre == null ||
+          neighbors.containsKey(t.genre);
+      return differentArtist || relatedGenre;
     }).toList();
-    AppLogger.log('Smart DJ: Unpredictability check (different artist + related genre) reduced pool from ${candidates.length} to ${filtered.length}', name: _logTag);
+    AppLogger.log(
+      'Smart DJ: Loosened pre-filter (different artist OR related genre) '
+      'reduced pool from ${candidates.length} to ${filtered.length}',
+      name: _logTag,
+    );
 
     if (filtered.isEmpty) {
       filtered = candidates.where((t) {
@@ -1045,6 +1461,53 @@ class AutoDjRoutingService {
       filtered = candidates;
       AppLogger.log('Smart DJ: Different artist empty, falling back to all candidates: ${filtered.length} candidates', name: _logTag);
     }
+
+    // Spec 2C Section B.4 Step 3: extract recent artist names
+    // from the QueueManager session history (the `history`
+    // parameter of [resolveNext]). These feed the
+    // `artist_diversity` term — a candidate whose artist is
+    // in this set scores 0.3 (recent) instead of 1.0.
+    final recentArtists = <String>[];
+    for (final track in history) {
+      final artist = track.author?.toLowerCase();
+      if (artist != null && artist.isNotEmpty) {
+        recentArtists.add(artist);
+      }
+    }
+
+    // Spec 2C Section B.4 Step 4: cold-start indicator. The
+    // ledger cache counter can undercount on upgrade installs
+    // (audit §9.3) — pre-existing bug, accepted degradation.
+    final useColdStart = _cachedHistoryCount < 3;
+
+    // Spec 2C Section B.4 Step 2: precompute per-candidate
+    // genre similarity on the main isolate, where the
+    // [GenreSimilarityEngine] lives. Each `readNormalized`
+    // call is a single SQLite primary-key lookup (~1ms on
+    // device), so a 50-100 candidate pool is fine without
+    // batching. If profiling later shows this is hot, batch
+    // via a single `IN (?, ?, ...)` query.
+    final precomputedGenreSimilarity = <String, double>{};
+    final seedNormalizedGenres = _genreEnrichment != null
+        ? await _genreEnrichment.readNormalized(current)
+        : <String>[];
+    for (final candidate in filtered) {
+      final candidateGenres = _genreEnrichment != null
+          ? await _genreEnrichment.readNormalized(candidate)
+          : <String>[];
+      precomputedGenreSimilarity[candidate.id] =
+          _similarityEngine?.score(
+                seedNormalizedGenres,
+                candidateGenres,
+              ) ??
+              0.0;
+    }
+    AppLogger.log(
+      'Smart DJ: Precomputed genre similarity for '
+      '${precomputedGenreSimilarity.length} candidates. '
+      'Seed genres: $seedNormalizedGenres',
+      name: _logTag,
+    );
 
     final scored = <_ScoredTrack>[];
     // Smart-DJ bootstrap fusion: the Liked-Song affinity
@@ -1072,11 +1535,9 @@ class AutoDjRoutingService {
         },
     ];
     // Use camelCase keys in the isolate payload so the
-    // boundary code (which mirrors the existing
-    // `_markovScore` instance helper) reads them
-    // naturally. `toMap()` writes snake_case for the
-    // SQLite schema, so we project the two fields the
-    // scorer actually consumes.
+    // boundary code reads them naturally. `toMap()` writes
+    // snake_case for the SQLite schema, so we project the
+    // fields the scorer actually consumes.
     final serializedState = <Map<String, dynamic>>[
       for (final e in state)
         <String, dynamic>{
@@ -1086,41 +1547,94 @@ class AutoDjRoutingService {
         },
     ];
     final serializedFullHistory = <Map<String, dynamic>>[
-      for (final e in history)
+      for (final e in fullHistory)
         <String, dynamic>{
           'trackId': e.trackId,
           'artistName': e.artistName,
           'primaryGenre': e.primaryGenre,
         },
     ];
-    final input = _SmartDjScoreInput(
+    final input = SmartDjScoreInput(
       candidates: serializedCandidates,
       stateEntries: serializedState,
       fullHistory: serializedFullHistory,
       topLikedArtists: _topLikedArtists,
       topLikedGenres: _topLikedGenres,
       beta: beta,
+      precomputedGenreSimilarity: precomputedGenreSimilarity,
+      recentArtists: recentArtists,
+      useColdStart: useColdStart,
     );
     List<Map<String, dynamic>> scoredResults;
     try {
-      scoredResults = await compute(_smartDjIsolateScore, input);
+      scoredResults = await compute(smartDjIsolateScore, input);
     } catch (e) {
       AppLogger.warning(
         '[SmartDJFusion] compute() isolate failed; falling back to '
         'in-process scoring: $e',
         name: _logTag,
       );
-      // Fallback path: in-process scoring (preserves the
-      // pre-fusion behaviour for any platform that refuses
-      // the isolate spawn — typically the test runner).
+      // In-process fallback path: same formula as
+      // smartDjIsolateScore, inlined so the test runner
+      // and any platform that refuses the isolate spawn
+      // still get correct results. Reuses the precomputed
+      // genre similarities from the main-isolate step.
       scoredResults = <Map<String, dynamic>>[];
+      final recentArtistSet = recentArtists.toSet();
+      final seedArtistLower =
+          state.isNotEmpty ? state.first.artistName.toLowerCase() : null;
+
+      // Compute temporal stats inline (same logic as the
+      // isolate function).
+      final Map<String, int> transitionFreq = <String, int>{};
+      int totalTransitionsFromSeed = 0;
+      if (!useColdStart && seedArtistLower != null) {
+        for (int i = 0; i < fullHistory.length - 1; i++) {
+          final cur = fullHistory[i].artistName.toLowerCase();
+          final nxt = fullHistory[i + 1].artistName.toLowerCase();
+          if (cur == seedArtistLower && nxt != seedArtistLower) {
+            transitionFreq[nxt] = (transitionFreq[nxt] ?? 0) + 1;
+            totalTransitionsFromSeed++;
+          }
+        }
+      }
+      final distinctSuccessors = transitionFreq.length;
+      final temporalDenominator = totalTransitionsFromSeed +
+          (distinctSuccessors > 0 ? distinctSuccessors : 1);
+
       for (final candidate in filtered) {
-        final markov = _markovScore(
-          state: state,
-          current: current,
-          candidate: candidate,
-          fullHistory: history,
-        );
+        final candidateArtistLower = candidate.author?.toLowerCase();
+
+        // Term 1: artist diversity (same logic as isolate).
+        double diversity;
+        if (candidateArtistLower == null || candidateArtistLower.isEmpty) {
+          diversity = 0.5;
+        } else if (seedArtistLower != null &&
+            candidateArtistLower == seedArtistLower) {
+          diversity = 0.0;
+        } else if (recentArtistSet.contains(candidateArtistLower)) {
+          diversity = 0.3;
+        } else {
+          diversity = 1.0;
+        }
+
+        // Term 2: genre similarity (precomputed).
+        final genreSim =
+            precomputedGenreSimilarity[candidate.id] ?? 0.0;
+
+        // Term 3: temporal pattern (skipped in cold-start).
+        double temporal = 0.0;
+        if (!useColdStart && candidateArtistLower != null) {
+          final freq = transitionFreq[candidateArtistLower] ?? 0;
+          temporal = (freq + 1) / temporalDenominator;
+        }
+
+        final markov = useColdStart
+            ? (diversity * 0.50) + (genreSim * 0.50)
+            : (diversity * 0.40) +
+                (genreSim * 0.40) +
+                (temporal * 0.20);
+
         final affinity = _likedAffinityFor(candidate);
         scoredResults.add(<String, dynamic>{
           'trackId': candidate.id,
@@ -1146,6 +1660,46 @@ class AutoDjRoutingService {
     if (scored.isEmpty) {
       AppLogger.log('Smart DJ: Scored candidates list is empty.', name: _logTag);
       return null;
+    }
+
+    // Spec 2C Section C.1: post-scoring hard cap. Any
+    // candidate whose artist matches one of the last two
+    // tracks in the QueueManager session is multiplied by
+    // 0.3 to break the "Black Sherif x5 in a row" churn.
+    // The cap applies only to the ranked list — not the
+    // diversity term — so a same-artist candidate can
+    // still win if every non-match candidate has been
+    // exhausted.
+    final lastTwoArtists = <String>{};
+    for (final track in history.take(2)) {
+      final artist = track.author?.toLowerCase();
+      if (artist != null && artist.isNotEmpty) {
+        lastTwoArtists.add(artist);
+      }
+    }
+    if (lastTwoArtists.isNotEmpty) {
+      final cappedIds = <String>[];
+      final rescored = <_ScoredTrack>[];
+      for (final entry in scored) {
+        final entryArtist = entry.track.author?.toLowerCase();
+        if (entryArtist != null && lastTwoArtists.contains(entryArtist)) {
+          rescored.add(_ScoredTrack(entry.track, entry.score * 0.3));
+          cappedIds.add(entry.track.id);
+        } else {
+          rescored.add(entry);
+        }
+      }
+      if (cappedIds.isNotEmpty) {
+        AppLogger.log(
+          'Smart DJ: post-cap ×0.3 applied to recent-artist '
+          'candidates: $cappedIds',
+          name: _logTag,
+        );
+        rescored.sort((a, b) => b.score.compareTo(a.score));
+        scored
+          ..clear()
+          ..addAll(rescored);
+      }
     }
 
     var pick = scored.first.track;
@@ -1250,80 +1804,62 @@ class AutoDjRoutingService {
 
   /// Pulls the most-recent N history rows (where N = [_markovWindow])
   /// and returns them as the Markov state vector. If fewer than N
-  /// rows are available, returns whatever is available (the
-  /// [_markovScore] helper handles shorter states by padding with
-  /// the sentinel "no transition observed").
+  /// rows are available, returns whatever is available. The
+  /// isolate function handles shorter states by treating the
+  /// available rows as the seed context.
   List<DJHistoryEntry> _extractMarkovState(List<DJHistoryEntry> history) {
     if (history.length <= _markovWindow) return history;
     return history.sublist(0, _markovWindow);
   }
 
-  /// Computes P(A → B) per the spec formula.
+  /// Spec 2G Fix #6: shared helper that recomputes the
+  /// Top-N Liked Artists and Genres from the user's
+  /// `favorite_tracks` snapshot. Used by:
+  ///   * `PlayerProvider._maybeBootstrapSmartDjFusion`
+  ///     (the boot-time one-shot)
+  ///   * `PlaylistProvider._refreshLikedSongsCache`
+  ///     (the post-favorite debounced refresh)
   ///
-  /// * **A** is the most recent history entry (the "current state"
-  ///   from the user's perspective).
-  /// * **B** is the candidate track under evaluation.
-  /// * **state** is the last [_markovWindow] history rows.
-  /// * **fullHistory** is the full sliding window used to compute
-  ///   the empirical transition frequency.
-  ///
-  /// We compare candidate metadata to **A** (not to the entire
-  /// state) for the artist / genre match components because the
-  /// spec defines those as binary weights between the two tracks
-  /// being evaluated; only the temporal_cluster_weight is
-  /// state-dependent.
-  double _markovScore({
-    required List<DJHistoryEntry> state,
-    required Track current,
-    required Track candidate,
-    required List<DJHistoryEntry> fullHistory,
+  /// The aggregation is purely in-memory over the
+  /// `getFavoriteTracks()` result so we don't need a new
+  /// raw-SQL helper in the database layer. The shapes
+  /// mirror the spec's `GROUP BY author ORDER BY COUNT(*)
+  /// DESC LIMIT N`: descending by count, alphabetical
+  /// tiebreak so the result is deterministic across
+  /// refreshes.
+  static ({List<String> artists, List<String> genres})
+      computeTopLikedArtistsAndGenres(
+    List<Track> favorites, {
+    int limit = 5,
   }) {
-    final a = state.isEmpty ? null : state.first;
-    final artistMatch = a != null &&
-        candidate.author != null &&
-        a.artistName.toLowerCase() == candidate.author!.toLowerCase();
-    final genreMatch = a != null &&
-        a.primaryGenre != 'Unknown' &&
-        a.primaryGenre == candidate.genre;
-
-    // Temporal weight: scan the history for transitions A → B
-    // using the most recent 3-row state as the context. We look
-    // for consecutive 3-windows whose first 3 entries match the
-    // current state and count how many of them transition into B
-    // (i.e. the row that immediately follows the 3-window is B).
-    final stateIds =
-        state.map((e) => e.trackId).toList(growable: false);
-    final candidateArtistLower = candidate.author?.toLowerCase();
-    int matchingContext = 0;
-    int transitionsToCandidate = 0;
-    if (fullHistory.length > stateIds.length) {
-      for (var i = 0; i + stateIds.length < fullHistory.length; i++) {
-        final window = fullHistory.sublist(i, i + stateIds.length);
-        bool ok = true;
-        for (var j = 0; j < stateIds.length; j++) {
-          if (window[j].trackId != stateIds[j]) {
-            ok = false;
-            break;
-          }
-        }
-        if (!ok) continue;
-        matchingContext++;
-        final next = fullHistory[i + stateIds.length];
-        if (next.trackId == candidate.id ||
-            (candidateArtistLower != null &&
-                next.artistName.toLowerCase() == candidateArtistLower &&
-                next.primaryGenre == candidate.genre)) {
-          transitionsToCandidate++;
-        }
+    final artistCounts = <String, int>{};
+    final genreCounts = <String, int>{};
+    for (final t in favorites) {
+      final a = t.author?.trim();
+      if (a != null && a.isNotEmpty) {
+        artistCounts.update(a, (v) => v + 1, ifAbsent: () => 1);
+      }
+      final g = t.genre?.trim();
+      if (g != null && g.isNotEmpty && g != 'Unknown') {
+        genreCounts.update(g, (v) => v + 1, ifAbsent: () => 1);
       }
     }
-    final temporal = matchingContext == 0
-        ? 0.0
-        : transitionsToCandidate / matchingContext;
-
-    return (artistMatch ? 0.5 : 0.0) +
-        (genreMatch ? 0.3 : 0.0) +
-        0.2 * temporal;
+    final artistEntries = artistCounts.entries.toList()
+      ..sort((a, b) {
+        final byCount = b.value.compareTo(a.value);
+        if (byCount != 0) return byCount;
+        return a.key.compareTo(b.key);
+      });
+    final genreEntries = genreCounts.entries.toList()
+      ..sort((a, b) {
+        final byCount = b.value.compareTo(a.value);
+        if (byCount != 0) return byCount;
+        return a.key.compareTo(b.key);
+      });
+    return (
+      artists: artistEntries.take(limit).map((e) => e.key).toList(),
+      genres: genreEntries.take(limit).map((e) => e.key).toList(),
+    );
   }
 }
 

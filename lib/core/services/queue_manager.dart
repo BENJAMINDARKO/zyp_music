@@ -91,6 +91,22 @@ class QueueManager extends ChangeNotifier {
   final List<Track> _sessionHistory = <Track>[];
   static const int _maxSessionHistoryLength = 3;
 
+  /// Spec 2G Fix #5: read-only view of the recent session
+  /// history (newest first, capped at 3 tracks by
+  /// [_maxSessionHistoryLength]). Returned as
+  /// [List.unmodifiable] so callers cannot accidentally
+  /// mutate the QueueManager's internal state via shared
+  /// reference — the engine is the sole writer to
+  /// [_sessionHistory] (via [rememberPlayedTrack]).
+  ///
+  /// Used by the gapless mixer's lookahead callback so
+  /// the Smart DJ artist-diversity term and the Same
+  /// Genre artist-decay matrix receive actual recent-pick
+  /// context instead of an empty list (the pre-fix
+  /// behaviour, per audit §8.4).
+  List<Track> get sessionHistory =>
+      List<Track>.unmodifiable(_sessionHistory);
+
   void setRouter(AutoDjRoutingService router) {
     _router = router;
   }

@@ -58,6 +58,7 @@ void main() {
       final id = await ledger.logTrack(DJHistoryEntry(
         trackId: 't1',
         artistName: 'Artist A',
+        primaryGenre: 'Rock',
         timestampMs: 1_000,
       ));
       expect(id, greaterThan(0));
@@ -65,9 +66,15 @@ void main() {
     });
 
     test('respects SQL defaults for genre / bpm / energy', () async {
+      // Spec 2C: `primaryGenre` is required at the Dart level. Pass
+      // the explicit 'Unknown' literal here to verify the SQL
+      // DEFAULT clause is still applied for cache-miss fallback
+      // rows (the producer in `_logCurrentTrackHistory` writes
+      // 'Unknown' directly when enrichment returns an empty list).
       await ledger.logTrack(DJHistoryEntry(
         trackId: 't1',
         artistName: 'Artist A',
+        primaryGenre: 'Unknown',
         timestampMs: 1_000,
       ));
       final rows = await ledger.getAll();
@@ -94,6 +101,7 @@ void main() {
       await ledger.logTrack(DJHistoryEntry(
         trackId: 'trigger',
         artistName: 'Trigger',
+        primaryGenre: 'Rock',
         timestampMs: 9_999_999,
       ));
 
@@ -125,6 +133,7 @@ void main() {
       await ledger.logTrack(DJHistoryEntry(
         trackId: 'trigger',
         artistName: 'Trigger',
+        primaryGenre: 'Rock',
         timestampMs: 9_999_999,
       ));
 
@@ -149,6 +158,7 @@ void main() {
       await ledger.logTrack(DJHistoryEntry(
         trackId: 'dup',
         artistName: 'Artist',
+        primaryGenre: 'Rock',
         timestampMs: 1_000,
       ));
       expect(ledger.hasBeenLoggedThisSession('dup'), isTrue);
@@ -160,6 +170,7 @@ void main() {
       await ledger.logTrack(DJHistoryEntry(
         trackId: 'dup',
         artistName: 'Artist',
+        primaryGenre: 'Rock',
         timestampMs: 2_000,
       ));
       // Both rows land because the test exercises the SQL path
@@ -208,6 +219,7 @@ void main() {
         await ledger.logTrack(DJHistoryEntry(
           trackId: 'seed_$i',
           artistName: 'Seed',
+          primaryGenre: 'Rock',
           timestampMs: 1_000 + i,
         ));
       }
@@ -250,6 +262,7 @@ void main() {
       await ledger.logTrack(DJHistoryEntry(
         trackId: 's0',
         artistName: 'Seed',
+        primaryGenre: 'Unknown',
         timestampMs: 1_000,
       ));
       final outcome = await ledger.resolveColdStart(
@@ -278,6 +291,7 @@ void main() {
         await ledger.logTrack(DJHistoryEntry(
           trackId: 'seed_$i',
           artistName: 'Seed',
+          primaryGenre: 'Unknown',
           timestampMs: 1_000 + i,
         ));
       }

@@ -5,6 +5,24 @@ import 'package:path/path.dart';
 import '../../models/playlist_model.dart';
 import '../../models/video_model.dart';
 
+/// Lightweight return type for [PlaylistDatabase.getCachedArtistGenres].
+/// Carries the raw MusicBrainz tags (for future re-normalization) and
+/// the already-normalized matrix keys (for the AI DJ scoring hot path).
+/// Spec 2A §3B. Spec 2E: [countryCode] is the ISO 3166-1 alpha-2
+/// country code captured from the MB artist document; nullable for
+/// bands and historical artists.
+class CachedArtistGenres {
+  final List<String> rawGenres;
+  final List<String> normalizedGenres;
+  final String? countryCode;
+
+  const CachedArtistGenres({
+    required this.rawGenres,
+    required this.normalizedGenres,
+    this.countryCode,
+  });
+}
+
 class PlaylistDatabase {
   /// Test-only factory: instantiates a fresh [PlaylistDatabase]
   /// backed by [path] (caller is responsible for the file's
@@ -70,7 +88,7 @@ class PlaylistDatabase {
     }
     return openDatabase(
       path,
-      version: 13,
+      version: 15,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -202,12 +220,16 @@ class PlaylistDatabase {
     );
     await db.execute(
       'CREATE TABLE IF NOT EXISTS artist_genres ('
-      'normalized_artist TEXT PRIMARY KEY, '
-      'display_name      TEXT    NOT NULL, '
-      'mbid              TEXT    NOT NULL, '
-      'genres_json       TEXT    NOT NULL, '
-      'genre_count       INTEGER NOT NULL DEFAULT 0, '
-      'fetched_at        INTEGER NOT NULL'
+      'normalized_artist        TEXT PRIMARY KEY, '
+      'display_name             TEXT    NOT NULL, '
+      'mbid                     TEXT    NOT NULL, '
+      'genres_json              TEXT    NOT NULL, '
+      'genre_count              INTEGER NOT NULL DEFAULT 0, '
+      'fetched_at               INTEGER NOT NULL, '
+      'normalized_genres_json   TEXT    NOT NULL DEFAULT \'[]\', '
+      'normalization_version    INTEGER NOT NULL DEFAULT 1, '
+      'confidence               INTEGER DEFAULT NULL, '
+      'country_code             TEXT    DEFAULT NULL'
       ')'
     );
     await db.execute(
@@ -423,14 +445,55 @@ class PlaylistDatabase {
         'ON artist_genres(fetched_at)'
       );
     }
+    if (oldVersion < 14) {
+      // Spec 2A: persist the normalized matrix keys alongside
+      // the raw MusicBrainz tags so the AI DJ scoring engine
+      // can read them on a hot path without re-running the
+      // normalization dictionary. `normalization_version`
+      // starts at 1; bump and add a one-time re-normalization
+      // pass if a major dictionary revision ever lands.
+      await db.execute(
+        'ALTER TABLE artist_genres ADD COLUMN '
+        'normalized_genres_json TEXT NOT NULL DEFAULT \'[]\'',
+      );
+      await db.execute(
+        'ALTER TABLE artist_genres ADD COLUMN '
+        'normalization_version INTEGER NOT NULL DEFAULT 1',
+      );
+      await db.execute(
+        'ALTER TABLE artist_genres ADD COLUMN '
+        'confidence INTEGER DEFAULT NULL',
+      );
+    }
+    if (oldVersion < 15) {
+      // Spec 2E: persist the artist's ISO 3166-1 alpha-2 country
+      // code captured from MusicBrainz's `country` field on the
+      // artist document. Nullable: bands, historical artists, and
+      // MB entries that pre-date the field will return NULL, and
+      // [CountryBonusService.scoreFor] treats either side being
+      // null as `unknown` → neutral 1.0 bonus. The routing layer
+      // never blocks the hot path on this column — the bonus is
+      // multiplicative and the seeded Track always short-circuits
+      // the artist-already-played test before we get here.
+      await db.execute(
+        'ALTER TABLE artist_genres ADD COLUMN '
+        'country_code TEXT DEFAULT NULL',
+      );
+    }
   }
 
-  Future<List<String>?> getCachedArtistGenres(String normalizedArtist) async {
+  Future<CachedArtistGenres?> getCachedArtistGenres(String normalizedArtist) async {
     if (normalizedArtist.trim().isEmpty) return null;
     final db = await database;
     final rows = await db.query(
       'artist_genres',
-      columns: const ['genres_json', 'genre_count', 'fetched_at'],
+      columns: const [
+        'genres_json',
+        'genre_count',
+        'fetched_at',
+        'normalized_genres_json',
+        'country_code',
+      ],
       where: 'normalized_artist = ?',
       whereArgs: [normalizedArtist],
       limit: 1,
@@ -445,23 +508,49 @@ class PlaylistDatabase {
     if (decoded is! List) return null;
     final genres = decoded.whereType<String>().toList(growable: false);
     if (genres.isEmpty) return null;
+
+    final normalizedRaw = row['normalized_genres_json'] as String?;
+    List<String> normalizedGenres = const <String>[];
+    if (normalizedRaw != null && normalizedRaw.isNotEmpty) {
+      final decodedNorm = jsonDecode(normalizedRaw);
+      if (decodedNorm is List) {
+        normalizedGenres = decodedNorm.whereType<String>().toList(growable: false);
+      }
+    }
+
+    final countryCodeRaw = row['country_code'] as String?;
+    final countryCode = (countryCodeRaw != null && countryCodeRaw.isNotEmpty)
+        ? countryCodeRaw
+        : null;
+
     final ageMs = DateTime.now().millisecondsSinceEpoch - fetchedAt;
     const thinTtl = Duration(days: 90);
     final isThin = genreCount < 3;
     if (isThin && ageMs < thinTtl.inMilliseconds) {
-      return genres;
+      return CachedArtistGenres(
+        rawGenres: genres,
+        normalizedGenres: normalizedGenres,
+        countryCode: countryCode,
+      );
     }
     if (!isThin) {
-      return genres;
+      return CachedArtistGenres(
+        rawGenres: genres,
+        normalizedGenres: normalizedGenres,
+        countryCode: countryCode,
+      );
     }
     return null;
   }
 
   Future<void> cacheArtistGenres({
     required String normalizedArtist,
-    required String displayName,
-    required String mbid,
     required List<String> genres,
+    required List<String> normalizedGenres,
+    String? mbid,
+    String? displayName,
+    int? confidence,
+    String? countryCode,
   }) async {
     if (normalizedArtist.trim().isEmpty) return;
     final db = await database;
@@ -469,14 +558,95 @@ class PlaylistDatabase {
       'artist_genres',
       {
         'normalized_artist': normalizedArtist,
-        'display_name': displayName,
-        'mbid': mbid,
+        'display_name': displayName ?? '',
+        'mbid': mbid ?? '',
         'genres_json': jsonEncode(genres),
         'genre_count': genres.length,
         'fetched_at': DateTime.now().millisecondsSinceEpoch,
+        'normalized_genres_json': jsonEncode(normalizedGenres),
+        'normalization_version': 1,
+        'confidence': confidence,
+        'country_code': (countryCode != null && countryCode.isNotEmpty)
+            ? countryCode
+            : null,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Batched ISO 3166-1 alpha-2 country lookup for a set of
+  /// artist display names. Returns a map keyed by the input
+  /// (display) names — misses are absent from the result. The
+  /// crate miner passes the YouTube `t.author` value directly;
+  /// we look up against `display_name` (case-insensitive)
+  /// because the YouTube artist string usually matches MB's
+  /// `name` field and the miner has no normaliser dependency.
+  /// The bonus service treats `null` as "unknown" → 1.0, so
+  /// a miss never disqualifies a candidate. Spec 2E §3.
+  Future<Map<String, String?>> getArtistCountries(Set<String> displayArtists) async {
+    if (displayArtists.isEmpty) return const <String, String?>{};
+    final db = await database;
+    final lower = displayArtists
+        .map((a) => a.toLowerCase().trim())
+        .where((a) => a.isNotEmpty)
+        .toList(growable: false);
+    if (lower.isEmpty) return const <String, String?>{};
+    final rows = await db.query(
+      'artist_genres',
+      columns: const ['display_name', 'country_code'],
+      where: 'LOWER(display_name) IN ('
+          '${List.filled(lower.length, '?').join(',')})',
+      whereArgs: lower,
+    );
+    final lowerToCode = <String, String?>{};
+    for (final row in rows) {
+      final dn = (row['display_name'] as String?)?.toLowerCase().trim();
+      if (dn == null) continue;
+      final raw = row['country_code'] as String?;
+      lowerToCode[dn] = (raw != null && raw.isNotEmpty) ? raw : null;
+    }
+    final out = <String, String?>{};
+    for (final original in displayArtists) {
+      final key = original.toLowerCase().trim();
+      if (key.isEmpty) continue;
+      if (lowerToCode.containsKey(key)) {
+        out[original] = lowerToCode[key];
+      }
+    }
+    return out;
+  }
+
+  /// Spec 2H: return the count of downloaded tracks per
+  /// normalised genre cluster. Used by the Shuffle Library
+  /// filter sub-menu to display a ranked list of genre
+  /// options. INNER JOIN excludes unenriched artists (no
+  /// useful filter on those). The result is a count per
+  /// canonical genre key (matching the proximity-matrix
+  /// schema), descending by count.
+  Future<Map<String, int>> getGenreClusterCounts() async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT ag.normalized_genres_json AS genres
+      FROM downloaded_tracks dt
+      INNER JOIN artist_genres ag
+        ON LOWER(ag.display_name) = LOWER(dt.author)
+      WHERE ag.normalized_genres_json IS NOT NULL
+        AND ag.normalized_genres_json != '[]'
+    ''');
+    final counts = <String, int>{};
+    for (final row in rows) {
+      final raw = row['genres'] as String?;
+      if (raw == null || raw.isEmpty) continue;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) continue;
+      for (final g in decoded) {
+        if (g is! String) continue;
+        final key = g.trim();
+        if (key.isEmpty) continue;
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+    }
+    return counts;
   }
 
   Future<void> insertPlaylist(PlaylistModel playlist) async {

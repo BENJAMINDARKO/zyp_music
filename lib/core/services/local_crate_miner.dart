@@ -156,6 +156,48 @@ class LocalCrateMiner {
       }
     }
 
+    // Spec 2E: enrich each track with the artist's ISO 3166-1
+    // alpha-2 country code (from `artist_genres.country_code`).
+    // Batched single SQL query keyed on the distinct set of
+    // normalised authors in the pool — O(1) round-trips
+    // regardless of pool size. Failures fall through silently:
+    // the bonus service treats `null` countries as "unknown"
+    // and returns a neutral 1.0 multiplier, so a missing country
+    // never disqualifies a candidate.
+    if (libraryDatabase != null) {
+      try {
+        final distinctAuthors = <String>{};
+        for (final t in out.values) {
+          final author = t.author?.trim();
+          if (author == null || author.isEmpty) continue;
+          distinctAuthors.add(author);
+        }
+        if (distinctAuthors.isNotEmpty) {
+          final countryMap = await libraryDatabase!
+              .getArtistCountries(distinctAuthors);
+          for (final entry in countryMap.entries) {
+            if (entry.value == null) continue;
+            // The country map key matches the author's
+            // *unnormalised* display name (the miner's
+            // author set is built from `t.author` directly
+            // and the DB stores the unnormalised value in
+            // `display_name`/the raw query). The DB query
+            // normalises internally; we look up by display
+            // name as a defensive secondary pass and fall
+            // through if it misses.
+            for (final t in out.values) {
+              if (t.country != null) continue;
+              if (t.author?.trim() == entry.key) {
+                out[t.id] = t.copyWith(country: entry.value);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        AppLogger.log('Crate country enrichment failed: $e', name: _logTag);
+      }
+    }
+
     var list = out.values.toList();
     if (excludeIds != null && excludeIds.isNotEmpty) {
       list = list.where((t) => !excludeIds.contains(t.id)).toList();
@@ -200,6 +242,13 @@ class LocalCrateMiner {
               ? null
               : Duration(seconds: row['durationSeconds'] as int),
           genre: row['genre'] as String?,
+          // Spec 2F: year is read straight from the row when
+          // present (test stubs populate it; production
+          // `downloaded_tracks` rows are joined against
+          // `track_metadata.year` upstream). The bonus
+          // service treats `null` as unknown → neutral, so
+          // a missing year never disqualifies a candidate.
+          year: row['year'] as int?,
         );
       }
     } catch (e) {

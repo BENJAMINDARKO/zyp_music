@@ -8,10 +8,18 @@ class MusicBrainzArtistMatch {
   final String mbid;
   final String name;
   final int score;
+
+  /// ISO 3166-1 alpha-2 country code from MusicBrainz's top-level
+  /// `country` field on the artist document. Nullable for bands,
+  /// historical artists, and MB entries that pre-date the field.
+  /// Spec 2E §1.
+  final String? country;
+
   const MusicBrainzArtistMatch({
     required this.mbid,
     required this.name,
     required this.score,
+    this.country,
   });
 }
 
@@ -89,10 +97,21 @@ class MusicBrainzDataSource {
         if (mbid == null || mbid.isEmpty) continue;
         if (score < minScore) break;
         if (artistName.toLowerCase() != trimmed.toLowerCase()) continue;
+        // Spec 2E: capture ISO 3166-1 alpha-2 country from the
+        // MB artist document. Top-level string, may be null for
+        // bands, historical artists, and any entry pre-dating
+        // the field. Whitespace-trimmed and empty-coerced to null
+        // so the downstream [CountryBonusService.scoreFor]
+        // `either-unknown → 1.0` rule fires cleanly.
+        final countryRaw = (entry['country'] as String?)?.trim();
+        final country = (countryRaw != null && countryRaw.isNotEmpty)
+            ? countryRaw
+            : null;
         return MusicBrainzArtistMatch(
           mbid: mbid,
           name: artistName,
           score: score,
+          country: country,
         );
       }
       return null;

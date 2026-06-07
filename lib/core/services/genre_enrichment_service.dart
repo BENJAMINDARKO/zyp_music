@@ -6,10 +6,12 @@ import '../../data/datasources/remote/musicbrainz_datasource.dart';
 import '../../domain/entities/video.dart';
 import '../utils/app_logger.dart';
 import '../utils/normalise.dart';
+import 'genre_normalization_service.dart';
 
 class GenreEnrichmentService {
   final MusicBrainzDataSource _mb;
   final PlaylistDatabase _db;
+  final GenreNormalizationService _normalization;
 
   final Map<String, Future<void>> _inFlight = HashMap();
   final Queue<String> _fifo = Queue<String>();
@@ -19,8 +21,10 @@ class GenreEnrichmentService {
   GenreEnrichmentService({
     required MusicBrainzDataSource mb,
     required PlaylistDatabase db,
+    required GenreNormalizationService normalization,
   })  : _mb = mb,
-        _db = db;
+        _db = db,
+        _normalization = normalization;
 
   /// Synchronous path used by the Auto DJ routing layer when the
   /// seed track has no genre tag on the wire. Returns the cached
@@ -33,7 +37,22 @@ class GenreEnrichmentService {
     final key = _keyFor(track);
     if (key == null) return const <String>[];
     final cached = await _db.getCachedArtistGenres(key);
-    return cached ?? const <String>[];
+    if (cached == null) return const <String>[];
+    return cached.rawGenres;
+  }
+
+  /// Synchronous read of the already-normalized matrix keys for
+  /// [track]'s artist. Returns an empty list on cache miss or when
+  /// the cache row predates Spec 2A (no `normalized_genres_json`
+  /// column populated). Used by the AI DJ scoring engine on the
+  /// hot path — it does NOT want to block on a dictionary lookup
+  /// or a re-normalization pass. Spec 2A §3B.
+  Future<List<String>> readNormalized(Track track) async {
+    final key = _keyFor(track);
+    if (key == null) return const <String>[];
+    final cached = await _db.getCachedArtistGenres(key);
+    if (cached == null) return const <String>[];
+    return cached.normalizedGenres;
   }
 
   /// Enriches [track] in place if a cached entry exists. Used by
@@ -63,6 +82,15 @@ class GenreEnrichmentService {
     _worker = _worker.then((_) => _drain());
   }
 
+  /// Awaitable barrier: resolves when the FIFO worker has drained
+  /// every enqueued artist. Useful for tests that want to assert
+  /// on the post-enrichment cache state without sleeping for the
+  /// MusicBrainz 1-req/sec throttle. Safe to call when no work is
+  /// in flight — returns immediately.
+  Future<void> drain() {
+    return _worker;
+  }
+
   Future<void> _drain() async {
     while (_fifo.isNotEmpty) {
       final key = _fifo.removeFirst();
@@ -85,28 +113,37 @@ class GenreEnrichmentService {
 
   Future<void> _enrichOne(String normalizedKey) async {
     final cached = await _db.getCachedArtistGenres(normalizedKey);
-    if (cached != null && cached.isNotEmpty) return;
+    if (cached != null && cached.rawGenres.isNotEmpty) return;
     final display = _displayForKey(normalizedKey);
     if (display == null) return;
     final match = await _mb.searchArtist(display);
     if (match == null) return;
     final entries = await _mb.getArtistGenres(match.mbid);
     if (entries.isEmpty) {
+      final confidence = match.score;
       await _db.cacheArtistGenres(
         normalizedArtist: normalizedKey,
         displayName: match.name,
         mbid: match.mbid,
         genres: const [],
+        normalizedGenres: const [],
+        confidence: confidence,
+        countryCode: match.country,
       );
       return;
     }
     entries.sort((a, b) => b.count.compareTo(a.count));
     final names = entries.map((e) => e.name).toList(growable: false);
+    final normalizedGenres = _normalization.normalizeAll(names);
+    final confidence = match.score;
     await _db.cacheArtistGenres(
       normalizedArtist: normalizedKey,
       displayName: match.name,
       mbid: match.mbid,
       genres: names,
+      normalizedGenres: normalizedGenres,
+      confidence: confidence,
+      countryCode: match.country,
     );
   }
 

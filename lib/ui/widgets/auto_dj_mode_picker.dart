@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/auto_dj_routing_service.dart';
+import '../../data/datasources/local/playlist_database.dart';
 import '../../domain/entities/auto_dj_mode.dart';
 import '../../presentation/providers/player_provider.dart';
 
@@ -90,6 +93,46 @@ class AutoDJModePicker {
                   mode: mode,
                   isCurrentMode: mode == currentMode,
                   onPick: () async {
+                    // Spec 2H: Shuffle Library opens a sub-menu
+                    // for genre-filter selection. Other modes
+                    // arm directly via the existing path.
+                    if (mode == AutoDJMode.shuffleLibrary) {
+                      // Open the sub-menu on top of the current
+                      // sheet. We do NOT pop the parent sheet —
+                      // dismissing it here would leave the sub-menu
+                      // unattached to the modal stack. The sub-menu
+                      // returns a future that completes with the
+                      // chosen genre (or null for "No filter").
+                      final picked = await ShuffleLibraryFilterSubMenu
+                          .show(sheetContext);
+                      if (picked == null) {
+                        // User dismissed the sub-menu without
+                        // picking — keep the current mode intact.
+                        return;
+                      }
+                      Navigator.pop(sheetContext);
+                      // Apply the filter, then arm the mode. The
+                      // routing service stores the filter key so
+                      // the next resolveNext pass narrows the pool.
+                      final routing = sheetContext
+                          .read<AutoDjRoutingService?>();
+                      if (routing != null) {
+                        routing.setShuffleLibraryGenreFilter(picked);
+                      }
+                      final provider = sheetContext.read<PlayerProvider>();
+                      final result =
+                          await provider.setAutoDJMode(AutoDJMode.shuffleLibrary);
+                      final filterName = picked ?? 'no filter';
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Shuffle Library armed — filter: $filterName',
+                          ),
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                      return;
+                    }
                     // Dismiss the sheet first so the snackbar lands on
                     // the parent surface (miniplayer / fullscreen /
                     // context menu's parent), not on top of the sheet.
@@ -207,6 +250,197 @@ class _ModeTile extends StatelessWidget {
       trailing: isCurrentMode
           ? const Icon(Icons.check_circle, color: Color(0xFFEAB308), size: 18)
           : const Icon(Icons.radio_button_unchecked, color: Colors.white24, size: 18),
+      onTap: onPick,
+    );
+  }
+}
+
+/// Spec 2H: genre-filter sub-menu for the Shuffle Library mode.
+///
+/// Modal bottom sheet that shows a ranked list of genre
+/// clusters present in the user's downloaded library, with
+/// track counts. The top entry is "No filter (all songs)".
+/// Returning [null] (tap-outside / back button) keeps the
+/// parent mode picker intact; the user must explicitly tap
+/// a genre or the top entry to confirm a selection.
+class ShuffleLibraryFilterSubMenu {
+  /// Opens the sub-menu over the existing modal stack and
+  /// resolves with the chosen filter key, or [null] if the
+  /// user dismissed the sheet without picking.
+  ///
+  /// `key` semantics match the proximity-matrix schema:
+  ///   * `null` → "No filter" (existing behaviour).
+  ///   * non-null → canonical matrix key, e.g. "Afrobeats".
+  static Future<String?> show(BuildContext parentContext) {
+    return _showImpl(parentContext);
+  }
+
+  @visibleForTesting
+  static Future<String?> showForTesting(BuildContext parentContext) {
+    return _showImpl(parentContext);
+  }
+
+  static Future<String?> _showImpl(BuildContext parentContext) {
+    return showModalBottomSheet<String?>(
+      context: parentContext,
+      isScrollControlled: true,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        final db = sheetContext.read<PlaylistDatabase>();
+        return SafeArea(
+          child: ShuffleLibraryFilterContent(database: db),
+        );
+      },
+    );
+  }
+}
+
+class ShuffleLibraryFilterContent extends StatefulWidget {
+  const ShuffleLibraryFilterContent({required this.database});
+
+  final PlaylistDatabase database;
+
+  @override
+  State<ShuffleLibraryFilterContent> createState() =>
+      _ShuffleLibraryFilterContentState();
+}
+
+class _ShuffleLibraryFilterContentState
+    extends State<ShuffleLibraryFilterContent> {
+  Future<Map<String, int>>? _countsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _countsFuture = widget.database.getGenreClusterCounts();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: const [
+              Icon(Icons.filter_list, color: Color(0xFFEAB308), size: 24),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Shuffle Library — Filter',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'Limit the pool to a single genre cluster.',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ),
+        const Divider(color: Colors.white24),
+        Flexible(
+          child: FutureBuilder<Map<String, int>>(
+            future: _countsFuture,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFFEAB308),
+                      ),
+                    ),
+                  ),
+                );
+              }
+              if (snap.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Couldn\'t load genres: ${snap.error}',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                );
+              }
+              final counts = snap.data ?? const <String, int>{};
+              if (counts.isEmpty) {
+                return _FilterTile(
+                  title: 'No filter',
+                  subtitle:
+                      'Your library has no enriched tracks yet — play some songs to see genre filters.',
+                  onPick: () => Navigator.pop(context, null),
+                );
+              }
+              // Sort descending by count; alphabetical tiebreak
+              // keeps the order deterministic for tests.
+              final entries = counts.entries.toList()
+                ..sort((a, b) {
+                  final byCount = b.value.compareTo(a.value);
+                  return byCount != 0 ? byCount : a.key.compareTo(b.key);
+                });
+              return ListView(
+                shrinkWrap: true,
+                children: [
+                  _FilterTile(
+                    title: 'No filter (all songs)',
+                    subtitle: null,
+                    onPick: () => Navigator.pop(context, null),
+                  ),
+                  for (final e in entries)
+                    _FilterTile(
+                      title: '${e.key} · ${e.value}',
+                      subtitle: e.value == 1 ? '1 track' : '${e.value} tracks',
+                      onPick: () => Navigator.pop(context, e.key),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _FilterTile extends StatelessWidget {
+  const _FilterTile({
+    required this.title,
+    required this.subtitle,
+    required this.onPick,
+  });
+
+  final String title;
+  final String? subtitle;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(
+        title,
+        style: const TextStyle(color: Colors.white),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle!,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
       onTap: onPick,
     );
   }
