@@ -1,54 +1,69 @@
 import 'package:flutter/material.dart';
+import 'theme_config.dart';
 
+/// Builds [ThemeData] from a [ThemePalette].
+///
+/// Usage:
+/// ```dart
+/// final theme = AppTheme.fromPalette(paletteFor('Ocean'));
+/// ```
 class AppTheme {
-  static const _primaryColor = Color(0xFF1DB954);
-  static const _darkBg = Color(0xFF121212);
-  static const _darkSurface = Color(0xFF1E1E1E);
-  static const _darkCard = Color(0xFF282828);
+  AppTheme._();
 
-  static ThemeData get darkTheme {
+  /// Build a full [ThemeData] from a palette definition.
+  static ThemeData fromPalette(ThemePalette p) {
+    final isDark = p.brightness == Brightness.dark;
+
     return ThemeData(
-      brightness: Brightness.dark,
-      primaryColor: _primaryColor,
-      scaffoldBackgroundColor: Colors.black38,
-      colorScheme: const ColorScheme.dark(
-        primary: _primaryColor,
-        secondary: _primaryColor,
-        surface: _darkSurface,
-        onPrimary: Colors.black,
-        onSecondary: Colors.black,
-        onSurface: Colors.white,
+      useMaterial3: true,
+      brightness: p.brightness,
+      primaryColor: p.primary,
+      scaffoldBackgroundColor: p.background,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: p.primary,
+        brightness: p.brightness,
+        surface: p.surface,
+        error: p.error,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
       ),
-      cardTheme: const CardThemeData(
-        color: _darkCard,
+      cardTheme: CardThemeData(
+        color: p.card,
         elevation: 2,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
       ),
-      iconTheme: const IconThemeData(color: Colors.white),
-      textTheme: const TextTheme(
+      iconTheme: IconThemeData(
+        color: isDark ? Colors.white : Colors.black87,
+      ),
+      textTheme: TextTheme(
         titleLarge: TextStyle(
-          color: Colors.white,
+          color: isDark ? Colors.white : Colors.black87,
           fontWeight: FontWeight.bold,
           fontSize: 20,
         ),
         titleMedium: TextStyle(
-          color: Colors.white,
+          color: isDark ? Colors.white : Colors.black87,
           fontWeight: FontWeight.w600,
           fontSize: 16,
         ),
-        bodyLarge: TextStyle(color: Colors.white, fontSize: 16),
-        bodyMedium: TextStyle(color: Colors.white70, fontSize: 14),
+        bodyLarge: TextStyle(
+          color: isDark ? Colors.white : Colors.black87,
+          fontSize: 16,
+        ),
+        bodyMedium: TextStyle(
+          color: isDark ? Colors.white70 : Colors.black54,
+          fontSize: 14,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: _primaryColor,
+          backgroundColor: p.primary,
           foregroundColor: Colors.black,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
@@ -58,13 +73,84 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: _darkCard,
+        fillColor: p.card,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
-        hintStyle: const TextStyle(color: Colors.grey),
+        hintStyle: TextStyle(
+          color: isDark ? Colors.grey : Colors.grey[600],
+        ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      dividerTheme: DividerThemeData(
+        color: isDark ? Colors.white24 : Colors.black12,
+        thickness: 1,
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: isDark ? const Color(0xFF1F1F1F) : Colors.grey[200],
+        selectedColor: p.accent,
+        labelStyle: TextStyle(
+          color: isDark ? Colors.white : Colors.black87,
+        ),
+        secondaryLabelStyle: TextStyle(
+          color: isDark ? Colors.white54 : Colors.black54,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: p.accent,
+        inactiveTrackColor: isDark ? Colors.white24 : Colors.black12,
+        thumbColor: p.accent,
+        valueIndicatorColor: p.accent,
+        valueIndicatorTextStyle: const TextStyle(color: Colors.black),
+        overlayColor: p.accent.withOpacity(0.15),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return p.accent;
+          return null;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return p.accent.withOpacity(0.5);
+          }
+          return isDark ? Colors.white24 : Colors.black12;
+        }),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.grey[800],
+        contentTextStyle: TextStyle(
+          color: isDark ? Colors.white : Colors.white,
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: isDark ? const Color(0xFF1F1F1F) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        indicatorColor: p.accent,
+        labelColor: isDark ? Colors.white : Colors.black87,
+        unselectedLabelColor: isDark ? Colors.white54 : Colors.black54,
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: p.accent,
+        foregroundColor: Colors.black,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: p.accent,
+        linearTrackColor: isDark ? Colors.white24 : Colors.black12,
       ),
     );
   }
