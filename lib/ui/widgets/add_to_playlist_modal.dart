@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../domain/entities/video.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/download_provider.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class AddToPlaylistModal extends StatelessWidget {
   final Track track;
@@ -55,7 +56,7 @@ class AddToPlaylistModal extends StatelessWidget {
               if (track.thumbnailUrl != null && track.thumbnailUrl!.isNotEmpty)
                 Positioned.fill(
                   child: CachedNetworkImage(
-                    imageUrl: track.thumbnailUrl!,
+                    imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
                     fit: BoxFit.cover,
                   ),
                 )
@@ -204,7 +205,7 @@ class AddToPlaylistModal extends StatelessWidget {
             ? ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: CachedNetworkImage(
-                  imageUrl: playlist.thumbnailUrl!,
+                  imageUrl: rewriteThumbnailSize(playlist.thumbnailUrl),
                   fit: BoxFit.cover,
                   errorWidget: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white54),
                 ),

@@ -9,6 +9,7 @@ import '../widgets/track_context_menu.dart';
 import '../widgets/bottom_player.dart';
 import '../widgets/track_download_icon.dart';
 import '../../presentation/providers/download_provider.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class PlaylistScreen extends StatefulWidget {
   final String playlistId;
@@ -110,7 +111,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 children: [
                   if (_playlist!.thumbnailUrl != null)
                     CachedNetworkImage(
-                      imageUrl: _playlist!.thumbnailUrl!,
+                      imageUrl: rewriteThumbnailSize(_playlist!.thumbnailUrl, 1200),
                       fit: BoxFit.cover,
                     ),
                   Container(

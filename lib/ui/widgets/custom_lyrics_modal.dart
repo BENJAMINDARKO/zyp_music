@@ -7,20 +7,19 @@ import 'synced_lyrics_widget.dart';
 import 'dart:ui';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class CustomLyricsModal extends StatefulWidget {
   final bool isFromMiniPlayer;
 
-  const CustomLyricsModal({
-    super.key,
-    required this.isFromMiniPlayer,
-  });
+  const CustomLyricsModal({super.key, required this.isFromMiniPlayer});
 
   @override
   State<CustomLyricsModal> createState() => _CustomLyricsModalState();
 }
 
-class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTickerProviderStateMixin {
+class _CustomLyricsModalState extends State<CustomLyricsModal>
+    with SingleTickerProviderStateMixin {
   int _syncOffsetMs = 0;
   late AnimationController _rotationController;
 
@@ -31,7 +30,7 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
       vsync: this,
       duration: const Duration(seconds: 10),
     );
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final player = context.read<PlayerProvider>();
       if (player.isActuallyPlaying) {
@@ -46,21 +45,25 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
     super.dispose();
   }
 
-  void _downloadLyrics(BuildContext context, String lyrics, String title) async {
+  void _downloadLyrics(
+    BuildContext context,
+    String lyrics,
+    String title,
+  ) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/$title-lyrics.lrc');
       await file.writeAsString(lyrics);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lyrics saved to ${file.path}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lyrics saved to ${file.path}')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save lyrics')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to save lyrics')));
       }
     }
   }
@@ -71,7 +74,8 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
       builder: (context, provider, child) {
         if (provider.isActuallyPlaying && !_rotationController.isAnimating) {
           _rotationController.repeat();
-        } else if (!provider.isActuallyPlaying && _rotationController.isAnimating) {
+        } else if (!provider.isActuallyPlaying &&
+            _rotationController.isAnimating) {
           _rotationController.stop();
         }
 
@@ -111,7 +115,11 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
           children: [
             const Text(
               'Lyrics',
-              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const Spacer(),
             IconButton(
@@ -131,7 +139,10 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
               onPressed: () => setState(() => _syncOffsetMs = 0),
             ),
             IconButton(
-              icon: const Icon(Icons.stop_circle_outlined, color: Colors.white70),
+              icon: const Icon(
+                Icons.stop_circle_outlined,
+                color: Colors.white70,
+              ),
               onPressed: () {},
             ),
             IconButton(
@@ -167,13 +178,21 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                     height: 60,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      image: (provider.currentTrack?.thumbnailUrl?.isNotEmpty ?? false)
+                      image:
+                          (provider.currentTrack?.thumbnailUrl?.isNotEmpty ??
+                              false)
                           ? DecorationImage(
-                              image: NetworkImage(provider.currentTrack!.thumbnailUrl!),
+                              image: NetworkImage(
+                                rewriteThumbnailSize(provider.currentTrack!.thumbnailUrl, 1200),
+                              ),
                               fit: BoxFit.cover,
                             )
                           : null,
-                      color: (provider.currentTrack?.thumbnailUrl?.isNotEmpty ?? false) ? null : Colors.grey[800],
+                      color:
+                          (provider.currentTrack?.thumbnailUrl?.isNotEmpty ??
+                              false)
+                          ? null
+                          : Colors.grey[800],
                     ),
                     child: Center(
                       child: Container(
@@ -195,13 +214,20 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                     children: [
                       Text(
                         provider.currentTrack?.title ?? 'Unknown',
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         provider.currentTrack?.author ?? 'Unknown',
-                        style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -212,24 +238,41 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
             child: Row(
               children: [
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.white24),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Text('Auto v', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  child: const Text(
+                    'Auto v',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ),
                 const SizedBox(width: 16),
                 IconButton(
-                  icon: const Icon(Icons.download_outlined, color: Colors.white70),
+                  icon: const Icon(
+                    Icons.download_outlined,
+                    color: Colors.white70,
+                  ),
                   onPressed: () {
-                    if (provider.lyrics != null && provider.currentTrack != null) {
-                      _downloadLyrics(context, provider.lyrics!, provider.currentTrack!.title);
+                    if (provider.lyrics != null &&
+                        provider.currentTrack != null) {
+                      _downloadLyrics(
+                        context,
+                        provider.lyrics!,
+                        provider.currentTrack!.title,
+                      );
                     }
                   },
                 ),
@@ -259,11 +302,16 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                 ).createShader(bounds);
               },
               blendMode: BlendMode.dstIn,
-              child: SyncedLyricsWidget(
-                lyricsText: provider.lyrics ?? '',
-                isLoading: provider.isLoadingLyrics,
-                position: Duration(milliseconds: provider.position.inMilliseconds + _syncOffsetMs),
-                autoScroll: provider.autoScroll,
+              child: ValueListenableBuilder<Duration>(
+                valueListenable: provider.positionNotifier,
+                builder: (_, position, _) => SyncedLyricsWidget(
+                  lyricsText: provider.lyrics ?? '',
+                  isLoading: provider.isLoadingLyrics,
+                  position: Duration(
+                    milliseconds: position.inMilliseconds + _syncOffsetMs,
+                  ),
+                  autoScroll: provider.autoScroll,
+                ),
               ),
             )
           : const Center(
@@ -290,9 +338,10 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: (provider.currentTrack?.thumbnailUrl?.isNotEmpty ?? false)
+                  child:
+                      (provider.currentTrack?.thumbnailUrl?.isNotEmpty ?? false)
                       ? Image.network(
-                          provider.currentTrack!.thumbnailUrl!,
+                          rewriteThumbnailSize(provider.currentTrack!.thumbnailUrl),
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,
@@ -300,14 +349,20 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                             width: 48,
                             height: 48,
                             color: Colors.white10,
-                            child: const Icon(Icons.music_note, color: Colors.white54),
+                            child: const Icon(
+                              Icons.music_note,
+                              color: Colors.white54,
+                            ),
                           ),
                         )
                       : Container(
                           width: 48,
                           height: 48,
                           color: Colors.white10,
-                          child: const Icon(Icons.music_note, color: Colors.white54),
+                          child: const Icon(
+                            Icons.music_note,
+                            color: Colors.white54,
+                          ),
                         ),
                 ),
                 const SizedBox(width: 12),
@@ -317,13 +372,20 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                     children: [
                       Text(
                         provider.currentTrack?.title ?? 'Unknown',
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         '${provider.currentTrack?.author ?? 'Unknown'} • ${provider.currentTrack?.year ?? ''}',
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -336,42 +398,77 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(icon: const Icon(Icons.favorite_border, color: Colors.white70), onPressed: () {}),
-                IconButton(icon: const Icon(Icons.mic_external_on, color: Colors.white70), onPressed: () {}),
-                IconButton(icon: const Icon(Icons.playlist_add, color: Colors.white70), onPressed: () {}),
-                IconButton(icon: const Icon(Icons.timer_outlined, color: Colors.white70), onPressed: () {}),
-                IconButton(icon: const Icon(Icons.queue_music, color: Colors.white70), onPressed: () {}),
+                IconButton(
+                  icon: const Icon(
+                    Icons.favorite_border,
+                    color: Colors.white70,
+                  ),
+                  onPressed: () {},
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.mic_external_on,
+                    color: Colors.white70,
+                  ),
+                  onPressed: () {},
+                ),
+                IconButton(
+                  icon: const Icon(Icons.playlist_add, color: Colors.white70),
+                  onPressed: () {},
+                ),
+                IconButton(
+                  icon: const Icon(Icons.timer_outlined, color: Colors.white70),
+                  onPressed: () {},
+                ),
+                IconButton(
+                  icon: const Icon(Icons.queue_music, color: Colors.white70),
+                  onPressed: () {},
+                ),
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Text(
-                  _formatDuration(provider.position),
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ProgressBar(
-                    progress: provider.position,
-                    buffered: provider.bufferedPosition,
-                    total: provider.duration,
-                    onSeek: provider.seekTo,
-                    barHeight: 4,
-                    baseBarColor: Colors.white24,
-                    bufferedBarColor: Colors.white38,
-                    progressBarColor: activeColor,
-                    thumbColor: activeColor,
-                    thumbRadius: 6,
-                    timeLabelLocation: TimeLabelLocation.none,
+            ValueListenableBuilder<Duration>(
+              valueListenable: provider.positionNotifier,
+              builder: (_, position, _) => Row(
+                children: [
+                  Text(
+                    _formatDuration(position),
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _formatDuration(provider.duration),
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: provider.bufferedPositionNotifier,
+                      builder: (_, buf, __) =>
+                          ValueListenableBuilder<Duration>(
+                        valueListenable: provider.durationNotifier,
+                        builder: (_, dur, __) => ProgressBar(
+                          progress: position,
+                          buffered: buf,
+                          total: dur,
+                          onSeek: provider.seekTo,
+                          barHeight: 4,
+                          baseBarColor: Colors.white24,
+                          bufferedBarColor: Colors.white38,
+                          progressBarColor: activeColor,
+                          thumbColor: activeColor,
+                          thumbRadius: 6,
+                          timeLabelLocation: TimeLabelLocation.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ValueListenableBuilder<Duration>(
+                    valueListenable: provider.durationNotifier,
+                    builder: (_, dur, __) => Text(
+                      _formatDuration(dur),
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
             Row(
@@ -382,7 +479,11 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                   onPressed: provider.toggleShuffle,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.skip_previous, color: Colors.white, size: 32),
+                  icon: const Icon(
+                    Icons.skip_previous,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                   onPressed: provider.previous,
                 ),
                 GestureDetector(
@@ -398,19 +499,29 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                             width: 32,
                             height: 32,
                             child: CircularProgressIndicator(
-                              color: activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                              color: activeColor.computeLuminance() > 0.5
+                                  ? Colors.black
+                                  : Colors.white,
                               strokeWidth: 3,
                             ),
                           )
                         : Icon(
-                            provider.isActuallyPlaying ? Icons.pause : Icons.play_arrow,
-                            color: activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                            provider.isActuallyPlaying
+                                ? Icons.pause
+                                : Icons.play_arrow,
+                            color: activeColor.computeLuminance() > 0.5
+                                ? Colors.black
+                                : Colors.white,
                             size: 32,
                           ),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.skip_next, color: Colors.white, size: 32),
+                  icon: const Icon(
+                    Icons.skip_next,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                   onPressed: provider.next,
                 ),
                 IconButton(
@@ -432,34 +543,48 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Text(
-                  _formatDuration(provider.position),
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ProgressBar(
-                    progress: provider.position,
-                    buffered: provider.bufferedPosition,
-                    total: provider.duration,
-                    onSeek: provider.seekTo,
-                    barHeight: 4,
-                    baseBarColor: Colors.white24,
-                    bufferedBarColor: Colors.white38,
-                    progressBarColor: activeColor,
-                    thumbColor: activeColor,
-                    thumbRadius: 6,
-                    timeLabelLocation: TimeLabelLocation.none,
+            ValueListenableBuilder<Duration>(
+              valueListenable: provider.positionNotifier,
+              builder: (_, position, _) => Row(
+                children: [
+                  Text(
+                    _formatDuration(position),
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _formatDuration(provider.duration),
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ValueListenableBuilder<Duration>(
+                      valueListenable: provider.bufferedPositionNotifier,
+                      builder: (_, buf, __) =>
+                          ValueListenableBuilder<Duration>(
+                        valueListenable: provider.durationNotifier,
+                        builder: (_, dur, __) => ProgressBar(
+                          progress: position,
+                          buffered: buf,
+                          total: dur,
+                          onSeek: provider.seekTo,
+                          barHeight: 4,
+                          baseBarColor: Colors.white24,
+                          bufferedBarColor: Colors.white38,
+                          progressBarColor: activeColor,
+                          thumbColor: activeColor,
+                          thumbRadius: 6,
+                          timeLabelLocation: TimeLabelLocation.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ValueListenableBuilder<Duration>(
+                    valueListenable: provider.durationNotifier,
+                    builder: (_, dur, __) => Text(
+                      _formatDuration(dur),
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -470,7 +595,11 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                   onPressed: provider.toggleShuffle,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.skip_previous, color: Colors.white, size: 32),
+                  icon: const Icon(
+                    Icons.skip_previous,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                   onPressed: provider.previous,
                 ),
                 GestureDetector(
@@ -485,17 +614,26 @@ class _CustomLyricsModalState extends State<CustomLyricsModal> with SingleTicker
                         ? const SizedBox(
                             width: 32,
                             height: 32,
-                            child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3),
+                            child: CircularProgressIndicator(
+                              color: Colors.black,
+                              strokeWidth: 3,
+                            ),
                           )
                         : Icon(
-                            provider.isActuallyPlaying ? Icons.pause : Icons.play_arrow,
+                            provider.isActuallyPlaying
+                                ? Icons.pause
+                                : Icons.play_arrow,
                             color: Colors.black,
                             size: 32,
                           ),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.skip_next, color: Colors.white, size: 32),
+                  icon: const Icon(
+                    Icons.skip_next,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                   onPressed: provider.next,
                 ),
                 IconButton(

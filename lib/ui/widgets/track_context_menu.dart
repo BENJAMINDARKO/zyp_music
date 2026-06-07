@@ -7,6 +7,7 @@ import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/download_provider.dart';
 import 'auto_dj_mode_picker.dart';
 import 'playlist_picker_dialog.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class TrackContextMenu {
   static void show(BuildContext context, Track track) {
@@ -31,7 +32,7 @@ class TrackContextMenu {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: Image.network(
-                          track.thumbnailUrl!,
+                          rewriteThumbnailSize(track.thumbnailUrl),
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,

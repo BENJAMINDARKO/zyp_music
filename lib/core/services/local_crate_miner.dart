@@ -69,6 +69,13 @@ class LocalCrateMiner {
   final FileExists _fileExists;
   final HiveAudioPathResolver _hiveAudioPathResolver;
 
+  /// Phase 6: kept as a public-ish field so the synthesis
+  /// path inside [_mineFromHive] can consult the SQLite mirror
+  /// for a single trackId (the existing [_sqliteSource] is a
+  /// `()` → all-rows bulk reader, not a per-id resolver).
+  /// Nullable for tests that wire a custom `sqliteSource` only.
+  final PlaylistDatabase? libraryDatabase;
+
   LocalCrateMiner({
     SqliteSource? sqliteSource,
     PlaylistDatabase? libraryDatabase,
@@ -85,7 +92,8 @@ class LocalCrateMiner {
         _historyLedger = historyLedger,
         _fileExists = fileExists ?? _defaultFileExists,
         _hiveAudioPathResolver =
-            hiveAudioPathResolver ?? _defaultHiveAudioPathResolver;
+            hiveAudioPathResolver ?? _defaultHiveAudioPathResolver,
+        libraryDatabase = libraryDatabase;
 
   static Future<List<Map<String, dynamic>>> _emptySqliteSource() async =>
       const <Map<String, dynamic>>[];
@@ -185,7 +193,12 @@ class LocalCrateMiner {
           title: (row['title'] as String?) ?? 'Unknown',
           author: row['author'] as String?,
           thumbnailUrl: row['thumbnailUrl'] as String?,
-          duration: Duration(seconds: row['durationSeconds'] as int? ?? 0),
+          // C1: preserve null rather than coercing to 0 (which
+          // would render as `0:00` in the UI). See
+          // [formatDuration] for the em-dash fallback.
+          duration: (row['durationSeconds'] as int?) == null
+              ? null
+              : Duration(seconds: row['durationSeconds'] as int),
           genre: row['genre'] as String?,
         );
       }
@@ -208,10 +221,62 @@ class LocalCrateMiner {
           );
           continue;
         }
+
+        // Tier 2 (defensive): consult the SQLite mirror in
+        // case the row was added after `_mineFromSqlite` ran.
+        // Cheap; primary-key lookup.
+        final db = libraryDatabase;
+        if (db != null) {
+          try {
+            final downloaded = await db.getDownloadedTrack(id);
+            if (downloaded != null) {
+              out[id] = Track(
+                id: id,
+                title: (downloaded['title'] as String?) ?? 'Cached Track',
+                author: downloaded['author'] as String?,
+                thumbnailUrl: downloaded['thumbnailUrl'] as String?,
+                // C1: preserve null. See sibling block above.
+                duration: (downloaded['durationSeconds'] as int?) == null
+                    ? null
+                    : Duration(seconds: downloaded['durationSeconds'] as int),
+              );
+              continue;
+            }
+          } catch (e) {
+            AppLogger.log(
+              '_mineFromHive: SQLite tier lookup failed for $id: $e',
+              name: _logTag,
+            );
+          }
+        }
+
+        // Tier 3: Hive tracker entry (display metadata when
+        // populated). The Hive tracker does not carry a
+        // duration field, so the synthesised Track reports
+        // `null` (the C1 "unknown" sentinel) — the UI renders
+        // it as `—:—` via [formatDuration]. C3 contract: no
+        // `Duration.zero` leak in the synthesis paths.
+        final hiveEntry = _hybridCache.getTrackerEntry(id);
+        if (hiveEntry != null && hiveEntry.title != null) {
+          out[id] = Track(
+            id: id,
+            title: hiveEntry.title!,
+            author: hiveEntry.author,
+            thumbnailUrl: hiveEntry.thumbnailUrl,
+            duration: null,
+          );
+          continue;
+        }
+
+        // Final fallback: stub. Unknown in every dimension;
+        // duration is `null` not `Duration.zero` for the
+        // same reason as the Hive branch above. Per C1,
+        // "no metadata" must not be mis-rendered as
+        // "0 seconds long".
         out[id] = Track(
           id: id,
           title: 'Cached Track',
-          duration: Duration.zero,
+          duration: null,
         );
       }
     } catch (e) {

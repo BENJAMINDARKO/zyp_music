@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:zyp_music/core/utils/app_logger.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,14 +18,21 @@ class AudioCacheService {
   static const String _prefsKey = 'audio_cache_lru';
 
   /// Optional notifier fired after a stream write completes successfully.
-  /// Receives the `(trackId, finalFilePath)` so the caller can register the
-  /// new cache entry in its own index (e.g. a Hive box) without coupling
-  /// this service to that index.
+  /// Receives the originating `(track, trackId, finalFilePath)` so the
+  /// caller can register the new cache entry in its own index (e.g. a
+  /// Hive box) and mirror the source [Track]'s display metadata into the
+  /// persisted record (Phase 6 cached-metadata spec). [track] is
+  /// nullable because the preloader call path operates on a trackId
+  /// alone — the synthesis-path lookup in
+  /// `QueueManager._buildTrackFromId` is the canonical resolver for
+  /// that case, and the backfill migration hydrates the missing
+  /// metadata on first launch.
   ///
   /// Errors raised inside the callback are swallowed; the file is already
   /// on disk and the next reconcile pass can pick it up if the index update
   /// did not land.
-  Future<void> Function(String trackId, String filePath)? onCacheSuccess;
+  Future<void> Function(Track? track, String trackId, String filePath)?
+      onCacheSuccess;
 
   /// Late-bound collaborators for the independent background downloader
   /// and the Hive-to-SQLite cache migration hook. Wired in `main.dart`
@@ -76,7 +85,15 @@ class AudioCacheService {
   }
 
   /// Downloads the stream in the background and saves it to the cache.
-  Future<void> cacheStream(String trackId, String streamUrl) async {
+  /// [track] is the originating domain entity; it is forwarded to the
+  /// `onCacheSuccess` hook so the Hive cache tracker can mirror the
+  /// display metadata (Phase 6 cached-metadata spec). Nullable for the
+  /// preloader call path which only has a trackId.
+  Future<void> cacheStream(
+    String trackId,
+    String streamUrl, {
+    Track? track,
+  }) async {
     try {
       final cacheDir = await _getCacheDir();
 
@@ -115,7 +132,7 @@ class AudioCacheService {
         final hook = onCacheSuccess;
         if (hook != null) {
           try {
-            await hook(trackId, file.path);
+            await hook(track, trackId, file.path);
           } catch (e) {
             AppLogger.log('onCacheSuccess hook failed for $trackId: $e',
                 name: 'AudioCacheService');
@@ -207,17 +224,16 @@ class AudioCacheService {
       //    without loading it into the player. The repository's
       //    getAudioUrl() consults the local download table and the
       //    LRU cache before falling through to the YouTube extractor,
-      //    so a track that was previously downloaded or pre-buffered
-      //    never re-enters the network path here.
-      final streamUrl = await repo.getAudioUrl(track, quality: 'adaptive');
-
-      // If the audio repository returned a local file path, the
-      // track is already permanently downloaded. Just register it in
+      //    so a previously-cached file never re-downloads.
+      final streamUrl = await repo.getAudioUrl(track);
+      // If the resolved URL is a local file (e.g. the
+      // track is already permanently downloaded) just register it in
       // the Hive box and exit — no network call is made.
       if (!streamUrl.startsWith('http')) {
         await cache.markSuccessAfterWrite(
           track.id,
           expectedFilePath: streamUrl,
+          sourceTrack: track,
         );
         await _maybePromoteToLibrary(track, streamUrl,
             playlistId: playlistId, writeToLibrary: writeToLibraryOnSuccess);
@@ -232,7 +248,7 @@ class AudioCacheService {
       //    must not abort the audio cache write.
       try {
         await Future.wait([
-          cacheStream(track.id, streamUrl),
+          cacheStream(track.id, streamUrl, track: track),
           repo.preloadTrackLyrics(track),
         ]);
       } catch (e) {
@@ -391,9 +407,17 @@ class AudioCacheService {
         filePath,
         title: track.title,
         thumbnailUrl: track.thumbnailUrl,
-        durationSeconds: track.duration.inSeconds,
+        durationSeconds: track.duration?.inSeconds,
         author: track.author,
       );
+
+      // C2: fire-and-forget duration backfill. If
+      // `track.duration` was null (live stream / unlisted
+      // video) the SQLite row was just written with `null` —
+      // let the probe try to recover the real value from the
+      // on-disk file. Bounded to 5s; short-circuits when
+      // `track.duration` was non-null.
+      unawaited(backfillDurationFromFile(track.id, filePath));
 
       // 4. Gently evict from Hive. The on-disk files are not
       //    touched, so the SQLite `filePath` still resolves to a
@@ -460,10 +484,13 @@ class AudioCacheService {
         playlistId ?? 'background',
         filePath,
         title: track.title,
-        thumbnailUrl: track.thumbnailUrl,
-        durationSeconds: track.duration.inSeconds,
-        author: track.author,
+        durationSeconds: track.duration?.inSeconds,
       );
+
+      // C2: fire-and-forget duration backfill. See sibling
+      // comment in [_maybePromoteToLibrary]'s primary
+      // `markTrackDownloaded` call site above.
+      unawaited(backfillDurationFromFile(track.id, filePath));
       await cache.evictFromTracker(track.id);
       AppLogger.log(
         'Promoted background download to permanent library: ${track.id}',
@@ -562,6 +589,113 @@ class AudioCacheService {
       }
 
       await prefs.setString(_prefsKey, jsonEncode(lru));
+    }
+  }
+
+  /// Probes a freshly-cached audio file for its true duration.
+  /// Used by the C2 backfill flow: when a track landed on disk
+  /// without a YouTube API duration (live streams, unlisted
+  /// videos) the duration column is `null`, which renders as
+  /// `—:—` in the list rows. This probe is fired fire-and-forget
+  /// by `AudioRepositoryImpl._backfillDuration` after every
+  /// successful `markSuccessAfterWrite` / `markTrackDownloaded`
+  /// commit; if the probe returns a finite duration, the SQLite
+  /// column is updated and the placeholder retires on next read.
+  ///
+  /// Implementation: spins up a throwaway `just_audio.AudioPlayer`,
+  /// calls `setFilePath` (which decodes the container header
+  /// without starting playback), reads `duration`, then disposes.
+  /// Capped at 5 seconds to bound the worst case on a corrupt
+  /// file — the player can otherwise hang on a malformed stream
+  /// forever.
+  ///
+  /// Returns `null` for any of: missing file, probe timeout,
+  /// format-not-supported, decode failure. The backfill helper
+  /// treats `null` as a no-op (the placeholder stays).
+  Future<Duration?> probeDurationFromFile(String filePath) async {
+    if (!File(filePath).existsSync()) return null;
+    final player = AudioPlayer();
+    try {
+      final duration = await player
+          .setFilePath(filePath)
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => null,
+          );
+      return duration;
+    } catch (e) {
+      AppLogger.log(
+        'probeDurationFromFile: $filePath failed: $e',
+        name: 'AudioCacheService',
+      );
+      return null;
+    } finally {
+      try {
+        await player.dispose();
+      } catch (_) {
+        // Dispose can race with the timeout path; safe to ignore.
+      }
+    }
+  }
+
+  /// Full C2 backfill pipeline: probe the on-disk file, then
+  /// update the SQLite `durationSeconds` column if the probe
+  /// yields a finite duration AND the current column is `null`
+  /// (a non-null value is left alone — it's either a YouTube
+  /// API value or the result of an earlier successful probe).
+  ///
+  /// Returns `true` if the SQLite column was written, `false`
+  /// otherwise (no-op because already populated, or probe
+  /// returned null/timeout/unsupported format). The boolean
+  /// exists for test assertions and structured logging; the
+  /// fire-and-forget call sites don't inspect it.
+  ///
+  /// Designed to be called with `unawaited(...)` from every
+  /// "file landed on disk" hook:
+  ///   * `onCacheSuccess` in [AudioRepositoryImpl] (cacheStream
+  ///     path → `markSuccessAfterWrite`),
+  ///   * `markTrackDownloaded` call sites in
+  ///     [AudioCacheService] (`_maybePromoteToLibrary` paths),
+  ///   * `markTrackDownloaded` call sites in [DownloadService]
+  ///     (explicit user-initiated download).
+  ///
+  /// Safe under concurrent invocation: the no-op guard
+  /// ("already non-null, skip probe") prevents thundering-herd
+  /// re-probes on the same track when multiple hooks fire
+  /// (e.g. cacheStream + markTrackDownloaded on the same
+  /// file).
+  Future<bool> backfillDurationFromFile(
+    String trackId,
+    String filePath,
+  ) async {
+    final db = _libraryDatabase;
+    if (db == null) return false;
+    try {
+      // 1. Skip if SQLite already has a non-null duration.
+      //    The synthesis paths surface this on the next read;
+      //    a re-probe would only slow startup and could in
+      //    principle overwrite a more-authoritative YouTube
+      //    API value with a slightly different probe value.
+      final existing = await db.getDownloadedTrack(trackId);
+      if (existing == null) return false; // track evicted mid-flight
+      if (existing['durationSeconds'] != null) return false;
+
+      // 2. Probe the file. null/timeout/unsupported → no-op.
+      final probed = await probeDurationFromFile(filePath);
+      if (probed == null) return false;
+
+      // 3. Persist. A second `markTrackDownloaded` arriving
+      //    concurrently (race between the cacheStream and the
+      //    permanent-library promotion) will overwrite this
+      //    with its own value; the schema is durable to that.
+      await db.updateTrackDuration(trackId, seconds: probed.inSeconds);
+      return true;
+    } catch (e) {
+      AppLogger.log(
+        'backfillDurationFromFile: $trackId failed: $e',
+        name: 'AudioCacheService',
+      );
+      return false;
     }
   }
 }

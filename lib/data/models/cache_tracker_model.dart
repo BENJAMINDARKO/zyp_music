@@ -16,6 +16,9 @@ class CacheTrackerModel {
   static const int kFieldLyricsFilePath = 4;
   static const int kFieldLyricsVerified = 5;
   static const int kFieldGenre = 6;
+  static const int kFieldTitle = 7;
+  static const int kFieldAuthor = 8;
+  static const int kFieldThumbnailUrl = 9;
 
   final String trackId;
   final int cachedAt;
@@ -32,6 +35,18 @@ class CacheTrackerModel {
   /// the adapter's null-safe read).
   final String? genre;
 
+  /// Phase 6: display metadata captured at cache-commit time.
+  /// Mirrors the source [Track]'s title / author / thumbnail
+  /// so the synthesis paths in `QueueManager._buildTrackFromId`
+  /// and `LocalCrateMiner._mineFromHive` can return a populated
+  /// `Track` from the Hive tier alone, without a SQLite
+  /// round-trip. Nullable on records written before this
+  /// field was added (handled by the adapter's null-safe read
+  /// and hydrated on first launch by `CacheMetadataBackfill`).
+  final String? title;
+  final String? author;
+  final String? thumbnailUrl;
+
   CacheTrackerModel({
     required this.trackId,
     required this.cachedAt,
@@ -40,6 +55,9 @@ class CacheTrackerModel {
     this.lyricsFilePath,
     this.lyricsVerified = true,
     this.genre,
+    this.title,
+    this.author,
+    this.thumbnailUrl,
   });
 
   CacheTrackerModel copyWith({
@@ -50,9 +68,15 @@ class CacheTrackerModel {
     String? lyricsFilePath,
     bool? lyricsVerified,
     String? genre,
+    String? title,
+    String? author,
+    String? thumbnailUrl,
     bool clearLyrics = false,
     bool clearLyricsFilePath = false,
     bool clearGenre = false,
+    bool clearTitle = false,
+    bool clearAuthor = false,
+    bool clearThumbnailUrl = false,
   }) {
     return CacheTrackerModel(
       trackId: trackId ?? this.trackId,
@@ -64,6 +88,10 @@ class CacheTrackerModel {
           : (lyricsFilePath ?? this.lyricsFilePath),
       lyricsVerified: lyricsVerified ?? this.lyricsVerified,
       genre: clearGenre ? null : (genre ?? this.genre),
+      title: clearTitle ? null : (title ?? this.title),
+      author: clearAuthor ? null : (author ?? this.author),
+      thumbnailUrl:
+          clearThumbnailUrl ? null : (thumbnailUrl ?? this.thumbnailUrl),
     );
   }
 }
@@ -101,13 +129,21 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       // routing service treats as "no signal — fall back to
       // the listening-history ledger".
       genre: fields[CacheTrackerModel.kFieldGenre] as String?,
+      // Phase 6: fields 7/8/9 are optional; records written
+      // before this migration surface with `title = null`,
+      // which the synthesis paths treat as "fall through to
+      // the SQLite tier or the stub". Hydrated on first
+      // launch by `CacheMetadataBackfill`.
+      title: fields[CacheTrackerModel.kFieldTitle] as String?,
+      author: fields[CacheTrackerModel.kFieldAuthor] as String?,
+      thumbnailUrl: fields[CacheTrackerModel.kFieldThumbnailUrl] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CacheTrackerModel obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(10)
       ..writeByte(CacheTrackerModel.kFieldTrackId)
       ..write(obj.trackId)
       ..writeByte(CacheTrackerModel.kFieldCachedAt)
@@ -121,6 +157,12 @@ class CacheTrackerModelAdapter extends TypeAdapter<CacheTrackerModel> {
       ..writeByte(CacheTrackerModel.kFieldLyricsVerified)
       ..write(obj.lyricsVerified)
       ..writeByte(CacheTrackerModel.kFieldGenre)
-      ..write(obj.genre);
+      ..write(obj.genre)
+      ..writeByte(CacheTrackerModel.kFieldTitle)
+      ..write(obj.title)
+      ..writeByte(CacheTrackerModel.kFieldAuthor)
+      ..write(obj.author)
+      ..writeByte(CacheTrackerModel.kFieldThumbnailUrl)
+      ..write(obj.thumbnailUrl);
   }
 }

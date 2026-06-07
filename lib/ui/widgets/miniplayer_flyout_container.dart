@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/utils/thumbnail_url.dart';
 
 /// Shared blurred-background container used by all MiniPlayer flyout panels.
 class MiniplayerFlyoutContainer extends StatelessWidget {
@@ -23,7 +24,7 @@ class MiniplayerFlyoutContainer extends StatelessWidget {
           // Blurred album art background
           if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty)
             CachedNetworkImage(
-              imageUrl: thumbnailUrl!,
+              imageUrl: rewriteThumbnailSize(thumbnailUrl, 1200),
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,

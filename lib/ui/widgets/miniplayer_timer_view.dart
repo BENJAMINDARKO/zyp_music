@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import 'miniplayer_flyout_container.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class MiniplayerTimerView extends StatefulWidget {
   const MiniplayerTimerView({super.key});

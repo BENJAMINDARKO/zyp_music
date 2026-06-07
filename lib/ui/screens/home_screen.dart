@@ -14,6 +14,7 @@ import '../widgets/track_context_menu.dart';
 import '../widgets/album_context_menu.dart';
 import 'album_screen.dart'; // We'll need this for albums
 import 'package:zyp_music/ui/screens/artist_screen.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -369,7 +370,7 @@ class _CompactTrackTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
                 child: track.thumbnailUrl != null
                     ? CachedNetworkImage(
-                        imageUrl: track.thumbnailUrl!,
+                        imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
                         width: 56,
                         height: 56,
                         fit: BoxFit.cover,
@@ -478,7 +479,7 @@ class _TrackCard extends StatelessWidget {
                           ? ClipRRect(
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                               child: CachedNetworkImage(
-                                imageUrl: track.thumbnailUrl!,
+                                imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
                                 fit: BoxFit.cover,
                                 errorWidget: (_, __, ___) => _fallbackIcon(),
                               ),
@@ -608,7 +609,7 @@ class _AlbumCard extends StatelessWidget {
                           ? ClipRRect(
                               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                               child: CachedNetworkImage(
-                                imageUrl: album.thumbnailUrl!,
+                                imageUrl: rewriteThumbnailSize(album.thumbnailUrl),
                                 fit: BoxFit.cover,
                                 errorWidget: (_, __, ___) => _fallbackIcon(),
                               ),

@@ -6,6 +6,7 @@ import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/download_provider.dart';
 import 'auto_dj_mode_picker.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 /// Long-press context menu for an Album card.
 ///
@@ -49,7 +50,7 @@ class AlbumContextMenu {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: Image.network(
-                          album.thumbnailUrl!,
+                          rewriteThumbnailSize(album.thumbnailUrl),
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,

@@ -14,21 +14,30 @@ import '../../service/audio_handler.dart';
 import '../../core/services/audio_cache_service.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/hybrid_cache_service.dart';
+import '../../core/services/lyrics_chain_service.dart';
 
-  String _stripPrefixes(String id) {
-    var stripped = id;
-    if (stripped.startsWith('unified_')) {
-      stripped = stripped.substring('unified_'.length);
-    }
-    if (stripped.startsWith('youtube_music_')) {
-      stripped = stripped.substring('youtube_music_'.length);
-    } else if (stripped.startsWith('youtube_')) {
-      stripped = stripped.substring('youtube_'.length);
-    }
-    return stripped;
+/// Public top-level entry point for the Track-ID prefix
+/// stripper. The function lives at file scope (not on a
+/// class) so collaborators outside [AudioRepositoryImpl] —
+/// e.g. the lyrics chain service — can call it without
+/// either a class reference or `static` ceremony. Kept as a
+/// plain function (no underscore) on purpose; the previous
+/// private `_stripPrefixes` was already top-level so this
+/// is purely a rename for re-use.
+String stripTrackIdPrefixes(String id) {
+  var stripped = id;
+  if (stripped.startsWith('unified_')) {
+    stripped = stripped.substring('unified_'.length);
   }
+  if (stripped.startsWith('youtube_music_')) {
+    stripped = stripped.substring('youtube_music_'.length);
+  } else if (stripped.startsWith('youtube_')) {
+    stripped = stripped.substring('youtube_'.length);
+  }
+  return stripped;
+}
 
-class AudioRepositoryImpl implements AudioRepository {
+class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
   final YoutubeRemoteDataSource remoteDataSource;
   final LyricsRemoteDataSource lyricsDataSource;
   final MusicAudioHandler _handler;
@@ -41,6 +50,18 @@ class AudioRepositoryImpl implements AudioRepository {
   /// downloader and the Hive-to-SQLite cache migration hooks can reuse
   /// the same on-disk file layout and Hive tracker wiring.
   final AudioCacheService _cacheService;
+
+  /// Phase 2: multi-tier lyrics fetch chain (YTMusic timed
+  /// → YTMusic plain → LrcLib) with the on-disk LRC cache as
+  /// tier 1. Late-bound via [setLyricsChainService] so the
+  /// repository remains constructible in unit tests that
+  /// don't care about lyrics. When null, the legacy
+  /// single-tier LrcLib path is preserved.
+  LyricsChainService? _lyricsChain;
+
+  void setLyricsChainService(LyricsChainService chain) {
+    _lyricsChain = chain;
+  }
 
   bool _isOffline = false;
   bool get isOffline => _isOffline;
@@ -60,12 +81,31 @@ class AudioRepositoryImpl implements AudioRepository {
     // pre-buffered tracks register themselves in the box. This is what makes
     // the download icon flip to the checkmark for tracks that were cached
     // by the lookahead pre-buffer engine (not just user-initiated downloads).
-    _cacheService.onCacheSuccess = (trackId, filePath) async {
+    //
+    // Phase 6 (cached-metadata spec): the originating [Track] is forwarded
+    // so `markSuccessAfterWrite` can mirror its `title`/`author`/`thumbnailUrl`
+    // into the persisted Hive record. The synthesis paths in
+    // `QueueManager._buildTrackFromId` and `LocalCrateMiner._mineFromHive`
+    // then return a fully-populated `Track` from the Hive tier alone
+    // instead of the legacy `'Cached Track'` stub.
+    _cacheService.onCacheSuccess = (track, trackId, filePath) async {
       final cache = _hybridCache;
       if (cache == null) return;
       await cache.markSuccessAfterWrite(
         trackId,
         expectedFilePath: filePath,
+        sourceTrack: track,
+      );
+      // C2: fire-and-forget duration backfill. The YouTube
+      // extractor often returns no duration for live streams /
+      // unlisted videos; the file we just wrote to disk has
+      // a real duration that the SQLite row is missing. The
+      // probe is bounded (5s) and short-circuits when the row
+      // already has a non-null duration, so the common case
+      // (YouTube API provided one) is a single no-op SQL
+      // read.
+      unawaited(
+        _cacheService.backfillDurationFromFile(trackId, filePath),
       );
     };
   }
@@ -132,7 +172,7 @@ class AudioRepositoryImpl implements AudioRepository {
   /// For native YouTube tracks with an 11-char ID, tries direct URL resolution first.
   /// Falls back to a search query for any other track or if the direct call fails.
   Future<String> _getYouTubeUrl(Track track, String quality) async {
-    final rawId = _stripPrefixes(track.id);
+    final rawId = stripTrackIdPrefixes(track.id);
     if ((track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) &&
         rawId.length == 11) {
       try {
@@ -161,7 +201,7 @@ class AudioRepositoryImpl implements AudioRepository {
         finalUrl.contains('googlevideo.com')) {
       try {
         AppLogger.log('Fetching fresh YouTube stream URL at play time', name: 'AudioRepository');
-        final rawId = _stripPrefixes(track.id);
+        final rawId = stripTrackIdPrefixes(track.id);
         final freshUrl = await remoteDataSource.getAudioUrl(rawId, quality: 'adaptive');
         if (freshUrl.isNotEmpty) {
           finalUrl = freshUrl;
@@ -173,7 +213,7 @@ class AudioRepositoryImpl implements AudioRepository {
 
     if (finalUrl.startsWith('http')) {
       // Start caching the stream in the background
-      _cacheService.cacheStream(track.id, finalUrl);
+      _cacheService.cacheStream(track.id, finalUrl, track: track);
     }
 
     final actualSource = 'youtube';
@@ -196,7 +236,7 @@ class AudioRepositoryImpl implements AudioRepository {
     Future<void> executePlay(String url, MediaItem mediaItem) async {
       final queue = _handler.queue.value;
       if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
-        _handler.mediaItem.add(mediaItem);
+        _handler.updateMediaItem(mediaItem);
         await _handler.playTrack(url, mediaItem);
       } else {
         final newQueue = List<MediaItem>.from(queue);
@@ -408,6 +448,18 @@ class AudioRepositoryImpl implements AudioRepository {
     }
   }
 
+  /// LyricsCacheReader entry point used by [LyricsChainService]
+  /// as tier 1 (the "is the LRC already on disk?" check). The
+  /// chain can be called from any code path that has a
+  /// [Track] in hand; the repository is the only collaborator
+  /// that knows the on-disk file layout, so the indirection
+  /// keeps the chain free of `dart:io` and path manipulation.
+  @override
+  Future<String?> read(String trackId) async {
+    final path = await _lyricsFilePathFor(trackId);
+    return _readCachedLyricsFile(trackId, path);
+  }
+
   /// Reads the deterministic trackId-keyed LRC file at [lyricsPath] and
   /// returns its content only when the content is non-empty AND
   /// structurally valid (synced LRC timestamps or plain text). Returns
@@ -515,6 +567,10 @@ class AudioRepositoryImpl implements AudioRepository {
   }
 
   Future<String?> _fetchLyricsFromNetwork(Track track) async {
+    final chain = _lyricsChain;
+    if (chain != null) {
+      return chain.fetchLyrics(track);
+    }
     return await lyricsDataSource.getSyncedLyrics(track.title, track.author ?? '');
   }
 
@@ -554,7 +610,14 @@ class AudioRepositoryImpl implements AudioRepository {
           title: e.title ?? 'Unknown',
           author: e.artists?.name ?? 'Unknown',
           thumbnailUrl: e.thumbnails?.last.url,
-          duration: Duration(seconds: e.duration ?? 0),
+          // C1: preserve null. The YouTube API returns no
+          // `duration` for live streams / unlisted videos;
+          // coercing to `0` would render as `0:00` in the UI.
+          // [formatDuration] handles the null case with the
+          // em-dash placeholder.
+          duration: e.duration == null
+              ? null
+              : Duration(seconds: e.duration!),
           source: TrackSource.youtube,
           genre: genre,
         );
@@ -633,7 +696,7 @@ class AudioRepositoryImpl implements AudioRepository {
     try {
       final audioUrl = await getAudioUrl(track);
       if (audioUrl.startsWith('http')) {
-        await _cacheService.cacheStream(track.id, audioUrl);
+        await _cacheService.cacheStream(track.id, audioUrl, track: track);
         AppLogger.log('Successfully preloaded track: ${track.id}', name: 'AudioRepository');
       }
       // Spec §1: when a track is cached via the background look-ahead
@@ -656,7 +719,7 @@ class AudioRepositoryImpl implements AudioRepository {
         finalUrl.contains('googlevideo.com')) {
       try {
         AppLogger.log('Fetching fresh YouTube stream URL at build time', name: 'AudioRepository');
-        final rawId = _stripPrefixes(track.id);
+        final rawId = stripTrackIdPrefixes(track.id);
         final freshUrl = await remoteDataSource.getAudioUrl(rawId, quality: 'adaptive');
         if (freshUrl.isNotEmpty) {
           finalUrl = freshUrl;
@@ -668,7 +731,7 @@ class AudioRepositoryImpl implements AudioRepository {
 
     if (finalUrl.startsWith('http')) {
       // Start caching the stream in the background
-      _cacheService.cacheStream(track.id, finalUrl);
+      _cacheService.cacheStream(track.id, finalUrl, track: track);
     }
 
     final headers = await _handler.getHeaders();

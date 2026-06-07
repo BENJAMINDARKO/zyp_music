@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/player_provider.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class GlobalBackground extends StatelessWidget {
   const GlobalBackground({super.key});
@@ -24,7 +25,7 @@ class GlobalBackground extends StatelessWidget {
           children: [
             Container(color: baseColor), // Base fallback
             CachedNetworkImage(
-              imageUrl: track.thumbnailUrl!,
+              imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
               fit: BoxFit.cover,
               errorWidget: (_, __, ___) => Container(color: baseColor),
             ),

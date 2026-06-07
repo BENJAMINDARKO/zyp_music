@@ -20,6 +20,14 @@ class YoutubeRemoteDataSource {
   late YoutubeExplode _yt;
   late ytm.YTMusic _ytMusic;
 
+  /// Public read-only handle on the underlying [ytm.YTMusic]
+  /// instance. Exposed so adjacent services (currently the
+  /// lyrics chain, future: sponsor-block pre-roller, etc.) can
+  /// call into the same authenticated client without having
+  /// to instantiate their own — and without forcing the
+  /// remote data source to know about lyrics at all.
+  ytm.YTMusic get ytMusic => _ytMusic;
+
   YoutubeRemoteDataSource({AuthService? authService})
       : _authService = authService ?? AuthService();
 
@@ -79,7 +87,7 @@ class YoutubeRemoteDataSource {
               id: v.videoId,
               title: v.name,
               author: v.artist.name,
-              durationSeconds: v.duration ?? 0,
+              durationSeconds: v.duration,
               thumbnailUrl: v.thumbnails.lastOrNull?.url,
               index: i,
             ));
@@ -127,7 +135,7 @@ class YoutubeRemoteDataSource {
               id: video.id.value,
               title: video.title,
               author: video.author,
-              durationSeconds: video.duration?.inSeconds ?? 0,
+              durationSeconds: video.duration?.inSeconds,
               thumbnailUrl: video.thumbnails.mediumResUrl,
               index: i,
             ));
@@ -169,7 +177,7 @@ class YoutubeRemoteDataSource {
       id: video.id.value,
       title: video.title,
       author: video.author,
-      durationSeconds: video.duration?.inSeconds ?? 0,
+      durationSeconds: video.duration?.inSeconds,
       thumbnailUrl: video.thumbnails.mediumResUrl,
       index: 0,
     );
@@ -265,7 +273,7 @@ class YoutubeRemoteDataSource {
         title: video.title,
         author: author,
         album: album,
-        durationSeconds: video.duration?.inSeconds ?? 0,
+      durationSeconds: video.duration?.inSeconds,
         thumbnailUrl: video.thumbnails.mediumResUrl,
         index: i,
       ));
@@ -274,9 +282,18 @@ class YoutubeRemoteDataSource {
   }
 
   Future<List<TrackModel>> searchTracks(String query) async {
+    // Pagination: `dart_ytmusic_api` 1.3.6's `searchSongs`
+    // signature is `(String query)` only — there is no
+    // `limit`/`offset` parameter and no continuation-token
+    // accessor. The upstream response is capped at the
+    // library's default page size; the UI's
+    // infinite-scroll handler therefore re-invokes this
+    // method with a refined query rather than paging the
+    // same query. If a future version exposes pagination,
+    // thread the `limit`/`page` arguments through here.
     final results = await _ytMusic.searchSongs(query);
     final tracks = <TrackModel>[];
-    
+
     for (var i = 0; i < results.length; i++) {
       final song = results[i];
       tracks.add(TrackModel(
@@ -284,7 +301,7 @@ class YoutubeRemoteDataSource {
         title: song.name,
         author: song.artist.name,
         album: song.album?.name,
-        durationSeconds: song.duration ?? 0,
+        durationSeconds: song.duration,
         thumbnailUrl: song.thumbnails.lastOrNull?.url,
         index: i,
       ));
@@ -293,6 +310,10 @@ class YoutubeRemoteDataSource {
   }
 
   Future<List<Album>> searchAlbums(String query) async {
+    // Pagination: `dart_ytmusic_api` 1.3.6's `searchAlbums`
+    // signature is `(String query)` only — no
+    // `limit`/`offset` and no continuation-token
+    // accessor. Same constraint as `searchTracks` above.
     final results = await _ytMusic.searchAlbums(query);
     return results.map((a) => Album(
       id: a.albumId, // We use albumId to fetch album tracks later
@@ -304,6 +325,10 @@ class YoutubeRemoteDataSource {
   }
 
   Future<List<Artist>> searchArtists(String query) async {
+    // Pagination: `dart_ytmusic_api` 1.3.6's `searchArtists`
+    // signature is `(String query)` only — no
+    // `limit`/`offset` and no continuation-token
+    // accessor. Same constraint as `searchTracks` above.
     final results = await _ytMusic.searchArtists(query);
     return results.map((a) => Artist(
       id: a.artistId,
@@ -313,6 +338,10 @@ class YoutubeRemoteDataSource {
   }
 
   Future<List<PlaylistModel>> searchPlaylists(String query) async {
+    // Pagination: `dart_ytmusic_api` 1.3.6's `searchPlaylists`
+    // signature is `(String query)` only — no
+    // `limit`/`offset` and no continuation-token
+    // accessor. Same constraint as `searchTracks` above.
     final results = await _ytMusic.searchPlaylists(query);
     return results.map((p) => PlaylistModel(
       id: p.playlistId,

@@ -7,6 +7,7 @@ import 'app.dart';
 import 'core/utils/app_logger.dart';
 import 'domain/entities/video.dart';
 import 'data/datasources/local/playlist_database.dart';
+import 'data/datasources/remote/musicbrainz_datasource.dart';
 import 'data/datasources/remote/youtube_remote_datasource.dart';
 import 'data/datasources/remote/lyrics_remote_datasource.dart';
 import 'data/repositories/audio_repository_impl.dart';
@@ -17,10 +18,13 @@ import 'data/models/cache_tracker_model.dart';
 import 'core/services/audio_cache_service.dart';
 import 'core/services/auto_dj_routing_service.dart';
 import 'core/services/dj_history_ledger.dart';
+import 'core/services/genre_enrichment_service.dart';
 import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/local_crate_miner.dart';
+import 'core/services/lyrics_chain_service.dart';
 import 'core/services/queue_manager.dart';
+import 'core/migrations/cache_metadata_backfill.dart';
 import 'core/constants/network_state.dart';
 import 'core/audio/gapless_queue_mixer.dart';
 import 'core/audio/silence_scan_worker.dart';
@@ -45,6 +49,36 @@ Future<void> main() async {
   final localDatabase = PlaylistDatabase();
   final hybridCache = HybridCacheService(libraryDatabase: localDatabase);
   await hybridCache.init();
+
+  // Phase 6: one-time metadata backfill. Hydrates the
+  // title/author/thumbnailUrl fields on existing Hive
+  // tracker entries from the SQLite downloaded_tracks
+  // mirror. The migration is gated on a versioned
+  // SharedPreferences flag and is idempotent — safe to
+  // call on every launch, and a no-op after the first run.
+  // Runs before the UI is shown so any subsequent synthesis
+  // path sees the hydrated state.
+  final box = hybridCache.box;
+  if (box != null) {
+    final backfill = CacheMetadataBackfill(
+      trackerBox: box,
+      database: localDatabase,
+    );
+    await backfill.runIfNeeded();
+  }
+
+  // Phase 6: MusicBrainz data source + the enrichment service
+  // that fronts it. Both are app-lifetime singletons; the
+  // service is the only collaborator the routing layer and
+  // the playback loop need to know about. The data source is
+  // owned by the service so the 1-req/sec rate gate is shared
+  // between Auto DJ background enrichment and the per-track
+  // enqueue fired by PlayerProvider.
+  final musicBrainz = MusicBrainzDataSource();
+  final genreEnrichment = GenreEnrichmentService(
+    mb: musicBrainz,
+    db: localDatabase,
+  );
 
   try {
     final session = await AudioSession.instance;
@@ -96,6 +130,19 @@ Future<void> main() async {
       hybridCache: hybridCache,
     );
 
+    // Phase 2: multi-tier lyrics fetch chain. Constructed
+    // after the audio repository so it can borrow the
+    // repository's on-disk LRC read path as tier 1 (the
+    // "is the LRC already on disk?" check). The chain is
+    // the network/format layer; the repository is still
+    // responsible for the on-disk + Hive write-back.
+    final lyricsChain = LyricsChainService(
+      youtube: remoteDataSource,
+      lrclib: lyricsDataSource,
+      cache: audioRepository,
+    );
+    audioRepository.setLyricsChainService(lyricsChain);
+
     // Construct the global connectivity listener after every collaborator
     // it needs to wake up is alive. `initialize` runs the synchronous
     // initial probe (so the system is locked to `offline` or `online`
@@ -143,6 +190,7 @@ Future<void> main() async {
       audioRepository: audioRepository,
       database: localDatabase,
       settingsProvider: settingsProvider,
+      cacheService: audioCacheService,
     );
     final downloadProvider = DownloadProvider(downloadService, hybridCache);
     await downloadProvider.init();
@@ -183,6 +231,7 @@ Future<void> main() async {
     final routingService = AutoDjRoutingService(
       crateMiner: crateMiner,
       historyLedger: historyLedger,
+      genreEnrichment: genreEnrichment,
       onlineFetcher: (t) => audioRepository.getUpNexts(t),
       connectivityProbe: () {
         switch (connectivityService.state) {
@@ -259,6 +308,7 @@ Future<void> main() async {
       connectivityService: connectivityService,
       queueManager: queueManager,
       historyLedger: historyLedger,
+      genreEnrichmentService: genreEnrichment,
       routingService: routingService,
     ));
   } catch (e) {

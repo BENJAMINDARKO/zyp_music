@@ -11,8 +11,9 @@ import '../../core/audio/gapless_queue_mixer.dart';
 import '../../core/audio/dsp_crossfade_engine.dart';
 import '../../core/constants/audio_quality.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
-import '../../core/services/auto_dj_routing_service.dart';
-import '../../core/services/dj_history_ledger.dart';
+  import '../../core/services/auto_dj_routing_service.dart';
+  import '../../core/services/dj_history_ledger.dart';
+  import '../../core/services/genre_enrichment_service.dart';
 import '../../core/services/hybrid_cache_service.dart';
 import '../../core/services/queue_manager.dart';
 import '../../core/services/connectivity_service.dart';
@@ -78,6 +79,15 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// without touching the queue manager.
   ConnectivityService? _connectivityService;
 
+  /// Phase 6: background MusicBrainz enrichment so future
+  /// Auto-DJ routing calls can short-circuit the
+  /// dominant-genre interceptor on a cache hit. The wiring
+  /// follows the existing late-binding pattern used by
+  /// `setHistoryLedger` and `setMixer`; see `app.dart` for
+  /// the chain. Nullable so unit tests that build a
+  /// `PlayerProvider` directly can run without one.
+  GenreEnrichmentService? _genreEnrichment;
+
   /// Smart-DJ bootstrap fusion: the routing service reference
   /// used to:
   ///   1. Push the Top 5 Liked Artists / Genres + initial
@@ -109,6 +119,55 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// order.
   bool _smartDjFusionBootstrapped = false;
 
+  /// Idempotent gate that resolves once
+  /// [_maybeBootstrapSmartDjFusion] has finished pushing the
+  /// Top-Artists / Top-Genres cache into the routing service.
+  /// The [QueueManager] awaits [smartDjBootstrapInitialization]
+  /// at the top of `generateNextAutoDJTrack` so the very first
+  /// `resolveNext()` call can never land on an empty fusion
+  /// cache — which previously produced zero-score roulette
+  /// wheels in Same-Genre mode at app cold start. The
+  /// completer is completed exactly once; subsequent reads
+  /// resolve on the next microtask with no behaviour change.
+  final Completer<void> _smartDjBootstrapCompleter = Completer<void>();
+  Future<void> get smartDjBootstrapInitialization =>
+      _smartDjBootstrapCompleter.future;
+
+  /// Dedicated high-frequency notifiers for position / buffer /
+  /// duration. The seekbar subscribes to these via [SeekbarConnector]
+  /// so audio-frame ticks do not propagate through the main
+  /// [ChangeNotifier] channel and rebuild every `Consumer` in the
+  /// tree. The legacy fields [_position], [_bufferedPosition], and
+  /// [_duration] are still kept in sync for any code path that reads
+  /// the getters (the audio handler bridge, the `_saveActiveTrackState`
+  /// persistence, the gapless mixer's lookahead, etc.).
+  final ValueNotifier<Duration> positionNotifier = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> bufferedPositionNotifier = ValueNotifier(
+    Duration.zero,
+  );
+  final ValueNotifier<Duration> durationNotifier = ValueNotifier(Duration.zero);
+
+  /// Drag lock. While a user is dragging the seekbar, position ticks
+  /// from the engine would otherwise overwrite the optimistic
+  /// `_dragValue` the seekbar painted. The lock is flipped on at
+  /// [startSeek] and cleared by [_startPolling] the first time a
+  /// stream tick lands within 500 ms of the seek target. The
+  /// [_seekTimeoutTimer] is a hard 2-second safety net: if the
+  /// engine is slow (network stream, cold cache), the lock is
+  /// force-cleared regardless of the delta check.
+  bool _isSeeking = false;
+  Duration _seekPosition = Duration.zero;
+  Timer? _seekTimeoutTimer;
+
+  /// Cold-launch / rapid-tap guard. The pending-resume path in
+  /// [togglePlayPause] calls `playTrack(track, startAt: pending)`,
+  /// which is a multi-step async load (URL resolve → mixer add →
+  /// engine setSource → seek → play). Without the guard, a fast
+  /// double-tap of the play button would race two cold-launch
+  /// loads against the same engine instance and leave the
+  /// provider with a stuck `_isLoading` flag.
+  bool _isTransitioning = false;
+
   StreamSubscription<CrossfadeReadyEvent>? _crossfadeSub;
   late final FallbackEngine _fallbackEngine;
 
@@ -128,7 +187,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _skipNextSubscription = _audioRepository.onSkipNextRequested.listen((_) {
       next();
     });
-    _skipPrevSubscription = _audioRepository.onSkipPreviousRequested.listen((_) {
+    _skipPrevSubscription = _audioRepository.onSkipPreviousRequested.listen((
+      _,
+    ) {
       previous();
     });
     // Drive the Hive-driven preload loop off the existing track-changed hook.
@@ -142,18 +203,19 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queueManager?.setPlayerProvider(this);
     // Allow the offline Auto DJ pool to look up recently-played metadata.
     _queueManager?.metadataResolver = () => {
-          for (final t in _recentlyPlayed) t.id: t,
-        };
+      for (final t in _recentlyPlayed) t.id: t,
+    };
     // Restore the persisted Auto Queue engagement flag and active track
     // metadata from disk so the engine and miniplayer resume their
     // previous state across cold launches.
     _loadAutoQueueState();
+    _startPolling();
     _loadActiveTrackState().then((_) {
       // Load recently played tracks on startup
       loadRecentlyPlayed().then((_) {
         _queueManager?.metadataResolver = () => {
-              for (final t in _recentlyPlayed) t.id: t,
-            };
+          for (final t in _recentlyPlayed) t.id: t,
+        };
         if (_recentlyPlayed.isNotEmpty) {
           notifyListeners();
         }
@@ -191,7 +253,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   String? _lyrics;
   bool _isLoadingLyrics = false;
-  
+
   Color? _dominantColor;
   bool _autoScroll = true;
   bool _isKaraokeMode = false;
@@ -375,6 +437,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       topLikedGenres: topGenres,
     );
     _smartDjFusionBootstrapped = true;
+    if (!_smartDjBootstrapCompleter.isCompleted) {
+      _smartDjBootstrapCompleter.complete();
+      AppLogger.log(
+        '[SmartDJ-Engine] Bootstrap completer fulfilled.',
+        name: 'PlayerProvider',
+      );
+    }
   }
 
   /// Late-binds the Phase 3 gapless queue mixer. Called once
@@ -385,7 +454,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// never needs to subscribe to the audio source directly.
   void setMixer(GaplessQueueMixer mixer) {
     _mixer = mixer;
-    
+
     // Subscribe to track queued events from the mixer (dynamic lookahead preloads)
     _mixer?.onTrackQueued = (track) {
       if (!_queue.any((t) => t.id == track.id)) {
@@ -467,6 +536,15 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _connectivityService = svc;
   }
 
+  /// Phase 6: late-binding setter for the genre
+  /// enrichment service. Once bound, every successful
+  /// track transition kicks the service so the artist's
+  /// MusicBrainz tag list lands in the local cache
+  /// before the next Auto-DJ routing call.
+  void setGenreEnrichmentService(GenreEnrichmentService svc) {
+    _genreEnrichment = svc;
+  }
+
   Box? _mediaStateBox;
   Future<Box> _getMediaStateBox() async {
     if (_mediaStateBox != null && _mediaStateBox!.isOpen) {
@@ -481,7 +559,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       'id': track.id,
       'title': track.title,
       'thumbnailUrl': track.thumbnailUrl,
-      'durationSeconds': track.duration.inSeconds,
+        'durationSeconds': track.duration?.inSeconds,
       'author': track.author,
       'album': track.album,
       'albumArtist': track.albumArtist,
@@ -501,7 +579,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       id: map['id'] as String,
       title: map['title'] as String,
       thumbnailUrl: map['thumbnailUrl'] as String?,
-      duration: Duration(seconds: map['durationSeconds'] as int? ?? 0),
+      // C1: preserve null. The SQLite `downloaded_tracks`
+      // and `favorite_tracks` columns are nullable; coercing
+      // to `0` would render as `0:00` for tracks the YouTube
+      // API never returned a duration for.
+      duration: (map['durationSeconds'] as int?) == null
+          ? null
+          : Duration(seconds: map['durationSeconds'] as int),
       author: map['author'] as String?,
       album: map['album'] as String?,
       albumArtist: map['albumArtist'] as String?,
@@ -515,25 +599,31 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     final handler = _audioHandler;
     if (handler == null || _queue.isEmpty) return;
     try {
-      final mediaItems = _queue.map((track) => MediaItem(
-        id: track.id,
-        title: track.title,
-        artist: track.author ?? '',
-        album: track.album,
-        artUri: track.thumbnailUrl != null ? Uri.tryParse(track.thumbnailUrl!) : null,
-        duration: track.duration,
-        extras: {
-          'year': track.year,
-          'source': 'youtube',
-        },
-      )).toList();
+      final mediaItems = _queue
+          .map(
+            (track) => MediaItem(
+              id: track.id,
+              title: track.title,
+              artist: track.author ?? '',
+              album: track.album,
+              artUri: track.thumbnailUrl != null
+                  ? Uri.tryParse(track.thumbnailUrl!)
+                  : null,
+              duration: track.duration,
+              extras: {'year': track.year, 'source': 'youtube'},
+            ),
+          )
+          .toList();
       await handler.setQueue(mediaItems, startIndex: _currentIndex);
       if (_currentTrack != null && _currentIndex < mediaItems.length) {
         final activeMediaItem = mediaItems[_currentIndex];
-        handler.mediaItem.add(activeMediaItem);
+        handler.updateMediaItem(activeMediaItem);
       }
     } catch (e) {
-      AppLogger.log('Error syncing restored state to audio handler: $e', name: 'PlayerProvider');
+      AppLogger.log(
+        'Error syncing restored state to audio handler: $e',
+        name: 'PlayerProvider',
+      );
     }
   }
 
@@ -559,10 +649,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
           title: m['title'] as String,
           author: m['author'] as String?,
           thumbnailUrl: m['thumbnailUrl'] as String?,
-          duration: Duration(seconds: m['durationSeconds'] as int? ?? 0),
+          // C1: preserve null. See sibling block above.
+          duration: (m['durationSeconds'] as int?) == null
+              ? null
+              : Duration(seconds: m['durationSeconds'] as int),
         );
       }).toList();
-      
+
       // If we have history and no current track, restore the last played track
       // so the miniplayer is persistent and visible on startup!
       if (_recentlyPlayed.isNotEmpty && _currentTrack == null) {
@@ -581,13 +674,19 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _recentlyPlayed = _recentlyPlayed.sublist(0, _maxRecent);
     }
     final prefs = await SharedPreferences.getInstance();
-    final json = jsonEncode(_recentlyPlayed.map((t) => {
-      'id': t.id,
-      'title': t.title,
-      'author': t.author,
-      'thumbnailUrl': t.thumbnailUrl,
-      'durationSeconds': t.duration.inSeconds,
-    }).toList());
+    final json = jsonEncode(
+      _recentlyPlayed
+          .map(
+            (t) => {
+              'id': t.id,
+              'title': t.title,
+              'author': t.author,
+              'thumbnailUrl': t.thumbnailUrl,
+              'durationSeconds': t.duration?.inSeconds,
+            },
+          )
+          .toList(),
+    );
     await prefs.setString(_recentlyPlayedKey, json);
   }
 
@@ -626,18 +725,21 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       await box.put('position_ms', _position.inMilliseconds);
       await box.put('duration_ms', _duration.inMilliseconds);
       await box.put('current_index', _currentIndex);
-      
+
       final queueIds = _queue.map((t) => t.id).toList();
       await box.put('queue_ids', queueIds);
-      
+
       final queueTracks = _queue.map((t) => _serializeTrack(t)).toList();
       await box.put('queue_tracks', queueTracks);
-      
+
       await box.put('current_track', _serializeTrack(track));
-      
+
       _lastPositionWrite = DateTime.now();
     } catch (e, stack) {
-      AppLogger.log('Error saving active track state: $e\n$stack', name: 'PlayerProvider');
+      AppLogger.log(
+        'Error saving active track state: $e\n$stack',
+        name: 'PlayerProvider',
+      );
     }
   }
 
@@ -653,10 +755,10 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       final id = box.get('track_id') as String?;
       if (id == null || id.isEmpty) return;
       if (_currentTrack != null) return; // Already restored by recently-played.
-      
+
       final durationMs = box.get('duration_ms') as int? ?? 0;
       final restoredIndex = box.get('current_index') as int? ?? 0;
-      
+
       // Restore queue
       final queueTracksMaps = box.get('queue_tracks') as List<dynamic>?;
       if (queueTracksMaps != null && queueTracksMaps.isNotEmpty) {
@@ -664,19 +766,25 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
             .map((m) => _deserializeTrack(Map<String, dynamic>.from(m)))
             .toList();
       }
-      
-      _currentIndex = restoredIndex.clamp(0, _queue.isEmpty ? 0 : _queue.length - 1);
-      
+
+      _currentIndex = restoredIndex.clamp(
+        0,
+        _queue.isEmpty ? 0 : _queue.length - 1,
+      );
+
       // Restore current track
-      final currentTrackMap = box.get('current_track') as Map<dynamic, dynamic>?;
+      final currentTrackMap =
+          box.get('current_track') as Map<dynamic, dynamic>?;
       if (currentTrackMap != null) {
-        _currentTrack = _deserializeTrack(Map<String, dynamic>.from(currentTrackMap));
+        _currentTrack = _deserializeTrack(
+          Map<String, dynamic>.from(currentTrackMap),
+        );
       } else if (_queue.isNotEmpty) {
         _currentTrack = _queue[_currentIndex];
       }
-      
+
       if (_currentTrack == null) return;
-      
+
       // Cold-start position reset: always begin at the absolute
       // start of the track (00:00). Any saved midway seek pointer
       // is overridden so the player sits in a stable Paused state
@@ -684,20 +792,26 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // friction or hangs from mid-track cold restoration.
       _position = Duration.zero;
       _duration = Duration(milliseconds: durationMs);
+      positionNotifier.value = Duration.zero;
+      durationNotifier.value = Duration(milliseconds: durationMs);
+      bufferedPositionNotifier.value = Duration.zero;
       _isPlaying = false;
       _processingState = ProcessingState.idle;
       _pendingResumePosition = Duration.zero;
-      
+
       AppLogger.log(
         'Restored active track: ${_currentTrack!.id} at 0ms (forced) in Paused state (queue size ${_queue.length})',
         name: 'PlayerProvider',
       );
-      
+
       await _syncRestoredStateToAudioHandler();
-      
+
       notifyListeners();
     } catch (e, stack) {
-      AppLogger.log('Error loading active track state: $e\n$stack', name: 'PlayerProvider');
+      AppLogger.log(
+        'Error loading active track state: $e\n$stack',
+        name: 'PlayerProvider',
+      );
     }
   }
 
@@ -720,7 +834,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   void removeFromQueue(int index) {
     if (index < 0 || index >= _queue.length) return;
     final bool wasPlayingCurrent = (index == _currentIndex && _isPlaying);
-    
+
     if (index == _currentIndex) {
       if (_queue.length > 1) {
         final newIdx = index < _queue.length - 1 ? index : index - 1;
@@ -766,7 +880,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   List<Track> get queue => _queue;
   int get currentIndex => _currentIndex;
   bool get isPlaying => _isPlaying;
-  bool get isBuffering => _processingState == ProcessingState.loading || _processingState == ProcessingState.buffering;
+  bool get isBuffering =>
+      _processingState == ProcessingState.loading ||
+      _processingState == ProcessingState.buffering;
   bool get isActuallyPlaying => _isPlaying && !isBuffering;
   bool get isLoading => _isLoading;
   bool get shuffleMode => _shuffleMode;
@@ -809,7 +925,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
 
     final result = await _audioRepository.getLyrics(track);
-    
+
     // Only update if the track hasn't changed while we were fetching
     if (_currentTrack?.id == track.id) {
       _lyrics = result;
@@ -839,17 +955,18 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _dominantColor = null;
     notifyListeners();
     if (url == null || url.isEmpty) return;
-    
+
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('dynamicAccentColor') == false) return;
-    
+
     try {
       final palette = await PaletteGenerator.fromImageProvider(
         NetworkImage(url),
         maximumColorCount: 5,
       );
       if (_currentTrack?.thumbnailUrl == url) {
-        _dominantColor = palette.dominantColor?.color ?? palette.vibrantColor?.color;
+        _dominantColor =
+            palette.dominantColor?.color ?? palette.vibrantColor?.color;
         notifyListeners();
       }
     } catch (_) {}
@@ -908,7 +1025,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// [startAutoQueue] per the Auto Queue spec. Kept as a no-op so any
   /// external callers (tests, legacy widgets) continue to compile and
   /// run without side-effects.
-  void startAutoDJ(List<Track> tracks, {int startIndex = 0, String? playlistId}) {
+  void startAutoDJ(
+    List<Track> tracks, {
+    int startIndex = 0,
+    String? playlistId,
+  }) {
     // No-op: Auto DJ functional block has been migrated to Auto Queue.
   }
 
@@ -1071,7 +1192,10 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   ///
   /// Fire-and-forget: failures are logged and the existing
   /// preloaded items remain as the queue tail.
-  Future<void> _warmUpNewMode(AutoDJMode mode, {required Track currentTrack}) async {
+  Future<void> _warmUpNewMode(
+    AutoDJMode mode, {
+    required Track currentTrack,
+  }) async {
     final manager = _queueManager;
     if (manager == null) return;
     try {
@@ -1169,8 +1293,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
     // Fallback: charts repository when the router found
     // nothing AND the device is online. The "recommend
-    // songs section" is the global Billboard/Tidal top
-    // songs list — the user gets a real track instead of
+    // songs section" is the global Billboard top songs
+    // list — the user gets a real track instead of
     // dead air, and the session kicks off cleanly.
     if (next == null) {
       final isOnline = _connectivityService?.state == NetworkState.online;
@@ -1178,8 +1302,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         final charts = _chartsRepository;
         if (charts != null) {
           try {
-            final recommended =
-                await charts.getGlobalTopSongs(forceRefresh: false);
+            final recommended = await charts.getGlobalTopSongs(
+              forceRefresh: false,
+            );
             if (recommended.isNotEmpty) {
               next = recommended.first;
               resolvedVia = 'charts';
@@ -1217,10 +1342,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     try {
       await playFromQueue(0);
     } catch (e) {
-      AppLogger.log(
-        'Cold-start play() failed: $e',
-        name: 'PlayerProvider',
-      );
+      AppLogger.log('Cold-start play() failed: $e', name: 'PlayerProvider');
     }
     AppLogger.log(
       'Cold-start instant play for mode=${mode.label} via=$resolvedVia: '
@@ -1268,7 +1390,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void cycleRepeatMode() {
-    _repeatMode = repeat.PlaybackRepeatMode.values[(_repeatMode.index + 1) % repeat.PlaybackRepeatMode.values.length];
+    _repeatMode =
+        repeat.PlaybackRepeatMode.values[(_repeatMode.index + 1) %
+            repeat.PlaybackRepeatMode.values.length];
     if (_autoDJMode.isActive) {
       _autoDJMode = AutoDJMode.off;
       _queueManager?.disableAutoDJ();
@@ -1291,7 +1415,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     });
     _sleepTimerTick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_sleepTimerRemaining != null && _sleepTimerRemaining!.inSeconds > 0) {
-        _sleepTimerRemaining = _sleepTimerRemaining! - const Duration(seconds: 1);
+        _sleepTimerRemaining =
+            _sleepTimerRemaining! - const Duration(seconds: 1);
         notifyListeners();
       }
     });
@@ -1382,6 +1507,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         cb();
       }
 
+      // Phase 6: kick background MusicBrainz enrichment for
+      // the now-playing track so the next Auto-DJ call can
+      // short-circuit on a cache hit. Fire-and-forget; never
+      // block the user-facing track change on a remote
+      // round-trip.
+      _genreEnrichment?.enqueueForEnrichment([track]);
+
       _preloadNextTrack();
     } catch (e) {
       _error = e.toString();
@@ -1435,11 +1567,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     final ledger = _historyLedger;
     if (ledger == null) return;
     try {
-      await ledger.logTrack(DJHistoryEntry(
-        trackId: track.id,
-        artistName: track.author ?? 'Unknown',
-        timestampMs: DateTime.now().millisecondsSinceEpoch,
-      ));
+      await ledger.logTrack(
+        DJHistoryEntry(
+          trackId: track.id,
+          artistName: track.author ?? 'Unknown',
+          timestampMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
       // Smart-DJ bootstrap fusion: the row just committed
       // to `dj_listening_history` is the only event the
       // engine's `_cachedHistoryCount` cares about. Per the
@@ -1476,19 +1610,25 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (_hybridCache.isActivelyCaching(track.id)) continue;
       _hybridCache.markCaching(track.id);
       // Fire-and-forget — never block the queue change on background writes.
-      unawaited(_audioRepository.preloadTrack(track).catchError((_) {
-        _hybridCache.markNotCaching(track.id);
-      }));
+      unawaited(
+        _audioRepository.preloadTrack(track).catchError((_) {
+          _hybridCache.markNotCaching(track.id);
+        }),
+      );
     }
   }
 
-  Future<void> playFromQueue(int index, {AudioQuality quality = AudioQuality.adaptive}) async {
+  Future<void> playFromQueue(
+    int index, {
+    AudioQuality quality = AudioQuality.adaptive,
+  }) async {
     if (index < 0 || index >= _queue.length) return;
     _currentIndex = index;
     await playTrack(_queue[index], quality: quality);
   }
 
   Future<void> togglePlayPause() async {
+    if (_isTransitioning) return;
     try {
       if (_isPlaying) {
         await _audioRepository.pause();
@@ -1507,7 +1647,17 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         // one go.
         final pending = _pendingResumePosition;
         if (pending != null && _currentTrack != null) {
-          await playTrack(_currentTrack!, startAt: pending);
+          // The cold-launch path is a multi-step async load
+          // (URL resolve → mixer add → engine setSource → seek
+          // → play). While it is in flight, subsequent taps of
+          // the play/pause button must be ignored or two loads
+          // will race against the same engine instance.
+          _isTransitioning = true;
+          try {
+            await playTrack(_currentTrack!, startAt: pending);
+          } finally {
+            _isTransitioning = false;
+          }
         } else {
           await _audioRepository.resume();
           _isPlaying = true;
@@ -1515,6 +1665,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
       notifyListeners();
     } catch (e) {
+      _isTransitioning = false;
       _error = 'Failed to toggle playback: ${e.toString()}';
       notifyListeners();
     }
@@ -1543,8 +1694,53 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       _position = position;
       notifyListeners();
-      AppLogger.log('Silent seek error (ignored on boot): $e', name: 'PlayerProvider');
+      AppLogger.log(
+        'Silent seek error (ignored on boot): $e',
+        name: 'PlayerProvider',
+      );
     }
+  }
+
+  /// Called by the seekbar at the start of a drag or tap. Flips
+  /// the [_isSeeking] lock so the position stream listener
+  /// suppresses updates until the engine catches up to the
+  /// user-painted position. Idempotent: a second `startSeek` while
+  /// already seeking cancels the prior timeout and reseats the
+  /// lock with a fresh 2-second window once [endSeek] fires.
+  void startSeek() {
+    _isSeeking = true;
+  }
+
+  /// Called by the seekbar on every drag update and on tap.
+  /// Updates the optimistic position so the seekbar paints
+  /// against the user's finger instead of the last stream tick.
+  /// Does NOT touch the audio engine — the actual seek is
+  /// committed by [endSeek] on drag release.
+  void updateSeek(Duration position) {
+    _seekPosition = position;
+    _position = position;
+    positionNotifier.value = position;
+  }
+
+  /// Called by the seekbar on drag end (and on tap). Commits the
+  /// final user-painted position to the audio engine, then keeps
+  /// the [_isSeeking] lock armed for up to 2 seconds while the
+  /// engine catches up. The lock auto-releases inside the
+  /// position stream listener as soon as a tick lands within
+  /// 500 ms of the seek target; the 2-second timer is a hard
+  /// fallback for slow / unresponsive engines.
+  void endSeek(Duration position) {
+    _seekPosition = position;
+    _position = position;
+    positionNotifier.value = position;
+    _audioRepository.seek(position);
+    _seekTimeoutTimer?.cancel();
+    _seekTimeoutTimer = Timer(const Duration(seconds: 2), () {
+      if (_isSeeking) {
+        _isSeeking = false;
+        _seekTimeoutTimer = null;
+      }
+    });
   }
 
   Future<void> next() async {
@@ -1621,7 +1817,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
             }
           }
         }
-        resolved = mixerTrack ??
+        resolved =
+            mixerTrack ??
             Track(
               id: item.id,
               title: item.title,
@@ -1664,45 +1861,67 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
     });
 
-  /// [UI-Sync] Public entry point for manual/native track synchronization.
-  /// Used by the platform channel bridge (or Dart event listeners) to force
-  /// a UI layout recalculation when a gapless boundary is crossed.
-  void synchronizeActiveTrackState(String activeTrackId) {
-    AppLogger.log(
-      '[PlayerProviderSync] Force synchronizing active track state for: $activeTrackId',
-      name: 'PlayerProvider',
-    );
-    // Find the track in the manual queue or mixer.
-    Track? resolved;
-    int? newIndex;
-    final queueIndex = _queue.indexWhere((t) => t.id == activeTrackId);
-    if (queueIndex != -1) {
-      resolved = _queue[queueIndex];
-      newIndex = queueIndex;
-    } else {
-      final mixerQueue = _mixer?.queuedTracks;
-      if (mixerQueue != null) {
-        for (final t in mixerQueue) {
-          if (t.id == activeTrackId) {
-            resolved = t;
-            break;
+    /// [UI-Sync] Public entry point for manual/native track synchronization.
+    /// Used by the platform channel bridge (or Dart event listeners) to force
+    /// a UI layout recalculation when a gapless boundary is crossed.
+    void synchronizeActiveTrackState(String activeTrackId) {
+      AppLogger.log(
+        '[PlayerProviderSync] Force synchronizing active track state for: $activeTrackId',
+        name: 'PlayerProvider',
+      );
+      // Find the track in the manual queue or mixer.
+      Track? resolved;
+      int? newIndex;
+      final queueIndex = _queue.indexWhere((t) => t.id == activeTrackId);
+      if (queueIndex != -1) {
+        resolved = _queue[queueIndex];
+        newIndex = queueIndex;
+      } else {
+        final mixerQueue = _mixer?.queuedTracks;
+        if (mixerQueue != null) {
+          for (final t in mixerQueue) {
+            if (t.id == activeTrackId) {
+              resolved = t;
+              break;
+            }
           }
         }
       }
+
+      if (resolved != null) {
+        _currentTrack = resolved;
+        if (newIndex != null) _currentIndex = newIndex;
+        _historyLoggedForCurrentTrack = false;
+        _fetchLyricsForCurrentTrack();
+        _extractDominantColor(_currentTrack?.thumbnailUrl);
+        notifyListeners();
+      }
     }
-    
-    if (resolved != null) {
-      _currentTrack = resolved;
-      if (newIndex != null) _currentIndex = newIndex;
-      _historyLoggedForCurrentTrack = false;
-      _fetchLyricsForCurrentTrack();
-      _extractDominantColor(_currentTrack?.thumbnailUrl);
-      notifyListeners();
-    }
-  }
 
     _positionSub = _audioRepository.positionStream.listen((pos) {
+      // Drag lock: while the user is dragging the seekbar, the
+      // position they painted is the source of truth. The first
+      // stream tick that lands within 500 ms of the seek target
+      // is treated as the engine having caught up, and the lock
+      // is released so subsequent ticks update the bar. The
+      // 2-second [_seekTimeoutTimer] is a hard fallback — if the
+      // engine never emits within that window (network stream,
+      // cold cache), the lock is force-cleared regardless.
+      if (_isSeeking) {
+        final delta = (pos.inMilliseconds - _seekPosition.inMilliseconds).abs();
+        if (delta < 500) {
+          _isSeeking = false;
+          _seekTimeoutTimer?.cancel();
+          _seekTimeoutTimer = null;
+        } else {
+          // Engine has not caught up yet — keep the optimistic
+          // value, do not run the side effects below (they would
+          // act on stale data), do not touch the notifier.
+          return;
+        }
+      }
       _position = pos;
+      positionNotifier.value = pos;
       // Throttled persistence: Hive writes on every audio
       // frame (multiple per second) would thrash the disk. We coalesce
       // to one write per 2 seconds while a track is actively playing.
@@ -1737,25 +1956,36 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         if (mixer.isLookaheadDirty && !mixer.isPipelineRebuilding) {
           unawaited(mixer.retryPendingInjection());
         }
-        unawaited(mixer.maybeQueueNextAt(
-          current: track,
-          position: pos,
-          duration: _duration,
-        ));
-        unawaited(mixer.maybeFireCrossfadeAt(
-          currentTrackId: track.id,
-          position: pos,
-          duration: _duration,
-        ));
+        unawaited(
+          mixer.maybeQueueNextAt(
+            current: track,
+            position: pos,
+            duration: _duration,
+          ),
+        );
+        unawaited(
+          mixer.maybeFireCrossfadeAt(
+            currentTrackId: track.id,
+            position: pos,
+            duration: _duration,
+          ),
+        );
       }
-      notifyListeners();
     });
-    _bufferedPositionSub = _audioRepository.bufferedPositionStream.listen((pos) {
+    _bufferedPositionSub = _audioRepository.bufferedPositionStream.listen((
+      pos,
+    ) {
       _bufferedPosition = pos;
-      notifyListeners();
+      bufferedPositionNotifier.value = pos;
     });
     _durationSub = _audioRepository.durationStream.listen((dur) {
+      if (dur == _duration) return;
       _duration = dur;
+      durationNotifier.value = dur;
+      // Duration changes are rare (track change). The wider
+      // `notifyListeners()` is OK here — a full consumer rebuild
+      // on track load is the correct behaviour for time labels,
+      // lyrics, and any other duration-dependent layout.
       notifyListeners();
     });
     _playingSub = _audioRepository.playingStream.listen((isPlaying) {
@@ -1774,7 +2004,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
     });
     _processingStateSub?.cancel();
-    _processingStateSub = _audioRepository.processingStateStream.listen((state) {
+    _processingStateSub = _audioRepository.processingStateStream.listen((
+      state,
+    ) {
       if (_processingState != state) {
         _processingState = state;
         notifyListeners();
@@ -1799,8 +2031,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void _listenForCompletion() {
     _completionSubscription?.cancel();
-    _completionSubscription =
-        _audioRepository.processingStateStream.listen((state) {
+    _completionSubscription = _audioRepository.processingStateStream.listen((
+      state,
+    ) {
       if (state == ProcessingState.completed && _queue.isNotEmpty) {
         if (_repeatMode == repeat.PlaybackRepeatMode.one) {
           seekTo(Duration.zero);
@@ -1897,12 +2130,14 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   void setAudioHandler(MusicAudioHandler handler) {
     _audioHandler = handler;
     _syncRestoredStateToAudioHandler();
+    _startPolling();
   }
 
   @override
   void dispose() {
     _sleepTimer?.cancel();
     _sleepTimerTick?.cancel();
+    _seekTimeoutTimer?.cancel();
     _stopPolling();
     _completionSubscription?.cancel();
     _skipNextSubscription?.cancel();
@@ -1918,6 +2153,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(_saveAutoQueueState());
     _queueManager?.removeListener(notifyListeners);
     WidgetsBinding.instance.removeObserver(this);
+    positionNotifier.dispose();
+    bufferedPositionNotifier.dispose();
+    durationNotifier.dispose();
     super.dispose();
   }
 }

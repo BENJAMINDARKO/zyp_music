@@ -19,9 +19,11 @@ import '../../presentation/providers/settings_provider.dart';
 import '../../presentation/providers/download_provider.dart';
 import '../widgets/track_context_menu.dart';
 import '../widgets/custom_audio_seekbar.dart';
+import '../widgets/seekbar_connector.dart';
 import 'artist_screen.dart';
 import 'album_screen.dart';
 import '../widgets/miniplayer_flyout_container.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class PlayingScreen extends StatefulWidget {
   const PlayingScreen({super.key});
@@ -30,7 +32,8 @@ class PlayingScreen extends StatefulWidget {
   State<PlayingScreen> createState() => _PlayingScreenState();
 }
 
-class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateMixin {
+class _PlayingScreenState extends State<PlayingScreen>
+    with TickerProviderStateMixin {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   PersistentBottomSheetController? _queueSheetController;
   late AnimationController _rotationController;
@@ -38,21 +41,25 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
   bool _isLyricsMode = false;
   int _syncOffsetMs = 0;
 
-  void _downloadLyrics(BuildContext context, String lyrics, String title) async {
+  void _downloadLyrics(
+    BuildContext context,
+    String lyrics,
+    String title,
+  ) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/$title-lyrics.lrc');
       await file.writeAsString(lyrics);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lyrics saved to ${file.path}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lyrics saved to ${file.path}')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save lyrics')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to save lyrics')));
       }
     }
   }
@@ -105,7 +112,12 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
         if (track == null) {
           return const Scaffold(
             backgroundColor: Color(0xFF0A0A0A),
-            body: Center(child: Text('No track playing', style: TextStyle(color: Colors.white))),
+            body: Center(
+              child: Text(
+                'No track playing',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
           );
         }
 
@@ -117,17 +129,12 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
         }
         _wasPlaying = player.isActuallyPlaying;
 
-        final progress = player.duration.inMilliseconds > 0
-            ? player.position.inMilliseconds / player.duration.inMilliseconds
-            : 0.0;
-        final bufferProgress = player.duration.inMilliseconds > 0
-            ? player.bufferedPosition.inMilliseconds / player.duration.inMilliseconds
-            : 0.0;
-            
+
         final activeColor = Colors.white;
         final settings = context.watch<SettingsProvider>();
-        final seekbarColor =
-            settings.invertSeekbarColor ? Colors.black : activeColor;
+        final seekbarColor = settings.invertSeekbarColor
+            ? Colors.black
+            : activeColor;
 
         return Scaffold(
           key: _scaffoldKey,
@@ -139,7 +146,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
               Positioned.fill(
                 child: (track.thumbnailUrl?.isNotEmpty ?? false)
                     ? CachedNetworkImage(
-                        imageUrl: track.thumbnailUrl!,
+                        imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) =>
                             Container(color: const Color(0xFF0A0A0A)),
@@ -155,27 +162,36 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
               ),
               // Layer 3: dark scrim
               Positioned.fill(
-                child: ColoredBox(
-                  color: Colors.black.withOpacity(0.75),
-                ),
+                child: ColoredBox(color: Colors.black.withOpacity(0.75)),
               ),
               SafeArea(
                 child: Column(
                   children: [
                     // Top bar
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 30),
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down,
+                              color: Colors.white,
+                              size: 30,
+                            ),
                             onPressed: () => Navigator.pop(context),
                           ),
                           const Expanded(
                             child: Text(
                               'Now Playing',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.white, fontSize: 14, letterSpacing: 0.5),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
                           IconButton(
@@ -212,7 +228,10 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                     if (_isLyricsMode) ...[
                       // Compact Header for Lyrics Mode
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24.0,
+                          vertical: 8.0,
+                        ),
                         child: Row(
                           children: [
                             RotationTransition(
@@ -222,13 +241,19 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                 height: 60,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  image: (track.thumbnailUrl?.isNotEmpty ?? false)
+                                  image:
+                                      (track.thumbnailUrl?.isNotEmpty ?? false)
                                       ? DecorationImage(
-                                          image: NetworkImage(track.thumbnailUrl!),
+                                          image: NetworkImage(
+                                            rewriteThumbnailSize(track.thumbnailUrl, 1200),
+                                          ),
                                           fit: BoxFit.cover,
                                         )
                                       : null,
-                                  color: (track.thumbnailUrl?.isNotEmpty ?? false) ? null : Colors.grey[800],
+                                  color:
+                                      (track.thumbnailUrl?.isNotEmpty ?? false)
+                                      ? null
+                                      : Colors.grey[800],
                                 ),
                                 child: Center(
                                   child: Container(
@@ -237,7 +262,10 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: const Color(0xFF141414),
-                                      border: Border.all(color: Colors.white24, width: 1),
+                                      border: Border.all(
+                                        color: Colors.white24,
+                                        width: 1,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -250,13 +278,20 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                 children: [
                                   Text(
                                     track.title,
-                                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   Text(
                                     track.author ?? 'Unknown',
-                                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 14,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -266,16 +301,23 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                           ],
                         ),
                       ),
-                      
+
                       // Lyrics Utility Toolbar
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8.0,
+                          vertical: 4.0,
+                        ),
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.refresh, color: Colors.white70, size: 20),
+                                icon: const Icon(
+                                  Icons.refresh,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
                                 onPressed: () async {
                                   await player.refreshLyrics();
                                 },
@@ -283,24 +325,35 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                               ),
                               IconButton(
                                 icon: Icon(
-                                  player.autoScroll ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                                  player.autoScroll
+                                      ? Icons.pause_circle_outline
+                                      : Icons.play_circle_outline,
                                   color: Colors.white70,
                                   size: 22,
                                 ),
-                                onPressed: () => player.setAutoScroll(!player.autoScroll),
+                                onPressed: () =>
+                                    player.setAutoScroll(!player.autoScroll),
                                 tooltip: 'Toggle Auto-Scroll',
                               ),
                               IconButton(
                                 icon: Icon(
                                   Icons.mic_external_on,
-                                  color: player.isKaraokeMode ? Colors.white : Colors.white.withOpacity(0.35),
+                                  color: player.isKaraokeMode
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.35),
                                   size: 22,
                                 ),
-                                onPressed: () => player.setKaraokeMode(!player.isKaraokeMode),
+                                onPressed: () => player.setKaraokeMode(
+                                  !player.isKaraokeMode,
+                                ),
                                 tooltip: 'Karaoke Mode',
                               ),
                               IconButton(
-                                icon: const Icon(Icons.stop_circle_outlined, color: Colors.white70, size: 22),
+                                icon: const Icon(
+                                  Icons.stop_circle_outlined,
+                                  color: Colors.white70,
+                                  size: 22,
+                                ),
                                 onPressed: () {
                                   player.pause();
                                 },
@@ -308,35 +361,70 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                               ),
                               const SizedBox(width: 16),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
                                   border: Border.all(color: Colors.white24),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
-                                child: const Text('Auto v', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                child: const Text(
+                                  'Auto v',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 8),
                               IconButton(
-                                icon: const Icon(Icons.remove, color: Colors.white70, size: 20),
-                                onPressed: () => setState(() => _syncOffsetMs -= 500),
+                                icon: const Icon(
+                                  Icons.remove,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _syncOffsetMs -= 500),
                               ),
                               Text(
                                 '${_syncOffsetMs >= 0 ? '+' : ''}${(_syncOffsetMs / 1000).toStringAsFixed(1)}s',
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.add, color: Colors.white70, size: 20),
-                                onPressed: () => setState(() => _syncOffsetMs += 500),
+                                icon: const Icon(
+                                  Icons.add,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _syncOffsetMs += 500),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.sync, color: Colors.white70, size: 20),
-                                onPressed: () => setState(() => _syncOffsetMs = 0),
+                                icon: const Icon(
+                                  Icons.sync,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _syncOffsetMs = 0),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.download_outlined, color: Colors.white70, size: 20),
+                                icon: const Icon(
+                                  Icons.download_outlined,
+                                  color: Colors.white70,
+                                  size: 20,
+                                ),
                                 onPressed: () {
                                   if (player.lyrics != null) {
-                                    _downloadLyrics(context, player.lyrics!, track.title);
+                                    _downloadLyrics(
+                                      context,
+                                      player.lyrics!,
+                                      track.title,
+                                    );
                                   }
                                 },
                               ),
@@ -348,39 +436,60 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                       Expanded(
                         child: player.isLoadingLyrics || player.lyrics != null
                             ? (player.isKaraokeMode
-                                ? SyncedLyricsWidget(
-                                    lyricsText: player.lyrics ?? '',
-                                    isLoading: player.isLoadingLyrics,
-                                    position: Duration(milliseconds: player.position.inMilliseconds + _syncOffsetMs),
-                                    karaokeMode: true,
-                                    autoScroll: player.autoScroll,
-                                  )
-                                : ShaderMask(
-                                    shaderCallback: (Rect bounds) {
-                                      return LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.white,
-                                          Colors.white,
-                                          Colors.white.withOpacity(0.05),
-                                          Colors.transparent,
-                                        ],
-                                        stops: const [0.0, 0.75, 0.95, 1.0],
-                                      ).createShader(bounds);
-                                    },
-                                    blendMode: BlendMode.dstIn,
-                                    child: SyncedLyricsWidget(
-                                      lyricsText: player.lyrics ?? '',
-                                      isLoading: player.isLoadingLyrics,
-                                      position: Duration(milliseconds: player.position.inMilliseconds + _syncOffsetMs),
-                                      autoScroll: player.autoScroll,
-                                    ),
-                                  ))
+                                  ? ValueListenableBuilder<Duration>(
+                                      valueListenable:
+                                          player.positionNotifier,
+                                      builder: (_, pos, __) =>
+                                          SyncedLyricsWidget(
+                                        lyricsText: player.lyrics ?? '',
+                                        isLoading: player.isLoadingLyrics,
+                                        position: Duration(
+                                          milliseconds:
+                                              pos.inMilliseconds +
+                                              _syncOffsetMs,
+                                        ),
+                                        karaokeMode: true,
+                                        autoScroll: player.autoScroll,
+                                      ),
+                                    )
+                                  : ShaderMask(
+                                      shaderCallback: (Rect bounds) {
+                                        return LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.white,
+                                            Colors.white,
+                                            Colors.white.withOpacity(0.05),
+                                            Colors.transparent,
+                                          ],
+                                          stops: const [0.0, 0.75, 0.95, 1.0],
+                                        ).createShader(bounds);
+                                      },
+                                      blendMode: BlendMode.dstIn,
+                                      child: ValueListenableBuilder<Duration>(
+                                        valueListenable:
+                                            player.positionNotifier,
+                                        builder: (_, pos, __) =>
+                                            SyncedLyricsWidget(
+                                          lyricsText: player.lyrics ?? '',
+                                          isLoading: player.isLoadingLyrics,
+                                          position: Duration(
+                                            milliseconds:
+                                                pos.inMilliseconds +
+                                                _syncOffsetMs,
+                                          ),
+                                          autoScroll: player.autoScroll,
+                                        ),
+                                      ),
+                                    ))
                             : const Center(
                                 child: Text(
                                   'No lyrics available',
-                                  style: TextStyle(color: Colors.white54, fontSize: 16),
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 16,
+                                  ),
                                 ),
                               ),
                       ),
@@ -411,18 +520,27 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                 children: [
                                   (track.thumbnailUrl?.isNotEmpty ?? false)
                                       ? CachedNetworkImage(
-                                          imageUrl: track.thumbnailUrl!,
+                                          imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
                                           fit: BoxFit.cover,
                                           width: double.infinity,
                                           height: double.infinity,
-                                          errorWidget: (_, __, ___) => Container(
-                                            color: Colors.grey[850],
-                                            child: const Icon(Icons.music_note, size: 80, color: Colors.white38),
-                                          ),
+                                          errorWidget: (_, __, ___) =>
+                                              Container(
+                                                color: Colors.grey[850],
+                                                child: const Icon(
+                                                  Icons.music_note,
+                                                  size: 80,
+                                                  color: Colors.white38,
+                                                ),
+                                              ),
                                         )
                                       : Container(
                                           color: Colors.grey[850],
-                                          child: const Icon(Icons.music_note, size: 80, color: Colors.white38),
+                                          child: const Icon(
+                                            Icons.music_note,
+                                            size: 80,
+                                            color: Colors.white38,
+                                          ),
                                         ),
                                   // Center hole
                                   Container(
@@ -431,7 +549,10 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: Colors.black,
-                                      border: Border.all(color: Colors.white24, width: 1),
+                                      border: Border.all(
+                                        color: Colors.white24,
+                                        width: 1,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -442,7 +563,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                       ),
 
                       const SizedBox(height: 24),
-                      
+
                       // Visualizer
                       SizedBox(
                         height: 40,
@@ -480,10 +601,22 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                   GestureDetector(
                                     onTap: () async {
                                       if (track.author != null) {
-                                        final provider = context.read<PlaylistProvider>();
-                                        final artist = await provider.findCorrectArtist(track.author!, track.album);
+                                        final provider = context
+                                            .read<PlaylistProvider>();
+                                        final artist = await provider
+                                            .findCorrectArtist(
+                                              track.author!,
+                                              track.album,
+                                            );
                                         if (artist != null && context.mounted) {
-                                          Navigator.push(context, MaterialPageRoute(builder: (_) => ArtistScreen(artistId: artist.id)));
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ArtistScreen(
+                                                artistId: artist.id,
+                                              ),
+                                            ),
+                                          );
                                         }
                                       }
                                     },
@@ -491,24 +624,42 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                       track.author ?? 'Unknown Artist',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(color: Colors.white70, fontSize: 15, decoration: TextDecoration.underline),
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 15,
+                                        decoration: TextDecoration.underline,
+                                      ),
                                     ),
                                   ),
                                   if (track.album != null) ...[
                                     const SizedBox(height: 2),
                                     GestureDetector(
                                       onTap: () async {
-                                        final provider = context.read<PlaylistProvider>();
-                                        final res = await provider.searchAlbums(track.album!);
+                                        final provider = context
+                                            .read<PlaylistProvider>();
+                                        final res = await provider.searchAlbums(
+                                          track.album!,
+                                        );
                                         if (res.isNotEmpty && context.mounted) {
-                                          Navigator.push(context, MaterialPageRoute(builder: (_) => AlbumScreen(albumId: res.first.id)));
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => AlbumScreen(
+                                                albumId: res.first.id,
+                                              ),
+                                            ),
+                                          );
                                         }
                                       },
                                       child: Text(
                                         track.album!,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.white38, fontSize: 13, decoration: TextDecoration.underline),
+                                        style: const TextStyle(
+                                          color: Colors.white38,
+                                          fontSize: 13,
+                                          decoration: TextDecoration.underline,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -521,13 +672,18 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                                 final isFav = pp.isFavorite(track.id);
                                 return IconButton(
                                   icon: Icon(
-                                    isFav ? Icons.favorite : Icons.favorite_border,
-                                    color: isFav ? Colors.white : Colors.white.withOpacity(0.35),
+                                    isFav
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
+                                    color: isFav
+                                        ? Colors.white
+                                        : Colors.white.withOpacity(0.35),
                                     size: 26,
                                   ),
                                   onPressed: () => pp.toggleFavorite(
                                     track,
-                                    downloadProvider: context.read<DownloadProvider>(),
+                                    downloadProvider: context
+                                        .read<DownloadProvider>(),
                                   ),
                                 );
                               },
@@ -549,8 +705,6 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
             context,
             player,
             track,
-            progress,
-            bufferProgress,
             seekbarColor,
             settings,
           ),
@@ -563,8 +717,6 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
     BuildContext context,
     PlayerProvider player,
     Track track,
-    double progress,
-    double bufferProgress,
     Color seekbarColor,
     SettingsProvider settings,
   ) {
@@ -586,25 +738,35 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 children: [
-                  CustomAudioSeekbar(
-                    value: progress.clamp(0.0, 1.0),
-                    secondaryValue: bufferProgress.clamp(0.0, 1.0),
+                  SeekbarConnector(
+                    hasTrack: true,
                     activeColor: seekbarColor,
                     inactiveColor: settings.invertSeekbarColor
                         ? Colors.black.withOpacity(0.30)
                         : Colors.white.withOpacity(0.30),
-                    style: settings.seekbarStyle == 'Gradient' 
-                        ? SeekbarStyle.gradient 
-                        : (settings.seekbarStyle == 'Waveform' 
-                            ? SeekbarStyle.waveform 
-                            : (settings.seekbarStyle == 'Wavy' 
-                                ? SeekbarStyle.wavy 
-                                : SeekbarStyle.minimal)),
+                    style: settings.seekbarStyle == 'Gradient'
+                        ? SeekbarStyle.gradient
+                        : (settings.seekbarStyle == 'Waveform'
+                              ? SeekbarStyle.waveform
+                              : (settings.seekbarStyle == 'Wavy'
+                                    ? SeekbarStyle.wavy
+                                    : SeekbarStyle.minimal)),
                     invertColor: settings.invertSeekbarColor,
                     isPlaying: player.isActuallyPlaying,
+                    onChangeStart: () => player.startSeek(),
                     onChanged: (v) {
-                      final pos = Duration(milliseconds: (v * player.duration.inMilliseconds).round());
-                      player.seekTo(pos);
+                      final pos = Duration(
+                        milliseconds: (v * player.duration.inMilliseconds)
+                            .round(),
+                      );
+                      player.updateSeek(pos);
+                    },
+                    onChangeEnd: (v) {
+                      final pos = Duration(
+                        milliseconds: (v * player.duration.inMilliseconds)
+                            .round(),
+                      );
+                      player.endSeek(pos);
                     },
                   ),
                   Padding(
@@ -612,10 +774,26 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(_formatDuration(player.position),
-                            style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                        Text(_formatDuration(player.duration),
-                            style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        ValueListenableBuilder<Duration>(
+                          valueListenable: player.positionNotifier,
+                          builder: (_, pos, __) => Text(
+                            _formatDuration(pos),
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        ValueListenableBuilder<Duration>(
+                          valueListenable: player.durationNotifier,
+                          builder: (_, dur, __) => Text(
+                            _formatDuration(dur),
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -630,15 +808,24 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.shuffle,
+                    icon: Icon(
+                      Icons.shuffle,
                       size: 28,
-                      color: player.shuffleMode ? Colors.white : Colors.white.withOpacity(0.35),
+                      color: player.shuffleMode
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.35),
                     ),
                     onPressed: player.toggleShuffle,
                   ),
                   IconButton(
-                    icon: const Icon(Icons.skip_previous, size: 40, color: Colors.white),
-                    onPressed: player.currentIndex > 0 ? () => player.previous() : null,
+                    icon: const Icon(
+                      Icons.skip_previous,
+                      size: 40,
+                      color: Colors.white,
+                    ),
+                    onPressed: player.currentIndex > 0
+                        ? () => player.previous()
+                        : null,
                   ),
                   // Play/Pause circle
                   GestureDetector(
@@ -669,14 +856,20 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                               ),
                             )
                           : Icon(
-                              player.isActuallyPlaying ? Icons.pause : Icons.play_arrow,
+                              player.isActuallyPlaying
+                                  ? Icons.pause
+                                  : Icons.play_arrow,
                               color: Colors.black,
                               size: 40,
                             ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.skip_next, size: 40, color: Colors.white),
+                    icon: const Icon(
+                      Icons.skip_next,
+                      size: 40,
+                      color: Colors.white,
+                    ),
                     onPressed: player.currentIndex + 1 < player.queue.length
                         ? () => player.next()
                         : null,
@@ -704,11 +897,22 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.mic_none, color: _isLyricsMode ? Colors.white : Colors.white.withOpacity(0.35), size: 22),
-                    onPressed: () => setState(() => _isLyricsMode = !_isLyricsMode),
+                    icon: Icon(
+                      Icons.mic_none,
+                      color: _isLyricsMode
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.35),
+                      size: 22,
+                    ),
+                    onPressed: () =>
+                        setState(() => _isLyricsMode = !_isLyricsMode),
                   ),
                   IconButton(
-                    icon: Icon(Icons.playlist_add, color: Colors.white.withOpacity(0.35), size: 22),
+                    icon: Icon(
+                      Icons.playlist_add,
+                      color: Colors.white.withOpacity(0.35),
+                      size: 22,
+                    ),
                     onPressed: () {
                       showDialog(
                         context: context,
@@ -717,7 +921,11 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                     },
                   ),
                   IconButton(
-                    icon: Icon(Icons.queue_music, color: Colors.white.withOpacity(0.35), size: 22),
+                    icon: Icon(
+                      Icons.queue_music,
+                      color: Colors.white.withOpacity(0.35),
+                      size: 22,
+                    ),
                     onPressed: () => _showUpNextModal(context, player),
                   ),
                 ],
@@ -743,7 +951,7 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
           builder: (context, provider, child) {
             final queue = provider.queue;
             final currentIndex = provider.currentIndex;
-            
+
             return MiniplayerFlyoutContainer(
               thumbnailUrl: provider.currentTrack?.thumbnailUrl,
               child: SafeArea(
@@ -756,11 +964,18 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                         children: [
                           const Text(
                             'Up Next',
-                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white70),
+                            icon: const Icon(
+                              Icons.close,
+                              color: Colors.white70,
+                            ),
                             onPressed: () {
                               _queueSheetController?.close();
                               _queueSheetController = null;
@@ -780,19 +995,27 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                               borderRadius: BorderRadius.circular(4),
                               child: (t.thumbnailUrl?.isNotEmpty ?? false)
                                   ? CachedNetworkImage(
-                                      imageUrl: t.thumbnailUrl!,
+                                      imageUrl:
+                                          rewriteThumbnailSize(t.thumbnailUrl),
                                       width: 48,
                                       height: 48,
                                       fit: BoxFit.cover,
-                                      errorWidget: (_, __, ___) => Container(color: Colors.grey[800]),
+                                      errorWidget: (_, __, ___) =>
+                                          Container(color: Colors.grey[800]),
                                     )
-                                  : Container(width: 48, height: 48, color: Colors.grey[800]),
+                                  : Container(
+                                      width: 48,
+                                      height: 48,
+                                      color: Colors.grey[800],
+                                    ),
                             ),
                             title: Text(
                               t.title,
                               style: TextStyle(
                                 color: isPlaying ? Colors.white : Colors.white,
-                                fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
+                                fontWeight: isPlaying
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -804,7 +1027,10 @@ class _PlayingScreenState extends State<PlayingScreen> with TickerProviderStateM
                               overflow: TextOverflow.ellipsis,
                             ),
                             trailing: IconButton(
-                              icon: const Icon(Icons.close, color: Colors.white54),
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.white54,
+                              ),
                               onPressed: () {
                                 provider.removeFromQueue(index);
                               },

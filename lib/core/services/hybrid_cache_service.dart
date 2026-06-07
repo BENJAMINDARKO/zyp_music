@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../data/datasources/local/playlist_database.dart';
 import '../../data/models/cache_tracker_model.dart';
+import '../../domain/entities/video.dart';
 import '../../core/utils/app_logger.dart';
 
 /// Public cache state exposed to the UI layer.
@@ -78,6 +79,14 @@ class HybridCacheService extends ChangeNotifier {
   Stream<CachedStateEvent> get stateStream => _stateEvents.stream;
 
   bool get isInitialized => _box?.isOpen ?? false;
+
+  /// Phase 6: exposes the underlying Hive box so the one-time
+  /// `CacheMetadataBackfill` migration can iterate the existing
+  /// entries and hydrate the new display-metadata fields from
+  /// the SQLite mirror. Returns `null` before [init] has run.
+  /// Direct callers (other than the backfill) should prefer the
+  /// typed query methods above (`isCached`, `getLyrics`, ...).
+  Box<CacheTrackerModel>? get box => _box;
 
   HybridCacheService({this.libraryDatabase});
 
@@ -304,6 +313,20 @@ class HybridCacheService extends ChangeNotifier {
     return _box?.get(trackId);
   }
 
+  /// Phase 6: alias for [getCacheEntry] named to match the
+  /// three-tier synthesis lookup contract documented in the
+  /// cached-metadata spec. Returns the full [CacheTrackerModel]
+  /// (including the display-metadata fields added in Phase 6)
+  /// or `null` when the box has no entry. Used by
+  /// `QueueManager._buildTrackFromId` and
+  /// `LocalCrateMiner._mineFromHive` to populate the
+  /// `title`/`author`/`thumbnailUrl` columns of the synthesised
+  /// `Track` from the Hive tier alone when the SQLite tier
+  /// misses.
+  CacheTrackerModel? getTrackerEntry(String trackId) {
+    return _box?.get(trackId);
+  }
+
   /// Removes the tracking record for [trackId] from the Hive box
   /// without touching any on-disk files. This is the "gently evict"
   /// primitive used by the cache migration hook once the SQLite
@@ -353,10 +376,22 @@ class HybridCacheService extends ChangeNotifier {
   /// is the explicit "as soon as the file write handle closes successfully
   /// and `File.exists()` evaluates to true" rule from the spec.
   ///
+  /// If [sourceTrack] is provided, the display-metadata fields
+  /// (title, author, thumbnailUrl) are mirrored from it into the
+  /// persisted record so the synthesis paths in
+  /// `QueueManager._buildTrackFromId` and
+  /// `LocalCrateMiner._mineFromHive` can return a fully-populated
+  /// `Track` from the Hive tier alone (Phase 6 cached-metadata
+  /// spec). When [sourceTrack] is null, the previous values (if
+  /// any) are preserved — a preloader that does not have the full
+  /// `Track` in scope can still call this method and rely on the
+  /// backfill migration to hydrate the metadata later.
+  ///
   /// Always triggers the LRU eviction pass after a successful write.
   Future<void> markSuccessAfterWrite(
     String trackId, {
     String? expectedFilePath,
+    Track? sourceTrack,
   }) async {
     final box = _box;
     if (box == null) return;
@@ -380,6 +415,10 @@ class HybridCacheService extends ChangeNotifier {
       timedLyrics: existing?.timedLyrics,
       lyricsFilePath: existing?.lyricsFilePath,
       lyricsVerified: existing?.lyricsVerified ?? true,
+      genre: existing?.genre,
+      title: sourceTrack?.title ?? existing?.title,
+      author: sourceTrack?.author ?? existing?.author,
+      thumbnailUrl: sourceTrack?.thumbnailUrl ?? existing?.thumbnailUrl,
     );
     await box.put(trackId, next);
     _activeCaching.remove(trackId);
@@ -670,12 +709,21 @@ class HybridCacheService extends ChangeNotifier {
   /// The loop is sequential and never blocks playback. If [streamUrlResolver]
   /// is omitted, the call is a no-op for any uncached track (callers can
   /// still rely on `isCached` / `markCaching` to track state).
+  ///
+  /// Phase 6 (cached-metadata spec): the [cacheStream] callback now
+  /// receives the full [Track] (or `null` for non-Track queue entries)
+  /// so the `onCacheSuccess` hook in `AudioCacheService` can mirror
+  /// `title`/`author`/`thumbnailUrl` into the persisted Hive record.
+  /// The preloader itself runs over `List<dynamic>` because it predates
+  /// the Phase 2 typed-entity queue refactor; the cast is guarded by
+  /// an `is Track` check.
   Future<void> preloadFromQueue({
     required List<dynamic> queue,
     required int currentIndex,
     required int lookAheadLimit,
     Future<String?> Function(dynamic track)? streamUrlResolver,
-    Future<void> Function(String trackId, String streamUrl)? cacheStream,
+    Future<void> Function(String trackId, String streamUrl, {Track? track})?
+        cacheStream,
   }) async {
     if (queue.isEmpty) return;
     final lookAhead = lookAheadLimit < 0 ? 0 : lookAheadLimit;
@@ -684,9 +732,11 @@ class HybridCacheService extends ChangeNotifier {
     final end = (start + lookAhead).clamp(0, queue.length);
 
     for (var i = start; i < end; i++) {
-      final track = queue[i];
-      if (track == null) continue;
-      final trackId = (track as dynamic).id as String?;
+      final dynamic rawTrack = queue[i];
+      if (rawTrack == null) continue;
+      final Track? track = rawTrack is Track ? rawTrack : null;
+      final String? trackId =
+          track?.id ?? (rawTrack as dynamic).id as String?;
       if (trackId == null) continue;
       if (isCached(trackId)) continue;
       if (isActivelyCaching(trackId)) continue;
@@ -698,7 +748,7 @@ class HybridCacheService extends ChangeNotifier {
         if (url == null || url.isEmpty || !url.startsWith('http')) continue;
         markCaching(trackId);
         unawaited(
-          cacheStream(trackId, url).whenComplete(() {
+          cacheStream(trackId, url, track: track).whenComplete(() {
             markNotCaching(trackId);
           }),
         );

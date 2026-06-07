@@ -18,7 +18,24 @@ class Track {
   final String id;
   final String title;
   final String? thumbnailUrl;
-  final Duration duration;
+
+  /// Track duration in seconds, nullable.
+  ///
+  /// **C1 honest-nulls invariant:** `null` means "unknown" — the
+  /// YouTube API did not return a duration for this track (some
+  /// live streams, unlisted videos, pre-buffered gapless tracks
+  /// whose metadata was dropped on the way through). `Duration.zero`
+  /// means "explicitly zero" which is a meaningful value
+  /// (intentionally empty audio, rare in practice but possible).
+  ///
+  /// UI code that displays a duration must check for `null` and
+  /// render a placeholder (e.g. `'—:—'`) — see
+  /// [formatDuration] in `lib/core/utils/format_duration.dart`.
+  /// Coercing `null` to `Duration.zero` at the API boundary
+  /// would destroy this distinction and resurrect the
+  /// pre-C1 bug where every unknown-duration track rendered
+  /// as `0:00`.
+  final Duration? duration;
   final String? author;
   final String? album;
   final String? albumArtist;
@@ -51,7 +68,7 @@ class Track {
     required this.id,
     required this.title,
     this.thumbnailUrl,
-    this.duration = Duration.zero,
+    this.duration,
     this.author,
     this.album,
     this.albumArtist,

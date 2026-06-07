@@ -21,6 +21,7 @@ import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/dj_history_ledger.dart';
 import 'core/services/queue_manager.dart';
+import 'core/services/genre_enrichment_service.dart';
 import 'core/audio/gapless_queue_mixer.dart';
 
 class MonochromeApp extends StatelessWidget {
@@ -45,6 +46,12 @@ class MonochromeApp extends StatelessWidget {
   /// the AI DJ engine.
   final AutoDjRoutingService? routingService;
 
+  /// Phase 6: MusicBrainz enrichment service. Built in
+  /// `main.dart` and bound to [PlayerProvider] via the
+  /// `setGenreEnrichmentService` setter so every successful
+  /// track transition fires background enrichment.
+  final GenreEnrichmentService genreEnrichmentService;
+
   const MonochromeApp({
     super.key,
     required this.playlistRepository,
@@ -59,6 +66,7 @@ class MonochromeApp extends StatelessWidget {
     required this.historyLedger,
     required this.mixer,
     required this.dspEngine,
+    required this.genreEnrichmentService,
     this.routingService,
   });
 
@@ -89,7 +97,8 @@ class MonochromeApp extends StatelessWidget {
               ..setMixer(mixer)
               ..setDspEngine(dspEngine)
               ..setChartsRepository(chartsRepository)
-              ..setConnectivityService(connectivityService);
+              ..setConnectivityService(connectivityService)
+              ..setGenreEnrichmentService(genreEnrichmentService);
             // Smart-DJ bootstrap-fusion: bind the routing
             // service and the playlist repository AFTER the
             // base wiring so the bootstrap method's

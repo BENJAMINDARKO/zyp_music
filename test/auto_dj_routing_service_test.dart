@@ -47,7 +47,7 @@ void main() {
                 'id': t.id,
                 'title': t.title,
                 'filePath': p.join(tmp.path, '${t.id}.m4a'),
-                'durationSeconds': t.duration.inSeconds,
+                'durationSeconds': t.duration?.inSeconds,
                 'author': t.author,
                 'genre': t.genre,
               })

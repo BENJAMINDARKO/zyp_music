@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import 'miniplayer_flyout_container.dart';
 import 'package:mini_music_visualizer/mini_music_visualizer.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class MiniplayerQueueView extends StatelessWidget {
   const MiniplayerQueueView({super.key});
@@ -58,7 +59,7 @@ class MiniplayerQueueView extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(6),
                                 child: (t.thumbnailUrl?.isNotEmpty ?? false)
                                     ? CachedNetworkImage(
-                                        imageUrl: t.thumbnailUrl!,
+                                        imageUrl: rewriteThumbnailSize(t.thumbnailUrl),
                                         width: 48,
                                         height: 48,
                                         fit: BoxFit.cover,

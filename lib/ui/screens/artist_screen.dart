@@ -10,6 +10,7 @@ import 'album_screen.dart';
 import '../widgets/track_download_icon.dart';
 import '../widgets/bottom_player.dart';
 import '../../presentation/providers/download_provider.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class ArtistScreen extends StatefulWidget {
   final String artistId;
@@ -111,7 +112,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                 children: [
                   if (_artist!.thumbnailUrl != null)
                     CachedNetworkImage(
-                      imageUrl: _artist!.thumbnailUrl!,
+                      imageUrl: rewriteThumbnailSize(_artist!.thumbnailUrl, 1200),
                       fit: BoxFit.cover,
                     ),
                   Container(
@@ -205,7 +206,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                     borderRadius: BorderRadius.circular(4),
                     child: (track.thumbnailUrl?.isNotEmpty ?? false)
                         ? CachedNetworkImage(
-                            imageUrl: track.thumbnailUrl!,
+                            imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
                             width: 48,
                             height: 48,
                             fit: BoxFit.cover,
@@ -313,7 +314,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                               borderRadius: BorderRadius.circular(8),
                               child: (album.thumbnailUrl?.isNotEmpty ?? false)
                                   ? CachedNetworkImage(
-                                      imageUrl: album.thumbnailUrl!,
+                                      imageUrl: rewriteThumbnailSize(album.thumbnailUrl),
                                       width: 140,
                                       height: 140,
                                       fit: BoxFit.cover,

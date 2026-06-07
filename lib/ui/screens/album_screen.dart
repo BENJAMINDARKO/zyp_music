@@ -10,6 +10,7 @@ import '../widgets/track_download_icon.dart';
 import '../widgets/album_download_icon.dart';
 import '../widgets/bottom_player.dart';
 import '../../presentation/providers/download_provider.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class AlbumScreen extends StatefulWidget {
   final String albumId;
@@ -111,7 +112,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
                 children: [
                   if (_album!.thumbnailUrl != null)
                     CachedNetworkImage(
-                      imageUrl: _album!.thumbnailUrl!,
+                      imageUrl: rewriteThumbnailSize(_album!.thumbnailUrl, 1200),
                       fit: BoxFit.cover,
                     ),
                   Container(

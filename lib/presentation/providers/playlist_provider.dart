@@ -510,7 +510,7 @@ class PlaylistProvider extends ChangeNotifier {
           'id': t.id,
           'title': t.title,
           'author': t.author,
-          'durationSeconds': t.duration.inSeconds,
+          'durationSeconds': t.duration?.inSeconds,
           'thumbnailUrl': t.thumbnailUrl,
         }).toList(),
       });

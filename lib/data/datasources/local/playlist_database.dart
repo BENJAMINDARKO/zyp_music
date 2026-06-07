@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../models/playlist_model.dart';
@@ -69,7 +70,7 @@ class PlaylistDatabase {
     }
     return openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -198,6 +199,20 @@ class PlaylistDatabase {
       'genre             TEXT    DEFAULT NULL, '
       'scanned_at        INTEGER NOT NULL'
       ')'
+    );
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS artist_genres ('
+      'normalized_artist TEXT PRIMARY KEY, '
+      'display_name      TEXT    NOT NULL, '
+      'mbid              TEXT    NOT NULL, '
+      'genres_json       TEXT    NOT NULL, '
+      'genre_count       INTEGER NOT NULL DEFAULT 0, '
+      'fetched_at        INTEGER NOT NULL'
+      ')'
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_artist_genres_fetched_at '
+      'ON artist_genres(fetched_at)'
     );
   }
 
@@ -381,6 +396,87 @@ class PlaylistDatabase {
         'ON track_metadata(genre)'
       );
     }
+    if (oldVersion < 13) {
+      // Phase 6 of the AI DJ engine: a per-artist cached genre
+      // list sourced from MusicBrainz. The normalized artist
+      // name is the key (Unicode-folded, case-folded, accent-
+      // stripped) so the same artist recorded under multiple
+      // spellings collapses to one row. `mbid` is stored so a
+      // future re-fetch can hit MusicBrainz's per-artist
+      // endpoint directly without re-running the name search.
+      // `fetched_at` is epoch-ms; `genre_count` is the size of
+      // the cached genre list at write time so the service can
+      // cheaply decide whether to re-query (empty/thin lists
+      // have a longer TTL than rich ones).
+      await db.execute(
+        'CREATE TABLE IF NOT EXISTS artist_genres ('
+        'normalized_artist TEXT PRIMARY KEY, '
+        'display_name      TEXT    NOT NULL, '
+        'mbid              TEXT    NOT NULL, '
+        'genres_json       TEXT    NOT NULL, '
+        'genre_count       INTEGER NOT NULL DEFAULT 0, '
+        'fetched_at        INTEGER NOT NULL'
+        ')'
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_artist_genres_fetched_at '
+        'ON artist_genres(fetched_at)'
+      );
+    }
+  }
+
+  Future<List<String>?> getCachedArtistGenres(String normalizedArtist) async {
+    if (normalizedArtist.trim().isEmpty) return null;
+    final db = await database;
+    final rows = await db.query(
+      'artist_genres',
+      columns: const ['genres_json', 'genre_count', 'fetched_at'],
+      where: 'normalized_artist = ?',
+      whereArgs: [normalizedArtist],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    final genreCount = (row['genre_count'] as int?) ?? 0;
+    final fetchedAt = (row['fetched_at'] as int?) ?? 0;
+    final raw = row['genres_json'] as String?;
+    if (raw == null || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return null;
+    final genres = decoded.whereType<String>().toList(growable: false);
+    if (genres.isEmpty) return null;
+    final ageMs = DateTime.now().millisecondsSinceEpoch - fetchedAt;
+    const thinTtl = Duration(days: 90);
+    final isThin = genreCount < 3;
+    if (isThin && ageMs < thinTtl.inMilliseconds) {
+      return genres;
+    }
+    if (!isThin) {
+      return genres;
+    }
+    return null;
+  }
+
+  Future<void> cacheArtistGenres({
+    required String normalizedArtist,
+    required String displayName,
+    required String mbid,
+    required List<String> genres,
+  }) async {
+    if (normalizedArtist.trim().isEmpty) return;
+    final db = await database;
+    await db.insert(
+      'artist_genres',
+      {
+        'normalized_artist': normalizedArtist,
+        'display_name': displayName,
+        'mbid': mbid,
+        'genres_json': jsonEncode(genres),
+        'genre_count': genres.length,
+        'fetched_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<void> insertPlaylist(PlaylistModel playlist) async {
@@ -472,7 +568,7 @@ class PlaylistDatabase {
 
   Future<void> markTrackDownloaded(
       String trackId, String playlistId, String filePath,
-      {String title = '', String? thumbnailUrl, int durationSeconds = 0, String? author}) async {
+      {String title = '', String? thumbnailUrl, int? durationSeconds, String? author}) async {
     final db = await database;
     await db.insert('downloaded_tracks', {
       'id': trackId,
@@ -488,6 +584,37 @@ class PlaylistDatabase {
     // committed file. Runs in an isolate; never blocks the
     // download commit.
     _scheduleSilenceScan(trackId, filePath);
+  }
+
+  /// Backfills (or clears) the `durationSeconds` column for a
+  /// already-persisted downloaded track. Used by the C2
+  /// `probeDurationFromFile` flow: when a track landed on disk
+  /// without a YouTube API duration (live streams, unlisted
+  /// videos), the audio repository's `_backfillDuration` calls
+  /// this with the probed integer seconds to retire the
+  /// `—:—` placeholder in favour of a real value. Passing
+  /// `seconds: null` writes SQL `NULL` (used by the backfill
+  /// helper to "undo" a backfill if a later re-download
+  /// supplies a definitive YouTube-API value).
+  ///
+  /// No-op when the track is not in `downloaded_tracks`
+  /// (e.g. it was evicted between the cache write and the
+  /// probe completing).
+  ///
+  /// [seconds] is nullable so the same call can both
+  /// "backfill a probed value" and "restore the unknown
+  /// sentinel" depending on the caller's intent.
+  Future<void> updateTrackDuration(
+    String trackId, {
+    int? seconds,
+  }) async {
+    final db = await database;
+    await db.update(
+      'downloaded_tracks',
+      {'durationSeconds': seconds},
+      where: 'id = ?',
+      whereArgs: [trackId],
+    );
   }
 
   Future<bool> isTrackDownloaded(String trackId) async {
@@ -535,6 +662,34 @@ class PlaylistDatabase {
         where: 'id = ?', whereArgs: [trackId], limit: 1);
     if (result.isEmpty) return null;
     return result.first['filePath'] as String?;
+  }
+
+  /// Returns the full [downloaded_tracks] row for [trackId] as a
+  /// column-name → value map, or `null` when no row exists.
+  /// Backs the Phase 6 cached-metadata spec's three-tier
+  /// synthesis lookup: Hive-only entries (no SQLite row) fall
+  /// through to the Hive tier; entries that do have a row are
+  /// rebuilt from these columns so the synthesis path can
+  /// return a fully-populated [Track] without a second
+  /// round-trip.
+  ///
+  /// Column reference (per `_createTables` schema, version 13):
+  ///   * `id` (TEXT PK)
+  ///   * `playlistId` (TEXT NOT NULL)
+  ///   * `title` (TEXT NOT NULL)
+  ///   * `thumbnailUrl` (TEXT?)
+  ///   * `durationSeconds` (INTEGER DEFAULT 0 — null/zero treated
+  ///     as "unknown" by the C1 honest-nulls spec)
+  ///   * `author` (TEXT?)
+  ///   * `filePath` (TEXT NOT NULL)
+  ///   * `downloadedAt` (INTEGER NOT NULL)
+  ///   * `source` (TEXT DEFAULT 'youtube')
+  Future<Map<String, dynamic>?> getDownloadedTrack(String trackId) async {
+    final db = await database;
+    final result = await db.query('downloaded_tracks',
+        where: 'id = ?', whereArgs: [trackId], limit: 1);
+    if (result.isEmpty) return null;
+    return result.first;
   }
 
   Future<List<Map<String, dynamic>>> getDownloadedTracks(String playlistId) async {

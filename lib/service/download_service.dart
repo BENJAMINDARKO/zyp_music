@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../core/utils/network_utils.dart';
+import '../core/services/audio_cache_service.dart';
 import '../data/datasources/local/playlist_database.dart';
 import '../domain/repositories/audio_repository.dart';
 import '../domain/entities/playlist.dart';
@@ -34,6 +35,13 @@ class DownloadService {
   late final AudioRepository _audioRepository;
   late final PlaylistDatabase _database;
   late final SettingsProvider? _settingsProvider;
+  /// Optional C2 backfill hook. Injected from `main.dart` so
+  /// the same `AudioCacheService` singleton used by
+  /// `AudioRepositoryImpl`'s `onCacheSuccess` hook also fires
+  /// from the explicit download path. Nullable for unit
+  /// tests that don't exercise the duration-probe path; the
+  /// backfill call is skipped via `?.` in that case.
+  late final AudioCacheService? _cacheService;
   final http.Client _client = http.Client();
 
   final _progressController = StreamController<DownloadProgress>.broadcast();
@@ -50,10 +58,12 @@ class DownloadService {
     required AudioRepository audioRepository,
     required PlaylistDatabase database,
     SettingsProvider? settingsProvider,
+    AudioCacheService? cacheService,
   }) {
     _audioRepository = audioRepository;
     _database = database;
     _settingsProvider = settingsProvider;
+    _cacheService = cacheService;
   }
 
   DownloadService.test() {
@@ -104,8 +114,17 @@ class DownloadService {
         filePath,
         title: track.title,
         thumbnailUrl: track.thumbnailUrl,
-        durationSeconds: track.duration.inSeconds,
+        durationSeconds: track.duration?.inSeconds,
         author: track.author,
+      );
+      // C2: fire-and-forget duration backfill. If
+      // `track.duration` was null (live stream / unlisted
+      // video) the SQLite row was just written with `null`;
+      // the probe may recover a real duration from the
+      // on-disk file. Bounded to 5s; short-circuits when
+      // `track.duration` was non-null.
+      unawaited(
+        _cacheService?.backfillDurationFromFile(track.id, filePath),
       );
       _completedController.add(track.id);
     } catch (e) {
@@ -151,8 +170,15 @@ class DownloadService {
           filePath,
           title: track.title,
           thumbnailUrl: track.thumbnailUrl,
-          durationSeconds: track.duration.inSeconds,
+          durationSeconds: track.duration?.inSeconds,
           author: track.author,
+        );
+        // C2: fire-and-forget duration backfill. See
+        // `downloadTrack` above for the contract; this
+        // site is the per-track inside the playlist-batch
+        // download path.
+        unawaited(
+          _cacheService?.backfillDurationFromFile(track.id, filePath),
         );
         _completedController.add(track.id);
       } catch (e) {

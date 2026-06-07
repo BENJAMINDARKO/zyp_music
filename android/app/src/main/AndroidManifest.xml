@@ -37,6 +37,9 @@
         <service android:name="com.ryanheise.audioservice.AudioService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback">
+            <meta-data
+                android:name="mediaSessionIcon"
+                android:resource="@drawable/ic_notification" />
         </service>
         <!-- Disable Impeller to avoid GPU buffer queue timeouts on Samsung Exynos devices -->
         <meta-data

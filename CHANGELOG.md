@@ -2,6 +2,17 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.1.13] — 2026-06-06
+
+### Added
+- **Honest duration display:** When a track's length isn't known yet, the app now shows `—:—` instead of a misleading `0:00`. Cached and downloaded tracks automatically get their real duration measured from the audio file once it's on disk.
+- **New app icon:** Refreshed the launcher icon, the in-app drawer logo, and the icon that appears in the notification panel.
+
+### Fixed
+- **Cold-launch track durations:** Tracks rebuilt from local memory at startup no longer report a fake `0:00` length — they show `—:—` until the real duration is available.
+
+---
+
 ## [1.1.12] — 2026-06-06
 
 ### Added

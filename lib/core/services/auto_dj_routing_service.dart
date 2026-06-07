@@ -6,6 +6,7 @@ import '../../domain/entities/auto_dj_mode.dart';
 import '../../domain/entities/video.dart';
 import '../utils/app_logger.dart';
 import 'dj_history_ledger.dart';
+import 'genre_enrichment_service.dart';
 import 'genre_proximity_graph.dart';
 import 'local_crate_miner.dart';
 
@@ -176,6 +177,14 @@ class AutoDjRoutingService {
   final OnlineSimilarFetcher? _onlineFetcher;
   final ConnectivityProbe _connectivityProbe;
 
+  /// Phase 6: MusicBrainz enrichment. Late-bound (and
+  /// optional) so legacy call sites that build the engine
+  /// without going through `main.dart` keep working. When
+  /// null the routing layer runs in pure-Markov mode with
+  /// the dominant-genre interceptor as the only genre
+  /// fallback.
+  final GenreEnrichmentService? _genreEnrichment;
+
   /// Smart DJ bootstrap-fusion cache: the number of rows in
   /// `dj_listening_history` at last invalidation. Read directly
   /// by [likedAffinityWeight] (the linear-decay matrix) so
@@ -224,6 +233,7 @@ class AutoDjRoutingService {
     DJHistoryLedger? historyLedger,
     OnlineSimilarFetcher? onlineFetcher,
     ConnectivityProbe? connectivityProbe,
+    GenreEnrichmentService? genreEnrichment,
     Random? random,
     int initialHistoryCount = 0,
     List<String> topLikedArtists = const <String>[],
@@ -233,6 +243,7 @@ class AutoDjRoutingService {
         _historyLedger = historyLedger,
         _onlineFetcher = onlineFetcher,
         _connectivityProbe = connectivityProbe ?? (() => NetworkAvailability.unknown),
+        _genreEnrichment = genreEnrichment,
         _random = random ?? Random(),
         _cachedHistoryCount = initialHistoryCount,
         _topLikedArtists = List<String>.unmodifiable(topLikedArtists),
@@ -633,6 +644,34 @@ class AutoDjRoutingService {
       }
     }
 
+    // Phase 6: seed enrichment. If the track's `genre` came
+    // over the wire as null/empty/"Unknown", consult the
+    // MusicBrainz cache (read-only, never blocks on a remote
+    // round-trip) before the dominant-genre interceptor gets
+    // a chance. This short-circuits the interceptor on the
+    // common case where the user already played the same
+    // artist in a previous session.
+    final enricher = _genreEnrichment;
+    Track seed = current;
+    if (enricher != null && _isUnknownGenre(current.genre)) {
+      final enriched = await enricher.enrichSync(current);
+      if (enriched.isNotEmpty) {
+        seed = current.copyWith(genre: enriched.first);
+        AppLogger.log(
+          'Same Genre: seed enriched from cache → "${enriched.first}".',
+          name: _logTag,
+        );
+      }
+    }
+
+    // Phase 6: fire-and-forget background enrichment for the
+    // full candidate pool. Pool enrichment is best-effort; the
+    // seed enrichment above is the only path the routing
+    // decision depends on.
+    if (enricher != null) {
+      enricher.enqueueForEnrichment(uniqueCandidates);
+    }
+
     // Full BFS sweep up to depth 3 — gather every candidate that
     // matches any reachable genre. The previous "first-hit"
     // termination was deterministic and caused the engine to
@@ -641,7 +680,7 @@ class AutoDjRoutingService {
     // the full neighbourhood lets the roulette wheel below
     // exercise the artist-penalty matrix on a much richer pool.
     final rawCandidates = _harvestBfsCandidates(
-      seedGenre: current.genre,
+      seedGenre: seed.genre,
       candidates: uniqueCandidates,
     );
     if (rawCandidates.isEmpty) {
@@ -729,10 +768,42 @@ class AutoDjRoutingService {
   /// implementation terminated on the first hit; this one
   /// completes a full sweep so the roulette wheel has a rich
   /// pool to draw from.
+  ///
+  /// Defensive: when [seedGenre] is null, empty, or the literal
+  /// "Unknown" placeholder, the seed carries no usable signal
+  /// and a BFS anchored on it would walk unrelated genres (or
+  /// yield nothing at all if the graph has no entry for the
+  /// placeholder). In that case we substitute the most-frequent
+  /// valid genre in [candidates] as the BFS origin via
+  /// [_extractDominantPoolGenre]. If the pool itself has no
+  /// valid genres, graph traversal is meaningless and we return
+  /// the raw pool verbatim so the caller's random-fallback can
+  /// still pick from it.
   List<Track> _harvestBfsCandidates({
     required String? seedGenre,
     required List<Track> candidates,
   }) {
+    final hasUsableSeed = seedGenre != null &&
+        seedGenre.isNotEmpty &&
+        seedGenre != 'Unknown';
+    if (!hasUsableSeed) {
+      final dominant = _extractDominantPoolGenre(candidates);
+      if (dominant == null) {
+        AppLogger.log(
+          'Same Genre: seed genre unusable (${seedGenre ?? "null"}) and '
+          'candidate pool has no valid genres; skipping BFS, returning '
+          'raw pool of ${candidates.length} candidates.',
+          name: _logTag,
+        );
+        return List<Track>.from(candidates);
+      }
+      AppLogger.log(
+        'Same Genre: seed genre unusable (${seedGenre ?? "null"}); '
+        'substituting dominant pool genre "$dominant" as BFS origin.',
+        name: _logTag,
+      );
+      seedGenre = dominant;
+    }
     final harvested = <Track>[];
     final harvestedIds = <String>{};
     for (final g in _graph.searchBreadth(seedGenre)) {
@@ -745,6 +816,45 @@ class AutoDjRoutingService {
       }
     }
     return harvested;
+  }
+
+  /// Frequency-maps [pool]'s `genre` field and returns the genre
+  /// string with the highest occurrence count. Null, empty, and
+  /// the literal "Unknown" placeholder are strictly excluded and
+  /// contribute nothing to the count. Ties are broken by the
+  /// alphabetically-first genre, giving the result a stable
+  /// ordering across runs. Returns `null` when no candidate in
+  /// the pool carries a valid genre — the caller should treat
+  /// that as a signal to skip graph traversal entirely.
+  /// Null/empty/"Unknown" defence used by the Phase 6 seed
+  /// enrichment path. Mirrors the predicate inside
+  /// [_extractDominantPoolGenre] so the routing layer's
+  /// decision to consult the MusicBrainz cache is consistent
+  /// with the dominant-genre interceptor's view of an
+  /// "unknowable" genre.
+  bool _isUnknownGenre(String? g) {
+    if (g == null) return true;
+    final trimmed = g.trim();
+    if (trimmed.isEmpty) return true;
+    if (trimmed == 'Unknown') return true;
+    return false;
+  }
+
+  String? _extractDominantPoolGenre(List<Track> pool) {
+    final counts = <String, int>{};
+    for (final t in pool) {
+      final g = t.genre?.trim();
+      if (g == null || g.isEmpty || g == 'Unknown') continue;
+      counts.update(g, (v) => v + 1, ifAbsent: () => 1);
+    }
+    if (counts.isEmpty) return null;
+    final entries = counts.entries.toList()
+      ..sort((a, b) {
+        final byCount = b.value.compareTo(a.value);
+        if (byCount != 0) return byCount;
+        return a.key.compareTo(b.key);
+      });
+    return entries.first.key;
   }
 
   /// W_path lookup. The graph exposes 1-hop weights via

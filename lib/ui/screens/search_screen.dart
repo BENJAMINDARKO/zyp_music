@@ -16,6 +16,7 @@ import '../widgets/track_download_icon.dart';
 import '../widgets/album_download_icon.dart';
 import '../../presentation/providers/download_provider.dart';
 import '../widgets/bottom_player.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class SearchScreen extends StatefulWidget {
   final String initialQuery;
@@ -163,7 +164,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
             borderRadius: BorderRadius.circular(4),
             child: (track.thumbnailUrl?.isNotEmpty ?? false)
                 ? CachedNetworkImage(
-                    imageUrl: track.thumbnailUrl!,
+                    imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
                     width: 48,
                     height: 48,
                     fit: BoxFit.cover,
@@ -231,7 +232,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
             borderRadius: BorderRadius.circular(4),
             child: (album.thumbnailUrl?.isNotEmpty ?? false)
                 ? CachedNetworkImage(
-                    imageUrl: album.thumbnailUrl!,
+                    imageUrl: rewriteThumbnailSize(album.thumbnailUrl),
                     width: 48,
                     height: 48,
                     fit: BoxFit.cover,
@@ -309,7 +310,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
             borderRadius: BorderRadius.circular(24),
             child: (artist.thumbnailUrl?.isNotEmpty ?? false)
                 ? CachedNetworkImage(
-                    imageUrl: artist.thumbnailUrl!,
+                    imageUrl: rewriteThumbnailSize(artist.thumbnailUrl),
                     width: 48,
                     height: 48,
                     fit: BoxFit.cover,
@@ -374,7 +375,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
             borderRadius: BorderRadius.circular(4),
             child: (playlist.thumbnailUrl?.isNotEmpty ?? false)
                 ? CachedNetworkImage(
-                    imageUrl: playlist.thumbnailUrl!,
+                    imageUrl: rewriteThumbnailSize(playlist.thumbnailUrl),
                     width: 48,
                     height: 48,
                     fit: BoxFit.cover,

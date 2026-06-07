@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:zyp_music/core/services/hybrid_cache_service.dart';
 import 'package:zyp_music/core/services/local_crate_miner.dart';
+import 'package:zyp_music/data/models/cache_tracker_model.dart';
 
 void main() {
   setUpAll(() {
@@ -193,6 +194,115 @@ void main() {
       expect(crate, isEmpty);
     });
   });
+
+  // ---------------------------------------------------------------------
+  // C3 — null duration propagation regression coverage
+  //
+  // The synthesis paths in [LocalCrateMiner._mineFromSqlite] /
+  // [LocalCrateMiner._mineFromHive] / [LocalCrateMiner._mineFromHive]
+  // (Hive tier + stub fallback) must propagate `null` for the
+  // "unknown" sentinel rather than coercing to `Duration.zero`
+  // (which would render as `0:00` in the UI and contradict the
+  // C1 honest-nulls invariant). The Hive tracker record has no
+  // duration field at all, so any branch that synthesises a Track
+  // from Hive alone must report `duration: null`.
+  // ---------------------------------------------------------------------
+  group('LocalCrateMiner C3 null-duration propagation', () {
+    test('SQLite row with null durationSeconds yields Track(duration: null)',
+        () async {
+      final realFile = File(p.join(tempDir.path, 'live.m4a'))
+        ..writeAsBytesSync([]);
+      final miner = LocalCrateMiner(
+        sqliteSource: () async => [
+          {
+            'id': 'live',
+            'title': 'Live Stream',
+            'filePath': realFile.path,
+            // SQLite column is nullable (Phase 2/C1). Live streams
+            // and unlisted videos have no API-supplied duration.
+            'durationSeconds': null,
+            'author': 'YouTube',
+          },
+        ],
+        hybridCache: _FakeHybridCache(const []),
+      );
+      final crate = await miner.mine();
+      expect(crate, hasLength(1));
+      expect(crate.first.duration, isNull);
+    });
+
+    test('SQLite row with finite duration propagates Duration(seconds: x)',
+        () async {
+      final realFile = File(p.join(tempDir.path, 'normal.m4a'))
+        ..writeAsBytesSync([]);
+      final miner = LocalCrateMiner(
+        sqliteSource: () async => [
+          {
+            'id': 'normal',
+            'title': 'Normal',
+            'filePath': realFile.path,
+            'durationSeconds': 213,
+            'author': 'A',
+          },
+        ],
+        hybridCache: _FakeHybridCache(const []),
+      );
+      final crate = await miner.mine();
+      expect(crate.first.duration, const Duration(seconds: 213));
+    });
+
+    test('Hive-tier synthesis reports duration: null (no Duration.zero leak)',
+        () async {
+      // A Hive tracker entry has title/author/thumbnailUrl but
+      // no duration field — so the synthesised Track's duration
+      // must be `null`. Pre-C3 this was `Duration.zero`, which
+      // would have rendered as `0:00` and broken the C1
+      // "unknown = `—:—`" UI contract.
+      final fakeFile = File(p.join(tempDir.path, 'cached.m4a'))
+        ..writeAsBytesSync([]);
+      final hiveEntry = CacheTrackerModel(
+        trackId: 'hive-only',
+        cachedAt: 0,
+        title: 'Hive-only Track',
+        author: 'Hive Author',
+        thumbnailUrl: 'http://example.com/t.jpg',
+      );
+      final miner = LocalCrateMiner(
+        sqliteSource: () async => const <Map<String, dynamic>>[],
+        hybridCache: _FakeHybridCache.withEntries({'hive-only': hiveEntry}),
+        fileExists: (path) async => path == fakeFile.path,
+        hiveAudioPathResolver: (_) async => fakeFile.path,
+      );
+      final crate = await miner.mine();
+      expect(crate, hasLength(1));
+      expect(crate.first.title, 'Hive-only Track');
+      expect(crate.first.duration, isNull,
+          reason: 'Hive branch must not leak Duration.zero');
+    });
+
+    test('stub fallback (no SQLite, no Hive metadata) reports duration: null',
+        () async {
+      // The final fallback synthesises a `'Cached Track'` stub
+      // when neither the SQLite mirror nor the Hive tracker
+      // have a populated title. Pre-C3 the stub's duration was
+      // `Duration.zero`; post-C3 it is `null` (C1 "unknown").
+      final fakeFile = File(p.join(tempDir.path, 'stub.m4a'))
+        ..writeAsBytesSync([]);
+      final miner = LocalCrateMiner(
+        sqliteSource: () async => const <Map<String, dynamic>>[],
+        hybridCache: _FakeHybridCache(const ['stub-id']),
+        // Hive tracker entry is present but `title` is null —
+        // falls through to the stub branch.
+        fileExists: (path) async => path == fakeFile.path,
+        hiveAudioPathResolver: (_) async => fakeFile.path,
+      );
+      final crate = await miner.mine();
+      expect(crate, hasLength(1));
+      expect(crate.first.title, 'Cached Track');
+      expect(crate.first.duration, isNull,
+          reason: 'Stub fallback must not leak Duration.zero');
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -201,8 +311,18 @@ void main() {
 
 class _FakeHybridCache extends HybridCacheService {
   final List<String> _ids;
-  _FakeHybridCache(this._ids);
+  final Map<String, CacheTrackerModel> _entries;
+  _FakeHybridCache(this._ids) : _entries = const {};
+
+  /// Construct a fake that also satisfies `getTrackerEntry`
+  /// lookups for the Hive-tier synthesis tests.
+  _FakeHybridCache.withEntries(Map<String, CacheTrackerModel> entries)
+      : _ids = entries.keys.toList(),
+        _entries = entries;
 
   @override
   List<String> getCachedTrackIds() => _ids;
+
+  @override
+  CacheTrackerModel? getTrackerEntry(String trackId) => _entries[trackId];
 }

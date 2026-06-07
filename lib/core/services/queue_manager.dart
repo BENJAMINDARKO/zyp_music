@@ -279,6 +279,21 @@ class QueueManager extends ChangeNotifier {
 
     final router = _router;
     if (router != null) {
+      // Guard against the cold-start race where `resolveNext`
+      // lands on the routing service before the Smart-DJ
+      // bootstrap fusion has populated its Top-Artists /
+      // Top-Genres cache. The completer on `PlayerProvider`
+      // fires once `_maybeBootstrapSmartDjFusion` finishes
+      // pushing the liked-songs aggregation into the router;
+      // awaiting it here means the first `resolveNext` always
+      // sees a primed cache. Idempotent: if bootstrap already
+      // completed this is a microtask-level no-op. The
+      // optional chain covers unit tests that construct
+      // `QueueManager` without binding a `PlayerProvider`.
+      final pp = _playerProvider;
+      if (pp != null) {
+        await pp.smartDjBootstrapInitialization;
+      }
       try {
         final pick = await router.resolveNext(
           mode: _currentMode,
@@ -357,17 +372,92 @@ class QueueManager extends ChangeNotifier {
       'Offline Auto DJ picked $nextId (pool size ${pool.length})',
       name: _logTag,
     );
-    return _buildTrackFromId(nextId);
+    return await _buildTrackFromId(nextId);
   }
 
-  Track _buildTrackFromId(String trackId) {
+  /// Resolves a [TrackId] to a [Track] via the three-tier
+  /// synthesis path (Phase 6 cached-metadata spec):
+  ///
+  ///   1. **In-memory resolver** — the live `metadataResolver()`
+  ///      closure (typically backed by `PlayerProvider`'s
+  ///      recently-played list). Fast path; returns whatever
+  ///      the host wired.
+  ///   2. **SQLite permanent library** — `PlaylistDatabase.getDownloadedTrack`
+  ///      is consulted for a full metadata row. This is the
+  ///      authoritative source for tracks the user has
+  ///      downloaded or favorited.
+  ///   3. **Hive transient cache** — `hybridCache.getTrackerEntry`
+  ///      is consulted for the display-metadata fields added in
+  ///      Phase 6 (`title` / `author` / `thumbnailUrl`). If the
+  ///      entry is present and its `title` is non-null, the
+  ///      synthesis returns a populated `Track` from the Hive
+  ///      tier alone.
+  ///   4. **Stub fallback** — returns the legacy
+  ///      `'Cached Track'` placeholder. This is the
+  ///      last-resort path; reaching it means the track is in
+  ///      neither storage tier (e.g. a gapless pre-buffer that
+  ///      crashed before the cache commit landed).
+  Future<Track> _buildTrackFromId(String trackId) async {
+    // Tier 1: in-memory resolver (existing fast path)
     final metadata = metadataResolver();
     final cached = metadata[trackId];
     if (cached != null) return cached;
+
+    // Tier 2: SQLite downloaded_tracks mirror
+    final db = libraryDatabase;
+    if (db != null) {
+      try {
+        final downloaded = await db.getDownloadedTrack(trackId);
+        if (downloaded != null) {
+          return Track(
+            id: trackId,
+            title: (downloaded['title'] as String?) ?? 'Cached Track',
+            author: downloaded['author'] as String?,
+            thumbnailUrl: downloaded['thumbnailUrl'] as String?,
+            // C1: preserve null. `0` would silently render as
+            // `0:00` in the UI; null renders as the em-dash
+            // placeholder via [formatDuration]. Live-stream
+            // tracks and unlisted videos with no API duration
+            // now show as unknown in the queue.
+            duration: (downloaded['durationSeconds'] as int?) == null
+                ? null
+                : Duration(seconds: downloaded['durationSeconds'] as int),
+            source: TrackSource.youtube,
+          );
+        }
+      } catch (e) {
+        AppLogger.log(
+          '_buildTrackFromId: SQLite tier lookup failed for $trackId: $e',
+          name: _logTag,
+        );
+      }
+    }
+
+    // Tier 3: Hive tracker entry (display metadata when populated).
+    // The Hive tracker does not carry a duration field, so the
+    // synthesised Track reports `null` (the C1 "unknown" sentinel)
+    // — the UI renders it as `—:—` via [formatDuration]. C3
+    // contract: no `Duration.zero` leak in the synthesis paths.
+    final hiveEntry = hybridCache.getTrackerEntry(trackId);
+    if (hiveEntry != null && hiveEntry.title != null) {
+      return Track(
+        id: trackId,
+        title: hiveEntry.title!,
+        author: hiveEntry.author,
+        thumbnailUrl: hiveEntry.thumbnailUrl ?? '',
+        duration: null,
+        source: TrackSource.youtube,
+      );
+    }
+
+    // Final fallback: stub. Unknown in every dimension; duration
+    // is `null` not `Duration.zero` for the same reason as the
+    // Hive branch above. Per C1, "no metadata" must not be
+    // mis-rendered as "0 seconds long".
     return Track(
       id: trackId,
       title: 'Cached Track',
-      duration: Duration.zero,
+      duration: null,
       source: TrackSource.youtube,
     );
   }

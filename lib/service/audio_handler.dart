@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:zyp_music/core/utils/app_logger.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
@@ -59,7 +61,7 @@ class MusicAudioHandler extends BaseAudioHandler {
       if (dur != null) {
         final item = mediaItem.value;
         if (item != null) {
-          mediaItem.add(item.copyWith(duration: dur));
+          updateMediaItem(item.copyWith(duration: dur));
         }
       }
     });
@@ -71,7 +73,7 @@ class MusicAudioHandler extends BaseAudioHandler {
           if (source.tag is MediaItem) {
             final item = source.tag as MediaItem;
             if (mediaItem.valueOrNull?.id != item.id) {
-              mediaItem.add(item);
+              updateMediaItem(item);
             }
             _currentIndex = index;
           }
@@ -101,7 +103,7 @@ class MusicAudioHandler extends BaseAudioHandler {
       if (index >= 0 && index < sequence.length) {
         final source = sequence[index];
         if (source.tag is MediaItem) {
-          mediaItem.add(source.tag as MediaItem);
+          updateMediaItem(source.tag as MediaItem);
           AppLogger.log(
             '[MediaSessionSync] Re-anchored MediaItem to active player: '
             '${(source.tag as MediaItem).id}',
@@ -165,7 +167,7 @@ class MusicAudioHandler extends BaseAudioHandler {
       if (dur != null) {
         final item = mediaItem.value;
         if (item != null) {
-          mediaItem.add(item.copyWith(duration: dur));
+          updateMediaItem(item.copyWith(duration: dur));
         }
       }
     });
@@ -177,7 +179,7 @@ class MusicAudioHandler extends BaseAudioHandler {
           if (source.tag is MediaItem) {
             final item = source.tag as MediaItem;
             if (mediaItem.valueOrNull?.id != item.id) {
-              mediaItem.add(item);
+              updateMediaItem(item);
             }
             _currentIndex = index;
           }
@@ -251,7 +253,7 @@ class MusicAudioHandler extends BaseAudioHandler {
     try {
       _currentIndex = _queue.indexWhere((e) => e.id == item.id);
       if (_currentIndex == -1) _currentIndex = null;
-      mediaItem.add(item);
+      updateMediaItem(item);
 
       final headers = await _getHeaders();
 
@@ -387,5 +389,41 @@ class MusicAudioHandler extends BaseAudioHandler {
     _durationSub?.cancel();
     _currentIndexSub?.cancel();
     _player.dispose();
+  }
+
+  Future<Uri?> _getLocalArtUri(Uri? remoteUri) async {
+    if (remoteUri == null) return null;
+    if (remoteUri.isScheme('file')) return remoteUri;
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      final fileName = 'art_${remoteUri.toString().hashCode}.jpg';
+      final file = File('${cacheDir.path}/$fileName');
+      if (await file.exists()) {
+        return file.uri;
+      }
+      final response = await http.get(remoteUri);
+      if (response.statusCode == 200) {
+        await file.writeAsBytes(response.bodyBytes);
+        return file.uri;
+      }
+    } catch (e) {
+      AppLogger.log('Error caching artwork: $e', name: 'MusicAudioHandler');
+    }
+    return remoteUri;
+  }
+
+  @override
+  Future<void> updateMediaItem(MediaItem mediaItem) async {
+    if (mediaItem.artUri != null && !mediaItem.artUri!.isScheme('file')) {
+      this.mediaItem.add(mediaItem);
+      final localUri = await _getLocalArtUri(mediaItem.artUri);
+      if (localUri != null && localUri != mediaItem.artUri) {
+        if (this.mediaItem.valueOrNull?.id == mediaItem.id) {
+          this.mediaItem.add(mediaItem.copyWith(artUri: localUri));
+        }
+      }
+    } else {
+      this.mediaItem.add(mediaItem);
+    }
   }
 }

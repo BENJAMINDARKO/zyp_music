@@ -157,7 +157,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         id: t.id,
         title: t.title,
         thumbnailUrl: t.thumbnailUrl,
-        durationSeconds: t.duration.inSeconds,
+        durationSeconds: t.duration?.inSeconds,
         author: t.author,
         index: t.index,
       )).toList(),
@@ -175,7 +175,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       id: track.id,
       title: track.title,
       thumbnailUrl: track.thumbnailUrl,
-      durationSeconds: track.duration.inSeconds,
+      durationSeconds: track.duration?.inSeconds,
       author: track.author,
       index: track.index,
     ));
@@ -204,7 +204,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       id: track.id,
       title: track.title,
       thumbnailUrl: track.thumbnailUrl,
-      durationSeconds: track.duration.inSeconds,
+      durationSeconds: track.duration?.inSeconds,
       author: track.author,
       index: track.index,
     ));
@@ -401,8 +401,20 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         final existingNormArtist = normalise(existing.author ?? '');
 
         if (existingNormTitle == normTitle && existingNormArtist == normArtist) {
-          final diff = (existing.duration.inSeconds - track.duration.inSeconds).abs();
-          if (diff <= 5 || track.duration.inSeconds == 0 || existing.duration.inSeconds == 0) {
+          // C1: `null` duration means "unknown" (live streams, unlisted
+          // videos, etc.) — treat the same as the original code's `0`
+          // sentinel for "trust the title/artist match without
+          // cross-checking duration".
+          final existingDur = existing.duration?.inSeconds;
+          final trackDur = track.duration?.inSeconds;
+          final diff = (existingDur == null || trackDur == null)
+              ? 0
+              : (existingDur - trackDur).abs();
+          if (diff <= 5 ||
+              existingDur == null ||
+              existingDur == 0 ||
+              trackDur == null ||
+              trackDur == 0) {
             // Merge source
             final newSourceRef = SourceRef(
               provider: track.source,
@@ -471,7 +483,12 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
           id: s.videoId,
           title: s.name,
           thumbnailUrl: s.thumbnails.lastOrNull?.url,
-          duration: Duration(seconds: s.duration ?? 0),
+          // C1: preserve null. `s.duration` is nullable from
+          // the YouTube Music API (live streams, unlisted).
+          // Coercing to `0` would render as `0:00` in the UI.
+          duration: s.duration == null
+              ? null
+              : Duration(seconds: s.duration!),
           author: s.artist.name,
           index: 0,
         )).toList(),
@@ -510,7 +527,10 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         id: s.videoId,
         title: s.name,
         thumbnailUrl: s.thumbnails.lastOrNull?.url,
-        duration: Duration(seconds: s.duration ?? 0),
+        // C1: preserve null. See sibling block above.
+        duration: s.duration == null
+            ? null
+            : Duration(seconds: s.duration!),
         author: a.name,
         index: 0,
       )).toList(),

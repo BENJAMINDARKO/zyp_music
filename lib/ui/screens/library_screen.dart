@@ -14,6 +14,7 @@ import 'album_screen.dart';
 import 'artist_screen.dart';
 import '../../presentation/providers/download_provider.dart';
 import '../widgets/track_download_icon.dart';
+import "../../core/utils/thumbnail_url.dart";
 
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
@@ -87,7 +88,7 @@ class LibraryScreen extends StatelessWidget {
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: CachedNetworkImage(
-                        imageUrl: track.thumbnailUrl!,
+                        imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
                         fit: BoxFit.cover,
                         errorWidget: (context, url, error) => const Icon(Icons.music_note, color: Colors.white54),
                       ),
@@ -161,7 +162,7 @@ class LibraryScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
                 child: (album.thumbnailUrl?.isNotEmpty ?? false)
                     ? CachedNetworkImage(
-                        imageUrl: album.thumbnailUrl!,
+                        imageUrl: rewriteThumbnailSize(album.thumbnailUrl),
                         width: 48,
                         height: 48,
                         fit: BoxFit.cover,
@@ -224,7 +225,7 @@ class LibraryScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(24),
                 child: (artist.thumbnailUrl?.isNotEmpty ?? false)
                     ? CachedNetworkImage(
-                        imageUrl: artist.thumbnailUrl!,
+                        imageUrl: rewriteThumbnailSize(artist.thumbnailUrl),
                         width: 48,
                         height: 48,
                         fit: BoxFit.cover,
@@ -304,7 +305,7 @@ class LibraryScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     child: (playlist.thumbnailUrl?.isNotEmpty ?? false)
                         ? CachedNetworkImage(
-                            imageUrl: playlist.thumbnailUrl!,
+                            imageUrl: rewriteThumbnailSize(playlist.thumbnailUrl),
                             width: 48,
                             height: 48,
                             fit: BoxFit.cover,
