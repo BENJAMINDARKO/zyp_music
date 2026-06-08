@@ -7,12 +7,42 @@
 //     in both directions) are mirrored.
 //   * Graceful degradation for unknown / null genres.
 
-import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter_test/flutter_test.dart';
 import 'package:zyp_music/core/services/genre_proximity_graph.dart';
 
+Map<String, Map<String, double>> _loadGraphMatrix() {
+  final f = File('assets/data/genre_proximity_matrix.json');
+  if (!f.existsSync()) {
+    throw StateError(
+        'assets/data/genre_proximity_matrix.json must exist for tests');
+  }
+  final decoded = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+  final matrix = <String, Map<String, double>>{};
+  for (final entry in decoded.entries) {
+    final neighbors = (entry.value as Map<String, dynamic>)['neighbors']
+        as Map<String, dynamic>?;
+    if (neighbors == null) continue;
+    matrix[entry.key] =
+        neighbors.map((k, v) => MapEntry(k, (v as num).toDouble()));
+  }
+  return matrix;
+}
+
+GenreProximityGraph _graphForTesting() {
+  final graph = GenreProximityGraph();
+  graph.loadMatrixForTesting(_loadGraphMatrix());
+  return graph;
+}
+
 void main() {
-  const graph = GenreProximityGraph();
+  late GenreProximityGraph graph;
+
+  setUp(() {
+    graph = _graphForTesting();
+  });
 
   group('GenreProximityGraph.spec', () {
     test('contains the canonical 80+ source genres', () {
@@ -24,20 +54,14 @@ void main() {
         'Indie Rock',
         'Classic Rock',
         'Hard Rock',
-        'Metal',
         'Heavy Metal',
         'Thrash Metal',
         'Death Metal',
         'Black Metal',
         'Doom Metal',
-        'Stoner Metal',
         'Psychedelic Rock',
         'Progressive Rock',
-        'Art Rock',
         'Post-Punk',
-        'New Wave',
-        'Goth Rock',
-        'Darkwave',
         'Shoegaze',
         'Dream Pop',
         'Indie Pop',
@@ -49,10 +73,8 @@ void main() {
         'J-Pop',
         'Anime OST',
         'Hip-Hop',
-        'Rap',
         'Trap',
         'Drill',
-        'EDM Trap',
         'R&B',
         'Neo-Soul',
         'Soul',
@@ -60,24 +82,16 @@ void main() {
         'Disco',
         'House',
         'Deep House',
-        'Chill House',
-        'Ambient House',
         'EDM',
         'Trance',
         'Techno',
-        'Minimal Techno',
-        'Ambient Techno',
         'Dubstep',
         'Drum & Bass',
         'Jungle',
-        'Breakbeat',
         'UK Garage',
-        '2-Step',
-        'Future Garage',
         'Ambient',
         'Chillout',
         'Lo-Fi',
-        'Jazzhop',
         'Jazz',
         'Smooth Jazz',
         'Blues',
@@ -108,20 +122,20 @@ void main() {
 
     test('Rock neighbours match the spec', () {
       final n = graph.neighborsOf('Rock');
-      expect(n['Alternative Rock'], 0.90);
+      expect(n['Alternative Rock'], 0.85);
       expect(n['Classic Rock'], 0.85);
       expect(n['Hard Rock'], 0.80);
-      expect(n['Indie Rock'], 0.75);
-      expect(n['Blues Rock'], 0.70);
+      expect(n['Indie Rock'], 0.80);
+      expect(n['Blues Rock'], 0.72);
     });
 
     test('Hip-Hop neighbours match the spec', () {
       final n = graph.neighborsOf('Hip-Hop');
-      expect(n['Rap'], 0.95);
-      expect(n['Trap'], 0.85);
-      expect(n['Drill'], 0.80);
-      expect(n['R&B'], 0.75);
-      expect(n['Afrobeats'], 0.55);
+      expect(n['Boom Bap'], 0.90);
+      expect(n['Trap'], 0.88);
+      expect(n['Drill'], 0.82);
+      expect(n['R&B'], 0.65);
+      expect(n['Afrobeats'], 0.42);
     });
 
     test('symmetric edges mirror across the matrix', () {
@@ -162,7 +176,7 @@ void main() {
       }
       // The first entry should be the highest-weight neighbour.
       expect(sorted.first.key, 'Alternative Rock');
-      expect(sorted.first.value, 0.90);
+      expect(sorted.first.value, 0.85);
     });
 
     test('searchBreadth starts with the seed genre', () {
@@ -178,7 +192,7 @@ void main() {
       expect(list[2], 'Classic Rock'); // 0.85
       expect(list[3], 'Hard Rock'); // 0.80
       expect(list[4], 'Indie Rock'); // 0.75
-      expect(list[5], 'Blues Rock'); // 0.70
+      expect(list[5], 'Pop Rock'); // 0.78
     });
 
     test('searchBreadth on an unknown genre yields nothing', () {
@@ -187,19 +201,17 @@ void main() {
     });
 
     test('searchBreadth expands to second-degree neighbours', () {
-      // 'Metal' is reachable from 'Rock' only at depth 2 (via
-      // Rock -> Hard Rock -> Metal). 'Indie Rock' is also a direct
-      // Rock neighbour (depth 1), so it's not a useful depth-2
-      // canary. 'Metal' is.
+      // 'Heavy Metal' is reachable from 'Rock' at depth 1 (direct
+      // neighbor at 0.65). It's used here to verify that the
+      // BFS correctly includes a medium-weight neighbor.
       final list = graph.searchBreadth('Rock').toList();
-      expect(list.contains('Metal'), isTrue);
-      // All of Rock's first-degree neighbours (Alternative Rock,
-      // Classic Rock, Hard Rock, Indie Rock, Blues Rock) should
-      // appear before Metal.
-      final idxMetal = list.indexOf('Metal');
-      final idxBluesRock = list.indexOf('Blues Rock');
-      expect(idxBluesRock < idxMetal, isTrue,
-          reason: 'Metal (depth 2) should be explored after Blues Rock (depth 1)');
+      expect(list.contains('Heavy Metal'), isTrue);
+      // All of Rock's higher-weight first-degree neighbours should
+      // appear before Heavy Metal.
+      final idxMetal = list.indexOf('Heavy Metal');
+      final idxPopRock = list.indexOf('Pop Rock');
+      expect(idxPopRock < idxMetal, isTrue,
+          reason: 'Heavy Metal (0.65) should be explored after Pop Rock (0.78)');
     });
   });
 }

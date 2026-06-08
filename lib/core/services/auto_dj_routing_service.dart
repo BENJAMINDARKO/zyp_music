@@ -372,7 +372,7 @@ class AutoDjRoutingService {
     List<String> topLikedArtists = const <String>[],
     List<String> topLikedGenres = const <String>[],
   })  : _crateMiner = crateMiner,
-        _graph = graph ?? const GenreProximityGraph(),
+        _graph = graph ?? GenreProximityGraph(),
         _historyLedger = historyLedger,
         _onlineFetcher = onlineFetcher,
         _connectivityProbe = connectivityProbe ?? (() => NetworkAvailability.unknown),

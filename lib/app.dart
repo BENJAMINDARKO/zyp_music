@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
-import 'core/theme/theme_config.dart';
 import 'core/audio/dsp_crossfade_engine.dart';
 import 'domain/repositories/audio_repository.dart';
 import 'domain/repositories/playlist_repository.dart';
@@ -139,27 +138,20 @@ class MonochromeApp extends StatelessWidget {
           create: (_) => MiniplayerVisibilityProvider(),
         ),
       ],
-      child: Consumer<SettingsProvider>(
-        builder: (context, settings, _) {
-          final palette = paletteFor(settings.theme);
-          return MaterialApp(
-            title: 'Monochrome',
-            theme: AppTheme.fromPalette(palette),
-            darkTheme: AppTheme.fromPalette(palette),
-            themeMode: settings.themeMode,
-            debugShowCheckedModeBanner: false,
-            navigatorKey: navigatorKey,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  const GlobalBackground(),
-                  if (child != null) child,
-                ],
-              );
-            },
-            home: const MainLayout(),
+      child: MaterialApp(
+        title: 'Monochrome',
+        theme: AppTheme.darkTheme,
+        debugShowCheckedModeBanner: false,
+        navigatorKey: navigatorKey,
+        builder: (context, child) {
+          return Stack(
+            children: [
+              const GlobalBackground(),
+              if (child != null) child,
+            ],
           );
         },
+        home: const MainLayout(),
       ),
     );
   }

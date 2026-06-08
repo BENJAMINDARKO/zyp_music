@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/audio_quality.dart';
-import '../../core/theme/theme_config.dart';
 
 class SettingsProvider extends ChangeNotifier {
   static const _keyPrebufferCount = 'prebufferCount';
@@ -80,8 +78,6 @@ class SettingsProvider extends ChangeNotifier {
       _prebufferCount.clamp(minPrebufferCount, maxPrebufferCount);
 
   String get theme => _theme;
-
-  ThemeMode get themeMode => themeModeFor(_theme);
 
   bool get showRecommendedSongs => _showRecommendedSongs;
   bool get showRecommendedAlbums => _showRecommendedAlbums;

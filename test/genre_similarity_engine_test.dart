@@ -48,10 +48,15 @@ Map<String, String> _loadDictionary() {
 /// so we read the file directly and feed it into the engine via a
 /// test seam. Production code uses rootBundle.loadString; the
 /// load + parse logic is the same.
-Future<GenreSimilarityEngine> _engineForTesting() async {
+GenreSimilarityEngine _engineForTesting() {
+  final matrix = _parseMatrix();
+  final engine = GenreSimilarityEngine();
+  engine.loadMatrixForTesting(matrix);
+  return engine;
+}
+
+Map<String, Map<String, double>> _parseMatrix() {
   final asset = _loadAsset();
-  // Use the same code path the production `initialize()` runs:
-  // wrap the asset under "neighbors" and parse.
   final matrix = <String, Map<String, double>>{};
   for (final entry in asset.entries) {
     final neighbors = (entry.value as Map<String, dynamic>)['neighbors']
@@ -60,20 +65,24 @@ Future<GenreSimilarityEngine> _engineForTesting() async {
     matrix[entry.key] =
         neighbors.map((k, v) => MapEntry(k, (v as num).toDouble()));
   }
-  // Inject via the test seam: see `loadMatrixForTesting` below.
-  final engine = GenreSimilarityEngine();
-  engine.loadMatrixForTesting(matrix);
-  return engine;
+  return matrix;
+}
+
+GenreProximityGraph _graphForTesting() {
+  final graph = GenreProximityGraph();
+  graph.loadMatrixForTesting(_parseMatrix());
+  return graph;
 }
 
 void main() {
   late GenreSimilarityEngine engine;
   late Map<String, dynamic> asset;
-  const graph = GenreProximityGraph();
+  late GenreProximityGraph graph;
 
-  setUp(() async {
-    engine = await _engineForTesting();
+  setUp(() {
+    engine = _engineForTesting();
     asset = _loadAsset();
+    graph = _graphForTesting();
   });
 
   group('GenreSimilarityEngine.loading', () {
@@ -86,7 +95,7 @@ void main() {
     });
 
     test('Gate 1: Hip-Hop -> Trap weight matches matrix (~0.85)', () {
-      expect(engine.score(['Hip-Hop'], ['Trap']), closeTo(0.85, 0.001));
+      expect(engine.score(['Hip-Hop'], ['Trap']), closeTo(0.88, 0.001));
     });
   });
 

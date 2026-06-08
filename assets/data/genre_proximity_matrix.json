@@ -1,545 +1,2415 @@
 {
+  "Hip-Hop": {
+    "neighbors": {
+      "Trap": 0.88,
+      "Drill": 0.82,
+      "Boom Bap": 0.9,
+      "Gangsta Rap": 0.85,
+      "Conscious Hip-Hop": 0.88,
+      "Underground Hip-Hop": 0.85,
+      "Cloud Rap": 0.75,
+      "Christian Hip-Hop": 0.75,
+      "R&B": 0.65,
+      "Neo-Soul": 0.58,
+      "Jazz-Hop": 0.68,
+      "Lo-Fi": 0.55,
+      "UK Garage": 0.45,
+      "Afrobeats": 0.42,
+      "Hiplife": 0.55,
+      "Asakaa": 0.65,
+      "Funk": 0.5,
+      "Soul": 0.5,
+      "Reggaeton": 0.4,
+      "Dancehall": 0.42,
+      "Pop": 0.45,
+      "Nu Metal": 0.3
+    }
+  },
+  "Trap": {
+    "neighbors": {
+      "Hip-Hop": 0.88,
+      "Drill": 0.82,
+      "Gangsta Rap": 0.8,
+      "Cloud Rap": 0.72,
+      "Boom Bap": 0.7,
+      "Underground Hip-Hop": 0.72,
+      "Conscious Hip-Hop": 0.65,
+      "Christian Hip-Hop": 0.68,
+      "R&B": 0.6,
+      "Afrobeats": 0.45,
+      "Asakaa": 0.7,
+      "Hiplife": 0.48,
+      "Reggaeton": 0.45,
+      "UK Garage": 0.42,
+      "Future Bass": 0.38,
+      "EDM": 0.32,
+      "Dance Pop": 0.35,
+      "Pop": 0.4
+    }
+  },
+  "Drill": {
+    "neighbors": {
+      "Hip-Hop": 0.82,
+      "Trap": 0.82,
+      "Boom Bap": 0.68,
+      "Gangsta Rap": 0.72,
+      "Underground Hip-Hop": 0.7,
+      "Asakaa": 0.85,
+      "UK Garage": 0.6,
+      "Afrobeats": 0.42,
+      "Cloud Rap": 0.6,
+      "Conscious Hip-Hop": 0.6,
+      "Christian Hip-Hop": 0.6,
+      "R&B": 0.5
+    }
+  },
+  "Boom Bap": {
+    "neighbors": {
+      "Hip-Hop": 0.9,
+      "Trap": 0.7,
+      "Drill": 0.68,
+      "Gangsta Rap": 0.78,
+      "Conscious Hip-Hop": 0.88,
+      "Underground Hip-Hop": 0.88,
+      "Jazz-Hop": 0.75,
+      "Cloud Rap": 0.65,
+      "Christian Hip-Hop": 0.72,
+      "Soul": 0.52,
+      "Funk": 0.48,
+      "Jazz": 0.45,
+      "R&B": 0.52,
+      "Neo-Soul": 0.5
+    }
+  },
+  "Gangsta Rap": {
+    "neighbors": {
+      "Hip-Hop": 0.85,
+      "Trap": 0.8,
+      "Drill": 0.72,
+      "Boom Bap": 0.78,
+      "Underground Hip-Hop": 0.75,
+      "Conscious Hip-Hop": 0.6,
+      "Cloud Rap": 0.55,
+      "R&B": 0.52,
+      "Funk": 0.45,
+      "Nu Metal": 0.28
+    }
+  },
+  "Conscious Hip-Hop": {
+    "neighbors": {
+      "Hip-Hop": 0.88,
+      "Boom Bap": 0.88,
+      "Underground Hip-Hop": 0.88,
+      "Jazz-Hop": 0.72,
+      "Christian Hip-Hop": 0.72,
+      "Gangsta Rap": 0.6,
+      "Trap": 0.65,
+      "Drill": 0.6,
+      "Cloud Rap": 0.68,
+      "R&B": 0.55,
+      "Neo-Soul": 0.58,
+      "Soul": 0.52,
+      "Afrobeats": 0.38,
+      "Reggae": 0.35
+    }
+  },
+  "Underground Hip-Hop": {
+    "neighbors": {
+      "Hip-Hop": 0.85,
+      "Boom Bap": 0.88,
+      "Conscious Hip-Hop": 0.88,
+      "Jazz-Hop": 0.75,
+      "Cloud Rap": 0.72,
+      "Gangsta Rap": 0.75,
+      "Trap": 0.72,
+      "Drill": 0.7,
+      "Christian Hip-Hop": 0.68,
+      "R&B": 0.5,
+      "Neo-Soul": 0.52,
+      "Lo-Fi": 0.5,
+      "Indie Rock": 0.28
+    }
+  },
+  "Cloud Rap": {
+    "neighbors": {
+      "Hip-Hop": 0.75,
+      "Trap": 0.72,
+      "Underground Hip-Hop": 0.72,
+      "Boom Bap": 0.65,
+      "Conscious Hip-Hop": 0.68,
+      "Lo-Fi": 0.65,
+      "Chillout": 0.58,
+      "R&B": 0.55,
+      "Neo-Soul": 0.58,
+      "Dream Pop": 0.45,
+      "Ambient": 0.42,
+      "Shoegaze": 0.32,
+      "Christian Hip-Hop": 0.6
+    }
+  },
+  "Christian Hip-Hop": {
+    "neighbors": {
+      "Hip-Hop": 0.75,
+      "Boom Bap": 0.72,
+      "Conscious Hip-Hop": 0.72,
+      "Underground Hip-Hop": 0.68,
+      "Trap": 0.68,
+      "Drill": 0.6,
+      "Cloud Rap": 0.6,
+      "Gangsta Rap": 0.5,
+      "Gospel": 0.8,
+      "Contemporary Gospel": 0.72,
+      "Traditional Gospel": 0.65,
+      "CCM": 0.65,
+      "Contemporary Worship": 0.58,
+      "Christian R&B": 0.72,
+      "R&B": 0.55,
+      "Soul": 0.52
+    }
+  },
+  "Afrobeats": {
+    "neighbors": {
+      "Amapiano": 0.72,
+      "Afroswing": 0.82,
+      "Afro-Fusion": 0.8,
+      "Highlife": 0.78,
+      "Hiplife": 0.75,
+      "Asakaa": 0.65,
+      "Azonto": 0.72,
+      "Bongo Flava": 0.65,
+      "Gqom": 0.55,
+      "Coupé-Décalé": 0.58,
+      "Kuduro": 0.5,
+      "Dancehall": 0.52,
+      "Reggae": 0.45,
+      "R&B": 0.48,
+      "Hip-Hop": 0.42,
+      "Pop": 0.48,
+      "Dance Pop": 0.45,
+      "Soca": 0.45,
+      "Soukous": 0.58,
+      "Makossa": 0.55,
+      "Mbalax": 0.55,
+      "Latin Pop": 0.35,
+      "Funk": 0.42
+    }
+  },
+  "Amapiano": {
+    "neighbors": {
+      "Afrobeats": 0.72,
+      "Afro-Fusion": 0.75,
+      "Gqom": 0.72,
+      "House": 0.68,
+      "Deep House": 0.65,
+      "Hiplife": 0.55,
+      "Afroswing": 0.62,
+      "Highlife": 0.55,
+      "Dancehall": 0.45,
+      "EDM": 0.4,
+      "Techno": 0.35,
+      "Asakaa": 0.48,
+      "Kuduro": 0.5,
+      "UK Garage": 0.42,
+      "Lo-Fi": 0.35
+    }
+  },
+  "Highlife": {
+    "neighbors": {
+      "Afrobeats": 0.78,
+      "Hiplife": 0.85,
+      "Afro-Fusion": 0.72,
+      "Afroswing": 0.65,
+      "Bongo Flava": 0.6,
+      "Soukous": 0.62,
+      "Makossa": 0.6,
+      "Mbalax": 0.58,
+      "Azonto": 0.65,
+      "Asakaa": 0.58,
+      "Reggae": 0.42,
+      "R&B": 0.4,
+      "Jazz Fusion": 0.38,
+      "Funk": 0.42,
+      "Ethio-Jazz": 0.42
+    }
+  },
+  "Hiplife": {
+    "neighbors": {
+      "Highlife": 0.85,
+      "Afrobeats": 0.75,
+      "Asakaa": 0.8,
+      "Azonto": 0.78,
+      "Afro-Fusion": 0.72,
+      "Afroswing": 0.65,
+      "Hip-Hop": 0.55,
+      "Trap": 0.48,
+      "Drill": 0.55,
+      "Bongo Flava": 0.55,
+      "R&B": 0.45,
+      "Dancehall": 0.48,
+      "Reggae": 0.4,
+      "Gqom": 0.45
+    }
+  },
+  "Asakaa": {
+    "neighbors": {
+      "Hiplife": 0.8,
+      "Drill": 0.85,
+      "Hip-Hop": 0.65,
+      "Afrobeats": 0.65,
+      "Afro-Fusion": 0.65,
+      "Trap": 0.7,
+      "UK Garage": 0.52,
+      "Highlife": 0.58,
+      "Azonto": 0.68,
+      "Gqom": 0.5,
+      "Bongo Flava": 0.48,
+      "Dancehall": 0.45,
+      "Amapiano": 0.48,
+      "R&B": 0.42
+    }
+  },
+  "Azonto": {
+    "neighbors": {
+      "Hiplife": 0.78,
+      "Afrobeats": 0.72,
+      "Highlife": 0.65,
+      "Asakaa": 0.68,
+      "Afro-Fusion": 0.68,
+      "Afroswing": 0.6,
+      "Dancehall": 0.52,
+      "Gqom": 0.45,
+      "Bongo Flava": 0.5,
+      "Dance Pop": 0.4
+    }
+  },
+  "Bongo Flava": {
+    "neighbors": {
+      "Afrobeats": 0.65,
+      "Hiplife": 0.55,
+      "Highlife": 0.6,
+      "Afro-Fusion": 0.65,
+      "Afroswing": 0.58,
+      "Dancehall": 0.58,
+      "Reggae": 0.52,
+      "Gqom": 0.45,
+      "Soukous": 0.55,
+      "Makossa": 0.52,
+      "Asakaa": 0.48,
+      "Pop": 0.4,
+      "R&B": 0.42,
+      "Hip-Hop": 0.4
+    }
+  },
+  "Gqom": {
+    "neighbors": {
+      "Amapiano": 0.72,
+      "Afro-Fusion": 0.65,
+      "Afrobeats": 0.55,
+      "House": 0.6,
+      "Deep House": 0.55,
+      "Techno": 0.45,
+      "UK Garage": 0.5,
+      "Drum & Bass": 0.4,
+      "Kuduro": 0.55,
+      "Asakaa": 0.5,
+      "Hiplife": 0.45,
+      "EDM": 0.38
+    }
+  },
+  "Coupé-Décalé": {
+    "neighbors": {
+      "Afrobeats": 0.58,
+      "Afro-Fusion": 0.62,
+      "Soukous": 0.6,
+      "Makossa": 0.58,
+      "Mbalax": 0.55,
+      "Highlife": 0.52,
+      "Kuduro": 0.52,
+      "Dancehall": 0.48,
+      "Bongo Flava": 0.5,
+      "Dance Pop": 0.38
+    }
+  },
+  "Kuduro": {
+    "neighbors": {
+      "Afro-Fusion": 0.62,
+      "Afrobeats": 0.5,
+      "Gqom": 0.55,
+      "Coupé-Décalé": 0.52,
+      "Amapiano": 0.5,
+      "House": 0.5,
+      "EDM": 0.42,
+      "Dancehall": 0.48,
+      "Soukous": 0.5,
+      "UK Garage": 0.4
+    }
+  },
+  "Afroswing": {
+    "neighbors": {
+      "Afrobeats": 0.82,
+      "Afro-Fusion": 0.78,
+      "Hiplife": 0.65,
+      "Highlife": 0.65,
+      "Asakaa": 0.62,
+      "Azonto": 0.6,
+      "Dancehall": 0.65,
+      "R&B": 0.65,
+      "UK Garage": 0.62,
+      "Hip-Hop": 0.55,
+      "Trap": 0.52,
+      "Gqom": 0.5,
+      "Soul": 0.52,
+      "Neo-Soul": 0.52,
+      "Pop": 0.45
+    }
+  },
+  "Afro-Fusion": {
+    "neighbors": {
+      "Afrobeats": 0.8,
+      "Afroswing": 0.78,
+      "Amapiano": 0.75,
+      "Highlife": 0.72,
+      "Hiplife": 0.72,
+      "Asakaa": 0.65,
+      "Azonto": 0.68,
+      "Bongo Flava": 0.65,
+      "Gqom": 0.65,
+      "Coupé-Décalé": 0.62,
+      "Kuduro": 0.62,
+      "Soukous": 0.6,
+      "Makossa": 0.58,
+      "Mbalax": 0.58,
+      "House": 0.5,
+      "R&B": 0.48,
+      "Dancehall": 0.52,
+      "Hip-Hop": 0.45,
+      "Ethio-Jazz": 0.4
+    }
+  },
+  "Reggae": {
+    "neighbors": {
+      "Roots Reggae": 0.9,
+      "Dancehall": 0.82,
+      "Dub": 0.8,
+      "Ska": 0.75,
+      "Soca": 0.55,
+      "Afrobeats": 0.45,
+      "R&B": 0.42,
+      "Soul": 0.45,
+      "Hip-Hop": 0.42,
+      "Latin Pop": 0.35,
+      "Bongo Flava": 0.52,
+      "Folk": 0.3,
+      "Afro-Fusion": 0.45
+    }
+  },
+  "Dancehall": {
+    "neighbors": {
+      "Reggae": 0.82,
+      "Roots Reggae": 0.72,
+      "Dub": 0.68,
+      "Ska": 0.62,
+      "Soca": 0.6,
+      "Reggaeton": 0.65,
+      "Hip-Hop": 0.42,
+      "Trap": 0.45,
+      "Afrobeats": 0.52,
+      "Afroswing": 0.65,
+      "Bongo Flava": 0.58,
+      "R&B": 0.45,
+      "Afro-Fusion": 0.52,
+      "Asakaa": 0.45,
+      "UK Garage": 0.42
+    }
+  },
+  "Roots Reggae": {
+    "neighbors": {
+      "Reggae": 0.9,
+      "Dub": 0.82,
+      "Dancehall": 0.72,
+      "Ska": 0.72,
+      "Soca": 0.45,
+      "Folk": 0.35,
+      "Afrobeats": 0.42,
+      "Blues": 0.35,
+      "Soul": 0.4
+    }
+  },
+  "Dub": {
+    "neighbors": {
+      "Reggae": 0.8,
+      "Roots Reggae": 0.82,
+      "Dancehall": 0.68,
+      "Ska": 0.6,
+      "Ambient": 0.5,
+      "IDM": 0.38,
+      "Drum & Bass": 0.4,
+      "UK Garage": 0.38,
+      "Chillout": 0.45
+    }
+  },
+  "Ska": {
+    "neighbors": {
+      "Reggae": 0.75,
+      "Roots Reggae": 0.72,
+      "Dancehall": 0.62,
+      "Dub": 0.6,
+      "Punk": 0.58,
+      "Pop Punk": 0.52,
+      "Soca": 0.48,
+      "Alternative Rock": 0.35,
+      "Funk": 0.42
+    }
+  },
+  "Soca": {
+    "neighbors": {
+      "Reggae": 0.55,
+      "Dancehall": 0.6,
+      "Roots Reggae": 0.45,
+      "Ska": 0.48,
+      "Afrobeats": 0.45,
+      "Cumbia": 0.42,
+      "Latin Pop": 0.42,
+      "R&B": 0.38,
+      "Dance Pop": 0.4,
+      "Afro-Fusion": 0.45,
+      "Bongo Flava": 0.42
+    }
+  },
+  "Reggaeton": {
+    "neighbors": {
+      "Latin Pop": 0.8,
+      "Dancehall": 0.65,
+      "Reggae": 0.52,
+      "Trap": 0.45,
+      "Hip-Hop": 0.4,
+      "Cumbia": 0.55,
+      "Bachata": 0.55,
+      "Merengue": 0.52,
+      "Salsa": 0.42,
+      "Dance Pop": 0.55,
+      "R&B": 0.48,
+      "EDM": 0.38,
+      "Soca": 0.42,
+      "Afrobeats": 0.4
+    }
+  },
+  "Latin Pop": {
+    "neighbors": {
+      "Reggaeton": 0.8,
+      "Bachata": 0.72,
+      "Merengue": 0.68,
+      "Salsa": 0.65,
+      "Cumbia": 0.65,
+      "Bolero": 0.6,
+      "Mariachi": 0.55,
+      "Bossa Nova": 0.55,
+      "Latin Jazz": 0.6,
+      "Pop": 0.68,
+      "Dance Pop": 0.62,
+      "R&B": 0.42,
+      "Dancehall": 0.4,
+      "Afrobeats": 0.35
+    }
+  },
+  "Salsa": {
+    "neighbors": {
+      "Latin Jazz": 0.78,
+      "Merengue": 0.72,
+      "Bachata": 0.68,
+      "Cumbia": 0.68,
+      "Latin Pop": 0.65,
+      "Bossa Nova": 0.6,
+      "Bolero": 0.62,
+      "Mariachi": 0.55,
+      "Jazz": 0.52,
+      "Funk": 0.45,
+      "Disco": 0.42,
+      "R&B": 0.38
+    }
+  },
+  "Bachata": {
+    "neighbors": {
+      "Merengue": 0.78,
+      "Salsa": 0.68,
+      "Latin Pop": 0.72,
+      "Cumbia": 0.62,
+      "Bolero": 0.65,
+      "Reggaeton": 0.55,
+      "Bossa Nova": 0.55,
+      "Latin Jazz": 0.58,
+      "R&B": 0.42,
+      "Pop": 0.45
+    }
+  },
+  "Merengue": {
+    "neighbors": {
+      "Bachata": 0.78,
+      "Salsa": 0.72,
+      "Latin Pop": 0.68,
+      "Cumbia": 0.65,
+      "Reggaeton": 0.52,
+      "Bolero": 0.58,
+      "Latin Jazz": 0.55,
+      "Soca": 0.42,
+      "Dance Pop": 0.4
+    }
+  },
+  "Latin Jazz": {
+    "neighbors": {
+      "Jazz": 0.78,
+      "Salsa": 0.78,
+      "Bossa Nova": 0.75,
+      "Jazz Fusion": 0.7,
+      "Latin Pop": 0.6,
+      "Merengue": 0.55,
+      "Bachata": 0.58,
+      "Bebop": 0.6,
+      "Cool Jazz": 0.62,
+      "Cumbia": 0.52,
+      "Free Jazz": 0.5,
+      "Ethio-Jazz": 0.48,
+      "Flamenco": 0.42
+    }
+  },
+  "Cumbia": {
+    "neighbors": {
+      "Salsa": 0.68,
+      "Merengue": 0.65,
+      "Bachata": 0.62,
+      "Latin Pop": 0.65,
+      "Reggaeton": 0.55,
+      "Mariachi": 0.5,
+      "Bolero": 0.52,
+      "Latin Jazz": 0.52,
+      "Dance Pop": 0.42,
+      "Soca": 0.42
+    }
+  },
+  "Bolero": {
+    "neighbors": {
+      "Salsa": 0.62,
+      "Bachata": 0.65,
+      "Merengue": 0.58,
+      "Latin Pop": 0.6,
+      "Latin Jazz": 0.58,
+      "Bossa Nova": 0.6,
+      "Mariachi": 0.52,
+      "Jazz": 0.48,
+      "Soul": 0.42,
+      "Folk": 0.35
+    }
+  },
+  "Mariachi": {
+    "neighbors": {
+      "Latin Pop": 0.55,
+      "Cumbia": 0.5,
+      "Bolero": 0.52,
+      "Salsa": 0.55,
+      "Merengue": 0.45,
+      "Folk": 0.42,
+      "Flamenco": 0.38,
+      "Country": 0.3
+    }
+  },
+  "Bossa Nova": {
+    "neighbors": {
+      "Latin Jazz": 0.75,
+      "Jazz": 0.72,
+      "Salsa": 0.6,
+      "Bolero": 0.6,
+      "Cool Jazz": 0.65,
+      "Jazz Fusion": 0.6,
+      "Latin Pop": 0.55,
+      "Bachata": 0.55,
+      "Folk": 0.45,
+      "Soul": 0.45,
+      "Smooth Jazz": 0.58,
+      "Ambient": 0.32
+    }
+  },
+  "Pop": {
+    "neighbors": {
+      "Dance Pop": 0.85,
+      "Electropop": 0.78,
+      "Synthpop": 0.72,
+      "Indie Pop": 0.72,
+      "Teen Pop": 0.8,
+      "Bubblegum Pop": 0.75,
+      "Pop Rock": 0.78,
+      "K-Pop": 0.68,
+      "J-Pop": 0.65,
+      "Latin Pop": 0.68,
+      "R&B": 0.6,
+      "Soul": 0.52,
+      "Dream Pop": 0.58,
+      "Rock": 0.5,
+      "Indie Rock": 0.45,
+      "Alternative Rock": 0.48,
+      "Afrobeats": 0.48,
+      "Hip-Hop": 0.45,
+      "Country": 0.4,
+      "CCM": 0.42,
+      "Contemporary Worship": 0.4
+    }
+  },
+  "Dance Pop": {
+    "neighbors": {
+      "Pop": 0.85,
+      "Electropop": 0.8,
+      "Synthpop": 0.72,
+      "EDM": 0.72,
+      "House": 0.65,
+      "Teen Pop": 0.75,
+      "Bubblegum Pop": 0.68,
+      "Future Bass": 0.62,
+      "K-Pop": 0.68,
+      "Disco": 0.6,
+      "R&B": 0.55,
+      "Indie Pop": 0.6,
+      "Latin Pop": 0.62,
+      "Reggaeton": 0.55
+    }
+  },
+  "Electropop": {
+    "neighbors": {
+      "Pop": 0.78,
+      "Dance Pop": 0.8,
+      "Synthpop": 0.82,
+      "EDM": 0.65,
+      "Future Bass": 0.65,
+      "K-Pop": 0.65,
+      "Indie Pop": 0.65,
+      "Dream Pop": 0.58,
+      "House": 0.58,
+      "Vaporwave": 0.52,
+      "Synthwave": 0.6,
+      "IDM": 0.42,
+      "Teen Pop": 0.65
+    }
+  },
+  "Synthpop": {
+    "neighbors": {
+      "Pop": 0.72,
+      "Electropop": 0.82,
+      "Dance Pop": 0.72,
+      "Post-Punk": 0.78,
+      "Synthwave": 0.72,
+      "Indie Pop": 0.62,
+      "Vaporwave": 0.6,
+      "EDM": 0.55,
+      "IDM": 0.45,
+      "Dream Pop": 0.52,
+      "K-Pop": 0.58
+    }
+  },
+  "Indie Pop": {
+    "neighbors": {
+      "Pop": 0.72,
+      "Indie Rock": 0.78,
+      "Alternative Rock": 0.68,
+      "Dream Pop": 0.75,
+      "Singer-Songwriter": 0.68,
+      "Indie Folk": 0.68,
+      "Electropop": 0.65,
+      "Shoegaze": 0.65,
+      "Synthpop": 0.62,
+      "Folk": 0.55,
+      "Dance Pop": 0.6,
+      "Teen Pop": 0.58,
+      "K-Indie": 0.72,
+      "Slowcore": 0.52
+    }
+  },
+  "Dream Pop": {
+    "neighbors": {
+      "Shoegaze": 0.85,
+      "Indie Pop": 0.75,
+      "Slowcore": 0.72,
+      "Post-Rock": 0.68,
+      "Ambient": 0.65,
+      "Cloud Rap": 0.45,
+      "Indie Rock": 0.68,
+      "Indie Folk": 0.58,
+      "Alternative Rock": 0.58,
+      "Electropop": 0.58,
+      "Chillout": 0.6,
+      "Lo-Fi": 0.55,
+      "Singer-Songwriter": 0.52
+    }
+  },
+  "K-Pop": {
+    "neighbors": {
+      "J-Pop": 0.75,
+      "C-Pop": 0.68,
+      "Mandopop": 0.65,
+      "Cantopop": 0.62,
+      "Pop": 0.68,
+      "Dance Pop": 0.68,
+      "Teen Pop": 0.7,
+      "Electropop": 0.65,
+      "Indie Pop": 0.55,
+      "K-Indie": 0.72,
+      "Bubblegum Pop": 0.65,
+      "R&B": 0.5
+    }
+  },
+  "J-Pop": {
+    "neighbors": {
+      "K-Pop": 0.75,
+      "C-Pop": 0.65,
+      "Mandopop": 0.62,
+      "Cantopop": 0.6,
+      "Anime OST": 0.72,
+      "Pop": 0.65,
+      "Electropop": 0.6,
+      "J-Rock": 0.68,
+      "Teen Pop": 0.65,
+      "Dance Pop": 0.62,
+      "Indie Pop": 0.52
+    }
+  },
+  "C-Pop": {
+    "neighbors": {
+      "Mandopop": 0.85,
+      "Cantopop": 0.82,
+      "K-Pop": 0.68,
+      "J-Pop": 0.65,
+      "Pop": 0.6,
+      "Dance Pop": 0.55,
+      "Bollywood": 0.35
+    }
+  },
+  "Mandopop": {
+    "neighbors": {
+      "C-Pop": 0.85,
+      "Cantopop": 0.8,
+      "K-Pop": 0.65,
+      "J-Pop": 0.62,
+      "Bollywood": 0.38,
+      "Pop": 0.6
+    }
+  },
+  "Cantopop": {
+    "neighbors": {
+      "C-Pop": 0.82,
+      "Mandopop": 0.8,
+      "K-Pop": 0.62,
+      "J-Pop": 0.6,
+      "Pop": 0.58
+    }
+  },
+  "Teen Pop": {
+    "neighbors": {
+      "Pop": 0.8,
+      "Bubblegum Pop": 0.88,
+      "Dance Pop": 0.75,
+      "K-Pop": 0.7,
+      "Indie Pop": 0.58,
+      "Pop Rock": 0.6,
+      "Electropop": 0.65
+    }
+  },
+  "Bubblegum Pop": {
+    "neighbors": {
+      "Teen Pop": 0.88,
+      "Pop": 0.75,
+      "Dance Pop": 0.68,
+      "K-Pop": 0.65,
+      "Indie Pop": 0.52,
+      "Pop Rock": 0.55
+    }
+  },
+  "Pop Rock": {
+    "neighbors": {
+      "Pop": 0.78,
+      "Rock": 0.78,
+      "Alternative Rock": 0.72,
+      "Indie Rock": 0.7,
+      "Classic Rock": 0.65,
+      "Hard Rock": 0.6,
+      "Indie Pop": 0.65,
+      "Teen Pop": 0.6,
+      "Post-Punk": 0.55,
+      "Folk Rock": 0.55,
+      "Punk": 0.5
+    }
+  },
   "Rock": {
     "neighbors": {
-      "Alternative Rock": 0.9,
+      "Alternative Rock": 0.85,
+      "Indie Rock": 0.8,
       "Classic Rock": 0.85,
-      "Indie Rock": 0.75,
       "Hard Rock": 0.8,
-      "Blues Rock": 0.7
+      "Pop Rock": 0.78,
+      "Punk": 0.72,
+      "Progressive Rock": 0.72,
+      "Psychedelic Rock": 0.72,
+      "Garage Rock": 0.72,
+      "Surf Rock": 0.6,
+      "Blues": 0.52,
+      "Folk Rock": 0.6,
+      "Post-Punk": 0.6,
+      "Pop Punk": 0.65,
+      "Hardcore Punk": 0.55,
+      "Heavy Metal": 0.65,
+      "Post-Rock": 0.58,
+      "Nu Metal": 0.55,
+      "Shoegaze": 0.5,
+      "Country": 0.38,
+      "Singer-Songwriter": 0.4,
+      "Blues Rock": 0.72
     }
   },
   "Alternative Rock": {
     "neighbors": {
-      "Rock": 0.9,
-      "Indie Rock": 0.85,
-      "Grunge": 0.8,
+      "Rock": 0.85,
+      "Indie Rock": 0.88,
       "Post-Punk": 0.75,
-      "Shoegaze": 0.7
+      "Punk": 0.68,
+      "Pop Rock": 0.72,
+      "Classic Rock": 0.68,
+      "Hard Rock": 0.65,
+      "Shoegaze": 0.68,
+      "Post-Rock": 0.65,
+      "Garage Rock": 0.68,
+      "Progressive Rock": 0.6,
+      "Folk Rock": 0.6,
+      "Pop Punk": 0.65,
+      "Hardcore Punk": 0.55,
+      "Dream Pop": 0.58,
+      "Indie Pop": 0.68,
+      "Singer-Songwriter": 0.48,
+      "K-Indie": 0.68
     }
   },
   "Indie Rock": {
     "neighbors": {
-      "Alternative Rock": 0.85,
-      "Indie Pop": 0.8,
+      "Alternative Rock": 0.88,
+      "Rock": 0.8,
+      "Post-Punk": 0.72,
+      "Indie Pop": 0.78,
+      "Garage Rock": 0.72,
+      "Shoegaze": 0.72,
       "Folk Rock": 0.65,
-      "Synthpop": 0.55,
-      "Dream Pop": 0.6
+      "Post-Rock": 0.68,
+      "Dream Pop": 0.68,
+      "Singer-Songwriter": 0.58,
+      "Indie Folk": 0.62,
+      "Pop Rock": 0.7,
+      "Punk": 0.6,
+      "Pop Punk": 0.6,
+      "Psychedelic Rock": 0.6,
+      "Progressive Rock": 0.55,
+      "K-Indie": 0.75,
+      "J-Rock": 0.6,
+      "Slowcore": 0.55
     }
   },
   "Classic Rock": {
     "neighbors": {
       "Rock": 0.85,
       "Hard Rock": 0.8,
-      "Blues Rock": 0.75,
-      "Psychedelic Rock": 0.7
+      "Progressive Rock": 0.75,
+      "Blues": 0.65,
+      "Folk Rock": 0.62,
+      "Psychedelic Rock": 0.72,
+      "Pop Rock": 0.65,
+      "Punk": 0.55,
+      "Alternative Rock": 0.68,
+      "Garage Rock": 0.68,
+      "Surf Rock": 0.62,
+      "Heavy Metal": 0.6,
+      "Blues Rock": 0.7
     }
   },
   "Hard Rock": {
     "neighbors": {
       "Rock": 0.8,
       "Classic Rock": 0.8,
-      "Metal": 0.85,
-      "Heavy Metal": 0.8
-    }
-  },
-  "Metal": {
-    "neighbors": {
-      "Hard Rock": 0.85,
-      "Heavy Metal": 0.9,
-      "Thrash Metal": 0.8,
-      "Industrial Metal": 0.7
-    }
-  },
-  "Heavy Metal": {
-    "neighbors": {
-      "Metal": 0.9,
-      "Thrash Metal": 0.85,
-      "Power Metal": 0.75
-    }
-  },
-  "Thrash Metal": {
-    "neighbors": {
-      "Heavy Metal": 0.85,
-      "Metal": 0.8,
-      "Death Metal": 0.7
-    }
-  },
-  "Death Metal": {
-    "neighbors": {
-      "Thrash Metal": 0.7,
-      "Black Metal": 0.75,
-      "Metal": 0.6
-    }
-  },
-  "Black Metal": {
-    "neighbors": {
-      "Death Metal": 0.75,
-      "Doom Metal": 0.65
-    }
-  },
-  "Doom Metal": {
-    "neighbors": {
-      "Black Metal": 0.65,
-      "Stoner Metal": 0.7
-    }
-  },
-  "Stoner Metal": {
-    "neighbors": {
-      "Doom Metal": 0.7,
-      "Psychedelic Rock": 0.6
+      "Heavy Metal": 0.8,
+      "Alternative Rock": 0.65,
+      "Punk": 0.65,
+      "Progressive Rock": 0.62,
+      "Blues": 0.6,
+      "Garage Rock": 0.62,
+      "Nu Metal": 0.65,
+      "Thrash Metal": 0.62,
+      "Psychedelic Rock": 0.58,
+      "Pop Rock": 0.6,
+      "Blues Rock": 0.72
     }
   },
   "Psychedelic Rock": {
     "neighbors": {
-      "Classic Rock": 0.7,
-      "Stoner Metal": 0.6,
-      "Progressive Rock": 0.75
+      "Rock": 0.72,
+      "Classic Rock": 0.72,
+      "Progressive Rock": 0.75,
+      "Garage Rock": 0.68,
+      "Alternative Rock": 0.6,
+      "Post-Rock": 0.62,
+      "Shoegaze": 0.65,
+      "Dream Pop": 0.58,
+      "Folk Rock": 0.58,
+      "Indie Rock": 0.6,
+      "Ambient": 0.42,
+      "IDM": 0.35,
+      "Blues Rock": 0.58
     }
   },
   "Progressive Rock": {
     "neighbors": {
+      "Rock": 0.72,
+      "Classic Rock": 0.75,
       "Psychedelic Rock": 0.75,
-      "Art Rock": 0.8
+      "Post-Rock": 0.72,
+      "Hard Rock": 0.62,
+      "Alternative Rock": 0.6,
+      "Heavy Metal": 0.58,
+      "Power Metal": 0.62,
+      "Jazz Fusion": 0.58,
+      "Instrumental": 0.6,
+      "Classical": 0.4,
+      "Shoegaze": 0.52,
+      "Modern Classical": 0.38
     }
   },
-  "Art Rock": {
+  "Garage Rock": {
     "neighbors": {
-      "Progressive Rock": 0.8,
+      "Rock": 0.72,
+      "Punk": 0.75,
+      "Alternative Rock": 0.68,
+      "Classic Rock": 0.68,
+      "Indie Rock": 0.72,
+      "Post-Punk": 0.65,
+      "Surf Rock": 0.65,
+      "Hard Rock": 0.62,
+      "Psychedelic Rock": 0.68,
+      "Hardcore Punk": 0.58,
+      "Blues": 0.52
+    }
+  },
+  "Surf Rock": {
+    "neighbors": {
+      "Garage Rock": 0.65,
+      "Rock": 0.6,
+      "Classic Rock": 0.62,
+      "Punk": 0.52,
+      "Pop Rock": 0.55,
+      "Folk": 0.38,
+      "Alternative Rock": 0.5
+    }
+  },
+  "Punk": {
+    "neighbors": {
+      "Rock": 0.72,
+      "Hardcore Punk": 0.85,
+      "Pop Punk": 0.82,
+      "Post-Punk": 0.8,
+      "Garage Rock": 0.75,
+      "Alternative Rock": 0.68,
+      "Ska": 0.58,
+      "Emo": 0.68,
+      "Screamo": 0.6,
+      "Classic Rock": 0.55,
+      "Hard Rock": 0.65,
       "Indie Rock": 0.6
     }
   },
   "Post-Punk": {
     "neighbors": {
+      "Punk": 0.8,
       "Alternative Rock": 0.75,
-      "New Wave": 0.7,
-      "Goth Rock": 0.65
+      "Indie Rock": 0.72,
+      "Garage Rock": 0.65,
+      "Post-Rock": 0.65,
+      "Shoegaze": 0.68,
+      "Synthpop": 0.68,
+      "Dream Pop": 0.65,
+      "Rock": 0.6,
+      "Hardcore Punk": 0.65,
+      "Pop Punk": 0.62,
+      "Slowcore": 0.6,
+      "Emo": 0.6
     }
   },
-  "New Wave": {
+  "Pop Punk": {
     "neighbors": {
-      "Post-Punk": 0.7,
-      "Synthpop": 0.8,
-      "Pop Rock": 0.6
-    }
-  },
-  "Goth Rock": {
-    "neighbors": {
-      "Post-Punk": 0.65,
-      "Darkwave": 0.8
-    }
-  },
-  "Darkwave": {
-    "neighbors": {
-      "Goth Rock": 0.8,
-      "Synthpop": 0.6
-    }
-  },
-  "Shoegaze": {
-    "neighbors": {
-      "Alternative Rock": 0.7,
-      "Dream Pop": 0.85
-    }
-  },
-  "Dream Pop": {
-    "neighbors": {
-      "Shoegaze": 0.85,
+      "Punk": 0.82,
+      "Rock": 0.65,
+      "Alternative Rock": 0.65,
+      "Hardcore Punk": 0.72,
+      "Emo": 0.78,
+      "Midwest Emo": 0.72,
+      "Post-Punk": 0.62,
       "Indie Rock": 0.6,
-      "Indie Pop": 0.55
+      "Pop Rock": 0.65,
+      "Screamo": 0.58,
+      "Ska": 0.52
     }
   },
-  "Indie Pop": {
+  "Hardcore Punk": {
     "neighbors": {
-      "Indie Rock": 0.8,
-      "Dream Pop": 0.55,
-      "Synthpop": 0.6,
-      "Pop": 0.65
+      "Punk": 0.85,
+      "Heavy Metal": 0.65,
+      "Thrash Metal": 0.68,
+      "Metalcore": 0.8,
+      "Post-Punk": 0.65,
+      "Screamo": 0.72,
+      "Pop Punk": 0.72,
+      "Emo": 0.65,
+      "Garage Rock": 0.58,
+      "Death Metal": 0.52,
+      "Black Metal": 0.5,
+      "Alternative Rock": 0.55
     }
   },
-  "Pop": {
+  "Heavy Metal": {
     "neighbors": {
-      "Dance Pop": 0.85,
-      "Electropop": 0.8,
-      "R&B": 0.7,
-      "Indie Pop": 0.65,
-      "K-Pop": 0.75
+      "Thrash Metal": 0.85,
+      "Hard Rock": 0.8,
+      "Death Metal": 0.78,
+      "Black Metal": 0.72,
+      "Doom Metal": 0.72,
+      "Power Metal": 0.8,
+      "Nu Metal": 0.72,
+      "Metalcore": 0.72,
+      "Classic Rock": 0.6,
+      "Progressive Rock": 0.58,
+      "Hardcore Punk": 0.65,
+      "Rock": 0.65,
+      "Christian Metal": 0.72
     }
   },
-  "Dance Pop": {
+  "Thrash Metal": {
     "neighbors": {
-      "Pop": 0.85,
-      "EDM": 0.8,
-      "House": 0.7
+      "Heavy Metal": 0.85,
+      "Death Metal": 0.8,
+      "Black Metal": 0.72,
+      "Metalcore": 0.75,
+      "Hardcore Punk": 0.68,
+      "Power Metal": 0.68,
+      "Doom Metal": 0.6,
+      "Nu Metal": 0.6,
+      "Hard Rock": 0.62,
+      "Punk": 0.55
     }
   },
-  "Electropop": {
+  "Death Metal": {
     "neighbors": {
-      "Pop": 0.8,
-      "Synthpop": 0.85,
-      "EDM": 0.7
+      "Heavy Metal": 0.78,
+      "Thrash Metal": 0.8,
+      "Black Metal": 0.78,
+      "Doom Metal": 0.72,
+      "Metalcore": 0.72,
+      "Hardcore Punk": 0.52,
+      "Nu Metal": 0.55,
+      "Power Metal": 0.58
     }
   },
-  "Synthpop": {
+  "Black Metal": {
     "neighbors": {
-      "Electropop": 0.85,
-      "New Wave": 0.8,
-      "Indie Pop": 0.6
+      "Heavy Metal": 0.72,
+      "Death Metal": 0.78,
+      "Thrash Metal": 0.72,
+      "Doom Metal": 0.68,
+      "Post-Rock": 0.45,
+      "Ambient": 0.38,
+      "Metalcore": 0.62,
+      "Power Metal": 0.58,
+      "Progressive Rock": 0.42
     }
   },
-  "K-Pop": {
+  "Doom Metal": {
     "neighbors": {
-      "Pop": 0.75,
-      "J-Pop": 0.7,
-      "Dance Pop": 0.65
+      "Heavy Metal": 0.72,
+      "Death Metal": 0.72,
+      "Black Metal": 0.68,
+      "Thrash Metal": 0.6,
+      "Post-Rock": 0.55,
+      "Ambient": 0.42,
+      "Progressive Rock": 0.5,
+      "Shoegaze": 0.45,
+      "Slowcore": 0.42,
+      "Psychedelic Rock": 0.48
     }
   },
-  "J-Pop": {
+  "Power Metal": {
     "neighbors": {
-      "K-Pop": 0.7,
-      "Anime OST": 0.8
+      "Heavy Metal": 0.8,
+      "Thrash Metal": 0.68,
+      "Death Metal": 0.58,
+      "Black Metal": 0.58,
+      "Progressive Rock": 0.62,
+      "Metalcore": 0.6,
+      "Nu Metal": 0.58,
+      "Classic Rock": 0.52,
+      "Christian Metal": 0.62
     }
   },
-  "Anime OST": {
+  "Nu Metal": {
     "neighbors": {
-      "J-Pop": 0.8,
-      "Soundtrack": 0.6
+      "Heavy Metal": 0.72,
+      "Metalcore": 0.7,
+      "Hardcore Punk": 0.6,
+      "Hip-Hop": 0.3,
+      "Thrash Metal": 0.6,
+      "Hard Rock": 0.65,
+      "Alternative Rock": 0.6,
+      "Death Metal": 0.55,
+      "Power Metal": 0.58,
+      "Rock": 0.55
     }
   },
-  "Hip-Hop": {
+  "Metalcore": {
     "neighbors": {
-      "Rap": 0.95,
-      "Trap": 0.85,
-      "R&B": 0.75,
-      "Afrobeats": 0.55,
-      "Drill": 0.8
+      "Heavy Metal": 0.72,
+      "Thrash Metal": 0.75,
+      "Death Metal": 0.72,
+      "Hardcore Punk": 0.8,
+      "Nu Metal": 0.7,
+      "Post-Punk": 0.5,
+      "Alternative Rock": 0.55,
+      "Screamo": 0.65,
+      "Emo": 0.6,
+      "Power Metal": 0.6,
+      "Black Metal": 0.62,
+      "Pop Punk": 0.52,
+      "Christian Metal": 0.68
     }
   },
-  "Rap": {
+  "Christian Metal": {
     "neighbors": {
-      "Hip-Hop": 0.95,
-      "Trap": 0.9,
-      "Drill": 0.85
-    }
-  },
-  "Trap": {
-    "neighbors": {
-      "Rap": 0.9,
-      "Hip-Hop": 0.85,
-      "EDM Trap": 0.75
-    }
-  },
-  "Drill": {
-    "neighbors": {
-      "Rap": 0.85,
-      "Hip-Hop": 0.8
-    }
-  },
-  "EDM Trap": {
-    "neighbors": {
-      "Trap": 0.75,
-      "Dubstep": 0.7
-    }
-  },
-  "R&B": {
-    "neighbors": {
-      "Hip-Hop": 0.75,
-      "Neo-Soul": 0.85,
-      "Soul": 0.8,
-      "Pop": 0.7
-    }
-  },
-  "Neo-Soul": {
-    "neighbors": {
-      "R&B": 0.85,
-      "Soul": 0.8,
-      "Jazz": 0.7
-    }
-  },
-  "Soul": {
-    "neighbors": {
-      "Neo-Soul": 0.8,
-      "R&B": 0.8,
-      "Funk": 0.75
-    }
-  },
-  "Funk": {
-    "neighbors": {
-      "Soul": 0.75,
-      "Disco": 0.8
-    }
-  },
-  "Disco": {
-    "neighbors": {
-      "Funk": 0.8,
-      "House": 0.75
-    }
-  },
-  "House": {
-    "neighbors": {
-      "EDM": 0.85,
-      "Deep House": 0.9,
-      "Amapiano": 0.7,
-      "Disco": 0.75
-    }
-  },
-  "Deep House": {
-    "neighbors": {
-      "House": 0.9,
-      "Chill House": 0.8,
-      "Ambient House": 0.7
-    }
-  },
-  "Chill House": {
-    "neighbors": {
-      "Deep House": 0.8,
-      "Chillout": 0.75
-    }
-  },
-  "Ambient House": {
-    "neighbors": {
-      "Deep House": 0.7,
-      "Ambient": 0.8
+      "Heavy Metal": 0.72,
+      "Metalcore": 0.68,
+      "Thrash Metal": 0.6,
+      "Power Metal": 0.62,
+      "Christian Rock": 0.72,
+      "CCM": 0.52,
+      "Hard Rock": 0.62,
+      "Nu Metal": 0.6,
+      "Christian Hip-Hop": 0.4
     }
   },
   "EDM": {
     "neighbors": {
-      "House": 0.85,
-      "Dance Pop": 0.8,
-      "Trance": 0.75,
-      "Dubstep": 0.6
+      "House": 0.8,
+      "Techno": 0.72,
+      "Trance": 0.78,
+      "Deep House": 0.72,
+      "Progressive House": 0.78,
+      "Dance Pop": 0.72,
+      "Dubstep": 0.72,
+      "Drum & Bass": 0.65,
+      "Future Bass": 0.75,
+      "UK Garage": 0.58,
+      "Jungle": 0.55,
+      "IDM": 0.5,
+      "Pop": 0.5,
+      "Synthwave": 0.55,
+      "Electropop": 0.65
     }
   },
-  "Trance": {
+  "House": {
     "neighbors": {
-      "EDM": 0.75,
-      "Techno": 0.7,
-      "Eurodance": 0.65
+      "EDM": 0.8,
+      "Deep House": 0.85,
+      "Progressive House": 0.82,
+      "Techno": 0.75,
+      "UK Garage": 0.72,
+      "Trance": 0.65,
+      "Disco": 0.65,
+      "Amapiano": 0.68,
+      "Gqom": 0.6,
+      "Afro-Fusion": 0.5,
+      "Funk": 0.52,
+      "Soul": 0.45,
+      "Future Bass": 0.6,
+      "Dance Pop": 0.65,
+      "Jungle": 0.6,
+      "Drum & Bass": 0.55,
+      "IDM": 0.5
+    }
+  },
+  "Deep House": {
+    "neighbors": {
+      "House": 0.85,
+      "Progressive House": 0.78,
+      "Techno": 0.68,
+      "Amapiano": 0.65,
+      "UK Garage": 0.65,
+      "Chillout": 0.62,
+      "Ambient": 0.52,
+      "Gqom": 0.55,
+      "IDM": 0.5,
+      "Trance": 0.58,
+      "Afro-Fusion": 0.52,
+      "Lo-Fi": 0.45,
+      "Soul": 0.42
+    }
+  },
+  "Progressive House": {
+    "neighbors": {
+      "House": 0.82,
+      "Deep House": 0.78,
+      "EDM": 0.78,
+      "Trance": 0.78,
+      "Techno": 0.65,
+      "Future Bass": 0.65,
+      "UK Garage": 0.58,
+      "Ambient": 0.45,
+      "IDM": 0.48
     }
   },
   "Techno": {
     "neighbors": {
-      "Trance": 0.7,
-      "Industrial": 0.65,
-      "Minimal Techno": 0.75
+      "House": 0.75,
+      "EDM": 0.72,
+      "Progressive House": 0.65,
+      "Deep House": 0.68,
+      "Drum & Bass": 0.65,
+      "Trance": 0.65,
+      "IDM": 0.6,
+      "Ambient": 0.45,
+      "Jungle": 0.62,
+      "UK Garage": 0.52,
+      "Gqom": 0.45
     }
   },
-  "Minimal Techno": {
+  "Trance": {
     "neighbors": {
-      "Techno": 0.75,
-      "Ambient Techno": 0.7
-    }
-  },
-  "Ambient Techno": {
-    "neighbors": {
-      "Minimal Techno": 0.7,
-      "Ambient": 0.75
+      "EDM": 0.78,
+      "Progressive House": 0.78,
+      "House": 0.65,
+      "Techno": 0.65,
+      "Ambient": 0.55,
+      "IDM": 0.48,
+      "Future Bass": 0.58,
+      "Electropop": 0.48,
+      "Synthwave": 0.5,
+      "Deep House": 0.58,
+      "Drum & Bass": 0.5
     }
   },
   "Dubstep": {
     "neighbors": {
-      "EDM": 0.6,
-      "Drum & Bass": 0.7,
-      "EDM Trap": 0.7
+      "Drum & Bass": 0.75,
+      "UK Garage": 0.72,
+      "EDM": 0.72,
+      "Future Bass": 0.72,
+      "Jungle": 0.65,
+      "Gqom": 0.5,
+      "IDM": 0.55,
+      "House": 0.55,
+      "Techno": 0.55,
+      "Chillout": 0.48,
+      "Trance": 0.5
     }
   },
   "Drum & Bass": {
     "neighbors": {
-      "Dubstep": 0.7,
-      "Jungle": 0.8
+      "Jungle": 0.88,
+      "Dubstep": 0.75,
+      "UK Garage": 0.72,
+      "Techno": 0.65,
+      "EDM": 0.65,
+      "IDM": 0.6,
+      "House": 0.55,
+      "Future Bass": 0.6,
+      "Gqom": 0.4,
+      "Hip-Hop": 0.38
     }
   },
   "Jungle": {
     "neighbors": {
-      "Drum & Bass": 0.8,
-      "Breakbeat": 0.75
-    }
-  },
-  "Breakbeat": {
-    "neighbors": {
-      "Jungle": 0.75,
-      "UK Garage": 0.7
+      "Drum & Bass": 0.88,
+      "UK Garage": 0.72,
+      "Dubstep": 0.65,
+      "Reggae": 0.42,
+      "Dancehall": 0.42,
+      "Techno": 0.62,
+      "EDM": 0.55,
+      "IDM": 0.55,
+      "Dub": 0.45,
+      "Hip-Hop": 0.35
     }
   },
   "UK Garage": {
     "neighbors": {
-      "Breakbeat": 0.7,
-      "2-Step": 0.8
+      "Drum & Bass": 0.72,
+      "Jungle": 0.72,
+      "Dubstep": 0.72,
+      "House": 0.72,
+      "Deep House": 0.65,
+      "Afroswing": 0.62,
+      "Hip-Hop": 0.45,
+      "R&B": 0.52,
+      "Dancehall": 0.42,
+      "Gqom": 0.5,
+      "Future Bass": 0.58,
+      "Techno": 0.52,
+      "EDM": 0.58,
+      "Asakaa": 0.52
     }
   },
-  "2-Step": {
+  "Future Bass": {
     "neighbors": {
-      "UK Garage": 0.8,
-      "Future Garage": 0.75
+      "EDM": 0.75,
+      "Electropop": 0.65,
+      "Dubstep": 0.72,
+      "Dance Pop": 0.62,
+      "Progressive House": 0.65,
+      "UK Garage": 0.58,
+      "Synthwave": 0.58,
+      "Pop": 0.5,
+      "Trance": 0.58,
+      "IDM": 0.52,
+      "Drum & Bass": 0.6,
+      "Trap": 0.38,
+      "K-Pop": 0.48
     }
   },
-  "Future Garage": {
+  "Synthwave": {
     "neighbors": {
-      "2-Step": 0.75,
-      "Ambient": 0.6
+      "Synthpop": 0.72,
+      "Vaporwave": 0.72,
+      "Electropop": 0.6,
+      "Post-Punk": 0.58,
+      "IDM": 0.5,
+      "Chillout": 0.58,
+      "Ambient": 0.52,
+      "EDM": 0.55,
+      "Future Bass": 0.58,
+      "Trance": 0.5,
+      "Film Score": 0.45,
+      "Soundtrack": 0.42
+    }
+  },
+  "Vaporwave": {
+    "neighbors": {
+      "Synthwave": 0.72,
+      "Synthpop": 0.6,
+      "Chillout": 0.65,
+      "Lo-Fi": 0.62,
+      "Ambient": 0.6,
+      "IDM": 0.55,
+      "Electropop": 0.52,
+      "Dream Pop": 0.5,
+      "J-Pop": 0.4,
+      "Disco": 0.42,
+      "Funk": 0.38
     }
   },
   "Ambient": {
     "neighbors": {
-      "Chillout": 0.85,
-      "Ambient House": 0.8,
-      "Post-Rock": 0.7
-    }
-  },
-  "Chillout": {
-    "neighbors": {
-      "Ambient": 0.85,
-      "Lo-Fi": 0.8,
-      "Chill House": 0.75
+      "Chillout": 0.78,
+      "Lo-Fi": 0.65,
+      "IDM": 0.68,
+      "Dream Pop": 0.65,
+      "Shoegaze": 0.58,
+      "Post-Rock": 0.6,
+      "Slowcore": 0.58,
+      "Minimalism": 0.7,
+      "Modern Classical": 0.55,
+      "Soundtrack": 0.52,
+      "Film Score": 0.5,
+      "Vaporwave": 0.6,
+      "Synthwave": 0.52,
+      "Dub": 0.5,
+      "Instrumental": 0.58
     }
   },
   "Lo-Fi": {
     "neighbors": {
       "Chillout": 0.8,
+      "Ambient": 0.65,
+      "Jazz-Hop": 0.78,
       "Hip-Hop": 0.55,
-      "Jazzhop": 0.75
+      "Cloud Rap": 0.65,
+      "Soul": 0.5,
+      "Neo-Soul": 0.55,
+      "R&B": 0.48,
+      "Vaporwave": 0.62,
+      "Dream Pop": 0.55,
+      "Indie Pop": 0.52,
+      "Jazz": 0.48,
+      "Boom Bap": 0.55,
+      "Indie Folk": 0.45
     }
   },
-  "Jazzhop": {
+  "Chillout": {
     "neighbors": {
-      "Lo-Fi": 0.75,
-      "Jazz": 0.6
+      "Lo-Fi": 0.8,
+      "Ambient": 0.78,
+      "IDM": 0.62,
+      "Vaporwave": 0.65,
+      "Synthwave": 0.58,
+      "Dream Pop": 0.6,
+      "Shoegaze": 0.52,
+      "Deep House": 0.62,
+      "Jazz": 0.48,
+      "Soul": 0.48,
+      "Neo-Soul": 0.52,
+      "Jazz-Hop": 0.6,
+      "Post-Rock": 0.55,
+      "Slowcore": 0.55,
+      "Dub": 0.45,
+      "R&B": 0.42
+    }
+  },
+  "IDM": {
+    "neighbors": {
+      "Ambient": 0.68,
+      "Techno": 0.6,
+      "Drum & Bass": 0.6,
+      "Chillout": 0.62,
+      "Post-Rock": 0.52,
+      "Minimalism": 0.58,
+      "Modern Classical": 0.5,
+      "Vaporwave": 0.55,
+      "House": 0.5,
+      "EDM": 0.5,
+      "Dubstep": 0.55,
+      "Progressive House": 0.48,
+      "Lo-Fi": 0.5
+    }
+  },
+  "R&B": {
+    "neighbors": {
+      "Soul": 0.88,
+      "Neo-Soul": 0.88,
+      "Hip-Hop": 0.65,
+      "Funk": 0.72,
+      "Gospel": 0.65,
+      "Motown": 0.75,
+      "Disco": 0.65,
+      "Pop": 0.6,
+      "Dance Pop": 0.55,
+      "Jazz-Hop": 0.58,
+      "Lo-Fi": 0.48,
+      "Trap": 0.6,
+      "Contemporary Gospel": 0.6,
+      "Christian R&B": 0.75,
+      "Afroswing": 0.65,
+      "Afrobeats": 0.48,
+      "Contemporary Worship": 0.48,
+      "Blues": 0.55,
+      "Electric Blues": 0.5,
+      "Smooth Jazz": 0.55,
+      "UK Garage": 0.52
+    }
+  },
+  "Soul": {
+    "neighbors": {
+      "R&B": 0.88,
+      "Neo-Soul": 0.85,
+      "Funk": 0.8,
+      "Motown": 0.82,
+      "Gospel": 0.72,
+      "Disco": 0.68,
+      "Blues": 0.65,
+      "Jazz": 0.62,
+      "Hip-Hop": 0.5,
+      "Contemporary Gospel": 0.62,
+      "Traditional Gospel": 0.6,
+      "Christian R&B": 0.65,
+      "Pop": 0.52,
+      "Smooth Jazz": 0.55,
+      "Electric Blues": 0.6,
+      "Delta Blues": 0.52,
+      "Afrobeats": 0.42
+    }
+  },
+  "Neo-Soul": {
+    "neighbors": {
+      "Soul": 0.85,
+      "R&B": 0.88,
+      "Funk": 0.72,
+      "Jazz-Hop": 0.72,
+      "Hip-Hop": 0.58,
+      "Motown": 0.7,
+      "Gospel": 0.62,
+      "Contemporary Gospel": 0.58,
+      "Blues": 0.55,
+      "Lo-Fi": 0.55,
+      "Jazz": 0.58,
+      "Pop": 0.5,
+      "Afrobeats": 0.4,
+      "Singer-Songwriter": 0.45,
+      "Indie Pop": 0.42
+    }
+  },
+  "Funk": {
+    "neighbors": {
+      "Soul": 0.8,
+      "R&B": 0.72,
+      "Disco": 0.8,
+      "Motown": 0.72,
+      "Neo-Soul": 0.72,
+      "Jazz Fusion": 0.68,
+      "Hip-Hop": 0.5,
+      "Blues": 0.55,
+      "Jazz": 0.58,
+      "Electric Blues": 0.52,
+      "Afrobeats": 0.42,
+      "Reggae": 0.4,
+      "Highlife": 0.42,
+      "House": 0.52,
+      "Ska": 0.42
+    }
+  },
+  "Disco": {
+    "neighbors": {
+      "Funk": 0.8,
+      "Soul": 0.68,
+      "R&B": 0.65,
+      "House": 0.65,
+      "Motown": 0.68,
+      "Pop": 0.55,
+      "Dance Pop": 0.6,
+      "Jazz": 0.5,
+      "Afrobeats": 0.4,
+      "Vaporwave": 0.42,
+      "Neo-Soul": 0.55
+    }
+  },
+  "Motown": {
+    "neighbors": {
+      "Soul": 0.82,
+      "R&B": 0.75,
+      "Funk": 0.72,
+      "Disco": 0.68,
+      "Neo-Soul": 0.7,
+      "Gospel": 0.58,
+      "Blues": 0.52,
+      "Jazz": 0.52,
+      "Pop": 0.5,
+      "Traditional Gospel": 0.52
+    }
+  },
+  "Gospel": {
+    "neighbors": {
+      "Soul": 0.72,
+      "R&B": 0.65,
+      "Traditional Gospel": 0.88,
+      "Contemporary Gospel": 0.85,
+      "Christian Hip-Hop": 0.8,
+      "CCM": 0.68,
+      "Contemporary Worship": 0.62,
+      "Christian R&B": 0.78,
+      "Neo-Soul": 0.62,
+      "Funk": 0.52,
+      "Blues": 0.52,
+      "Motown": 0.58,
+      "Jazz": 0.48,
+      "Christian Rock": 0.55,
+      "Afrobeats": 0.35
+    }
+  },
+  "Traditional Gospel": {
+    "neighbors": {
+      "Gospel": 0.88,
+      "Contemporary Gospel": 0.78,
+      "Soul": 0.6,
+      "Christian Hip-Hop": 0.62,
+      "CCM": 0.55,
+      "Contemporary Worship": 0.55,
+      "Christian R&B": 0.6,
+      "Blues": 0.55,
+      "Motown": 0.52,
+      "Jazz": 0.45,
+      "R&B": 0.58,
+      "Folk": 0.38
+    }
+  },
+  "Contemporary Gospel": {
+    "neighbors": {
+      "Gospel": 0.85,
+      "Traditional Gospel": 0.78,
+      "R&B": 0.65,
+      "Soul": 0.62,
+      "Neo-Soul": 0.58,
+      "Christian Hip-Hop": 0.72,
+      "CCM": 0.68,
+      "Contemporary Worship": 0.65,
+      "Christian R&B": 0.78,
+      "Afrobeats": 0.38,
+      "Pop": 0.45,
+      "Hip-Hop": 0.42
+    }
+  },
+  "CCM": {
+    "neighbors": {
+      "Contemporary Worship": 0.82,
+      "Gospel": 0.68,
+      "Contemporary Gospel": 0.68,
+      "Christian Rock": 0.75,
+      "Christian Metal": 0.52,
+      "Christian Hip-Hop": 0.65,
+      "Christian R&B": 0.65,
+      "Pop": 0.6,
+      "Traditional Gospel": 0.55,
+      "Folk": 0.4,
+      "Indie Pop": 0.42,
+      "Rock": 0.45
+    }
+  },
+  "Contemporary Worship": {
+    "neighbors": {
+      "CCM": 0.82,
+      "Gospel": 0.62,
+      "Contemporary Gospel": 0.65,
+      "Christian Rock": 0.7,
+      "Christian Hip-Hop": 0.58,
+      "Christian R&B": 0.6,
+      "Pop": 0.55,
+      "Traditional Gospel": 0.55,
+      "Indie Pop": 0.45,
+      "Folk": 0.4,
+      "Singer-Songwriter": 0.38
+    }
+  },
+  "Christian R&B": {
+    "neighbors": {
+      "Gospel": 0.78,
+      "Contemporary Gospel": 0.78,
+      "R&B": 0.75,
+      "Soul": 0.65,
+      "Neo-Soul": 0.62,
+      "Christian Hip-Hop": 0.72,
+      "CCM": 0.65,
+      "Contemporary Worship": 0.6,
+      "Traditional Gospel": 0.6,
+      "Pop": 0.52,
+      "Afrobeats": 0.35
+    }
+  },
+  "Christian Rock": {
+    "neighbors": {
+      "CCM": 0.75,
+      "Contemporary Worship": 0.7,
+      "Christian Metal": 0.72,
+      "Rock": 0.68,
+      "Alternative Rock": 0.62,
+      "Pop Rock": 0.62,
+      "Hard Rock": 0.58,
+      "Gospel": 0.55,
+      "Contemporary Gospel": 0.5,
+      "Christian Hip-Hop": 0.45,
+      "Indie Rock": 0.55
     }
   },
   "Jazz": {
     "neighbors": {
-      "Blues": 0.6,
-      "Neo-Soul": 0.7,
-      "Smooth Jazz": 0.85
+      "Bebop": 0.85,
+      "Cool Jazz": 0.85,
+      "Free Jazz": 0.8,
+      "Jazz Fusion": 0.8,
+      "Smooth Jazz": 0.78,
+      "Bossa Nova": 0.72,
+      "Latin Jazz": 0.78,
+      "Jazz-Hop": 0.72,
+      "Blues": 0.68,
+      "Soul": 0.62,
+      "R&B": 0.55,
+      "Neo-Soul": 0.58,
+      "Ethio-Jazz": 0.65,
+      "Funk": 0.58,
+      "Classic Rock": 0.35,
+      "Ambient": 0.38
     }
   },
   "Smooth Jazz": {
     "neighbors": {
+      "Jazz": 0.78,
+      "Jazz Fusion": 0.72,
+      "Cool Jazz": 0.75,
+      "Bebop": 0.65,
+      "Bossa Nova": 0.68,
+      "Soul": 0.55,
+      "R&B": 0.55,
+      "Neo-Soul": 0.52,
+      "Ambient": 0.45,
+      "Chillout": 0.5,
+      "Latin Jazz": 0.65,
+      "Lo-Fi": 0.42
+    }
+  },
+  "Bebop": {
+    "neighbors": {
+      "Jazz": 0.9,
+      "Cool Jazz": 0.8,
+      "Free Jazz": 0.72,
+      "Latin Jazz": 0.65,
+      "Jazz Fusion": 0.68,
+      "Smooth Jazz": 0.65,
+      "Blues": 0.55,
+      "Soul": 0.52,
+      "Bossa Nova": 0.62
+    }
+  },
+  "Cool Jazz": {
+    "neighbors": {
       "Jazz": 0.85,
-      "R&B": 0.55
+      "Bebop": 0.8,
+      "Bossa Nova": 0.75,
+      "Smooth Jazz": 0.75,
+      "Jazz Fusion": 0.72,
+      "Latin Jazz": 0.65,
+      "Free Jazz": 0.65,
+      "Blues": 0.52,
+      "Soul": 0.48,
+      "Ambient": 0.4
+    }
+  },
+  "Free Jazz": {
+    "neighbors": {
+      "Jazz": 0.8,
+      "Bebop": 0.72,
+      "Cool Jazz": 0.65,
+      "Jazz Fusion": 0.72,
+      "IDM": 0.42,
+      "Ambient": 0.4,
+      "Shoegaze": 0.38,
+      "Post-Rock": 0.42,
+      "Latin Jazz": 0.55,
+      "Ethio-Jazz": 0.58
+    }
+  },
+  "Jazz Fusion": {
+    "neighbors": {
+      "Jazz": 0.8,
+      "Latin Jazz": 0.7,
+      "Smooth Jazz": 0.72,
+      "Bebop": 0.68,
+      "Cool Jazz": 0.72,
+      "Free Jazz": 0.72,
+      "Jazz-Hop": 0.68,
+      "Funk": 0.68,
+      "Progressive Rock": 0.58,
+      "Bossa Nova": 0.6,
+      "Ethio-Jazz": 0.62,
+      "Soul": 0.52,
+      "R&B": 0.48
     }
   },
   "Blues": {
     "neighbors": {
-      "Rock": 0.55,
+      "Delta Blues": 0.88,
+      "Electric Blues": 0.85,
+      "Jazz": 0.68,
       "Soul": 0.65,
-      "Jazz": 0.6
+      "Rock": 0.52,
+      "Classic Rock": 0.65,
+      "Hard Rock": 0.6,
+      "Folk": 0.52,
+      "Country": 0.52,
+      "Funk": 0.55,
+      "R&B": 0.55,
+      "Gospel": 0.52,
+      "Americana": 0.55,
+      "Jazz Fusion": 0.55,
+      "Motown": 0.52,
+      "Blues Rock": 0.7
+    }
+  },
+  "Delta Blues": {
+    "neighbors": {
+      "Blues": 0.88,
+      "Electric Blues": 0.8,
+      "Folk": 0.65,
+      "Country": 0.6,
+      "Americana": 0.62,
+      "Soul": 0.55,
+      "Gospel": 0.58,
+      "Jazz": 0.58,
+      "Traditional Gospel": 0.55,
+      "Bluegrass": 0.52,
+      "Blues Rock": 0.55
+    }
+  },
+  "Electric Blues": {
+    "neighbors": {
+      "Blues": 0.85,
+      "Delta Blues": 0.8,
+      "Hard Rock": 0.65,
+      "Classic Rock": 0.65,
+      "Rock": 0.6,
+      "Soul": 0.6,
+      "Funk": 0.52,
+      "Jazz": 0.58,
+      "Jazz Fusion": 0.52,
+      "R&B": 0.5,
+      "Americana": 0.55,
+      "Blues Rock": 0.78
+    }
+  },
+  "Jazz-Hop": {
+    "neighbors": {
+      "Hip-Hop": 0.68,
+      "Jazz": 0.72,
+      "Lo-Fi": 0.78,
+      "Boom Bap": 0.75,
+      "Conscious Hip-Hop": 0.72,
+      "Underground Hip-Hop": 0.75,
+      "Neo-Soul": 0.72,
+      "Soul": 0.6,
+      "Chillout": 0.6,
+      "Jazz Fusion": 0.68,
+      "Smooth Jazz": 0.6,
+      "R&B": 0.58,
+      "Bebop": 0.6,
+      "Cool Jazz": 0.6,
+      "Funk": 0.58
+    }
+  },
+  "Ethio-Jazz": {
+    "neighbors": {
+      "Jazz": 0.65,
+      "Jazz Fusion": 0.62,
+      "Latin Jazz": 0.48,
+      "Afro-Fusion": 0.4,
+      "Afrobeats": 0.42,
+      "Free Jazz": 0.58,
+      "Highlife": 0.42,
+      "Blues": 0.42,
+      "Mbalax": 0.4,
+      "World Folk": 0.42,
+      "Soul": 0.4
     }
   },
   "Folk": {
     "neighbors": {
-      "Indie Rock": 0.6,
-      "Folk Rock": 0.8
+      "Folk Rock": 0.82,
+      "Indie Folk": 0.8,
+      "Singer-Songwriter": 0.78,
+      "Americana": 0.72,
+      "Country": 0.65,
+      "Bluegrass": 0.68,
+      "Celtic": 0.68,
+      "World Folk": 0.62,
+      "Alternative Rock": 0.48,
+      "Indie Rock": 0.48,
+      "Blues": 0.52,
+      "Delta Blues": 0.65,
+      "Classical": 0.32,
+      "Indie Pop": 0.55,
+      "Dream Pop": 0.45
     }
   },
   "Folk Rock": {
     "neighbors": {
-      "Folk": 0.8,
-      "Classic Rock": 0.6
+      "Folk": 0.82,
+      "Indie Folk": 0.78,
+      "Rock": 0.6,
+      "Alternative Rock": 0.6,
+      "Classic Rock": 0.62,
+      "Indie Rock": 0.65,
+      "Singer-Songwriter": 0.68,
+      "Country": 0.6,
+      "Americana": 0.7,
+      "Bluegrass": 0.62,
+      "Celtic": 0.58,
+      "Pop Rock": 0.55,
+      "Psychedelic Rock": 0.58
     }
   },
   "Country": {
     "neighbors": {
-      "Folk": 0.7,
-      "Bluegrass": 0.8
+      "Bluegrass": 0.78,
+      "Americana": 0.82,
+      "Folk": 0.65,
+      "Folk Rock": 0.6,
+      "Singer-Songwriter": 0.62,
+      "Classic Rock": 0.52,
+      "Rock": 0.38,
+      "Blues": 0.52,
+      "Delta Blues": 0.6,
+      "Pop": 0.4,
+      "Gospel": 0.45,
+      "Traditional Gospel": 0.42,
+      "Celtic": 0.4,
+      "Indie Folk": 0.52
     }
   },
   "Bluegrass": {
     "neighbors": {
-      "Country": 0.8,
-      "Folk": 0.75
+      "Country": 0.78,
+      "Americana": 0.78,
+      "Folk": 0.68,
+      "Celtic": 0.65,
+      "Folk Rock": 0.62,
+      "Singer-Songwriter": 0.58,
+      "Delta Blues": 0.52,
+      "Blues": 0.5,
+      "World Folk": 0.5,
+      "Indie Folk": 0.55,
+      "Traditional Gospel": 0.42
     }
   },
-  "Reggae": {
+  "Americana": {
     "neighbors": {
-      "Dancehall": 0.85,
-      "Afrobeats": 0.7,
-      "Ska": 0.75
+      "Country": 0.82,
+      "Bluegrass": 0.78,
+      "Folk": 0.72,
+      "Folk Rock": 0.7,
+      "Singer-Songwriter": 0.7,
+      "Indie Folk": 0.65,
+      "Blues": 0.55,
+      "Delta Blues": 0.62,
+      "Rock": 0.48,
+      "Classic Rock": 0.5,
+      "Celtic": 0.48,
+      "Alternative Rock": 0.48,
+      "Gospel": 0.4
     }
   },
-  "Ska": {
+  "Singer-Songwriter": {
     "neighbors": {
-      "Reggae": 0.75,
-      "Punk Rock": 0.6
+      "Folk": 0.78,
+      "Indie Folk": 0.8,
+      "Americana": 0.7,
+      "Folk Rock": 0.68,
+      "Indie Pop": 0.68,
+      "Indie Rock": 0.58,
+      "Alternative Rock": 0.48,
+      "Country": 0.62,
+      "Blues": 0.48,
+      "Dream Pop": 0.52,
+      "Slowcore": 0.52,
+      "Neo-Soul": 0.45,
+      "Pop": 0.5,
+      "Bluegrass": 0.58
     }
   },
-  "Dancehall": {
+  "Indie Folk": {
     "neighbors": {
-      "Reggae": 0.85,
-      "Afrobeats": 0.75
+      "Folk": 0.8,
+      "Singer-Songwriter": 0.8,
+      "Americana": 0.65,
+      "Folk Rock": 0.78,
+      "Indie Pop": 0.68,
+      "Indie Rock": 0.62,
+      "Dream Pop": 0.58,
+      "Country": 0.52,
+      "Bluegrass": 0.55,
+      "Celtic": 0.52,
+      "Slowcore": 0.52,
+      "Shoegaze": 0.48,
+      "Lo-Fi": 0.45,
+      "Alternative Rock": 0.52
     }
   },
-  "Afrobeats": {
+  "Celtic": {
     "neighbors": {
-      "Dancehall": 0.75,
-      "Amapiano": 0.8,
-      "Hip-Hop": 0.55
+      "Folk": 0.68,
+      "World Folk": 0.68,
+      "Bluegrass": 0.65,
+      "Folk Rock": 0.58,
+      "Americana": 0.48,
+      "Country": 0.4,
+      "Classical": 0.38,
+      "Indie Folk": 0.52
     }
   },
-  "Amapiano": {
+  "World Folk": {
     "neighbors": {
-      "Afrobeats": 0.8,
-      "House": 0.7,
-      "Deep House": 0.6
+      "Folk": 0.62,
+      "Celtic": 0.68,
+      "Bluegrass": 0.5,
+      "Indie Folk": 0.5,
+      "Flamenco": 0.52,
+      "Fado": 0.52,
+      "Klezmer": 0.55,
+      "Mbalax": 0.42,
+      "Soukous": 0.4,
+      "Ethio-Jazz": 0.42,
+      "Tuvan Throat Singing": 0.55,
+      "Bollywood": 0.35,
+      "Classical": 0.35,
+      "Afrobeats": 0.3
     }
   },
-  "Latin Pop": {
+  "Bollywood": {
     "neighbors": {
-      "Reggaeton": 0.8,
-      "Pop": 0.7
+      "Filmi": 0.82,
+      "Anime OST": 0.42,
+      "Latin Pop": 0.35,
+      "Pop": 0.45,
+      "Dance Pop": 0.42,
+      "Folk": 0.38,
+      "Classical": 0.38,
+      "World Folk": 0.35,
+      "R&B": 0.3
     }
   },
-  "Reggaeton": {
+  "Filmi": {
     "neighbors": {
-      "Latin Pop": 0.8,
-      "Dancehall": 0.7
+      "Bollywood": 0.82,
+      "Anime OST": 0.4,
+      "Pop": 0.42,
+      "Folk": 0.35,
+      "Classical": 0.38,
+      "World Folk": 0.35
     }
   },
-  "Salsa": {
+  "Anime OST": {
     "neighbors": {
-      "Latin Jazz": 0.8,
-      "Merengue": 0.75
+      "J-Pop": 0.72,
+      "Soundtrack": 0.72,
+      "Film Score": 0.68,
+      "J-Rock": 0.65,
+      "Bollywood": 0.42,
+      "Filmi": 0.4,
+      "Classical": 0.4,
+      "K-Pop": 0.5,
+      "Pop": 0.45,
+      "Instrumental": 0.55
     }
   },
-  "Merengue": {
+  "Tuvan Throat Singing": {
     "neighbors": {
-      "Salsa": 0.75,
-      "Bachata": 0.7
+      "World Folk": 0.55,
+      "Ambient": 0.42,
+      "Minimalism": 0.38,
+      "Klezmer": 0.3,
+      "Classical": 0.28
     }
   },
-  "Bachata": {
+  "Klezmer": {
     "neighbors": {
-      "Merengue": 0.7,
-      "Latin Pop": 0.6
+      "World Folk": 0.55,
+      "Jazz": 0.5,
+      "Folk": 0.55,
+      "Celtic": 0.45,
+      "Flamenco": 0.38,
+      "Classical": 0.35,
+      "Ethio-Jazz": 0.32,
+      "Tuvan Throat Singing": 0.3
     }
   },
-  "Latin Jazz": {
+  "Fado": {
     "neighbors": {
-      "Salsa": 0.8,
-      "Jazz": 0.7
+      "World Folk": 0.52,
+      "Folk": 0.55,
+      "Flamenco": 0.6,
+      "Bolero": 0.48,
+      "Classical": 0.38,
+      "Singer-Songwriter": 0.45,
+      "Celtic": 0.4,
+      "Blues": 0.38
     }
   },
-  "Soundtrack": {
+  "Flamenco": {
     "neighbors": {
-      "Classical": 0.75,
-      "Ambient": 0.65,
-      "Post-Rock": 0.7
+      "Fado": 0.6,
+      "Latin Jazz": 0.42,
+      "World Folk": 0.52,
+      "Folk": 0.52,
+      "Classical": 0.42,
+      "Salsa": 0.42,
+      "Bolero": 0.45,
+      "Celtic": 0.38,
+      "Klezmer": 0.38
     }
   },
-  "Post-Rock": {
+  "Rai": {
     "neighbors": {
-      "Ambient": 0.7,
-      "Instrumental": 0.75
+      "World Folk": 0.52,
+      "Folk": 0.45,
+      "Pop": 0.42,
+      "Mbalax": 0.48,
+      "Afrobeats": 0.42,
+      "Afro-Fusion": 0.4,
+      "Latin Pop": 0.35,
+      "Dance Pop": 0.35
     }
   },
-  "Instrumental": {
+  "Mbalax": {
     "neighbors": {
-      "Post-Rock": 0.75,
-      "Classical": 0.7
+      "Afrobeats": 0.55,
+      "Soukous": 0.65,
+      "Afro-Fusion": 0.58,
+      "Makossa": 0.6,
+      "Highlife": 0.58,
+      "World Folk": 0.42,
+      "Coupé-Décalé": 0.55,
+      "Ethio-Jazz": 0.4,
+      "Rai": 0.48,
+      "Dancehall": 0.38
+    }
+  },
+  "Soukous": {
+    "neighbors": {
+      "Afrobeats": 0.58,
+      "Mbalax": 0.65,
+      "Makossa": 0.68,
+      "Coupé-Décalé": 0.6,
+      "Highlife": 0.62,
+      "Afro-Fusion": 0.6,
+      "Bongo Flava": 0.55,
+      "World Folk": 0.4,
+      "Kuduro": 0.5,
+      "Reggae": 0.38
+    }
+  },
+  "Makossa": {
+    "neighbors": {
+      "Soukous": 0.68,
+      "Mbalax": 0.6,
+      "Afrobeats": 0.55,
+      "Coupé-Décalé": 0.58,
+      "Afro-Fusion": 0.58,
+      "Highlife": 0.6,
+      "Bongo Flava": 0.52,
+      "Dancehall": 0.4,
+      "World Folk": 0.38
     }
   },
   "Classical": {
     "neighbors": {
+      "Baroque": 0.88,
+      "Romantic Era Classical": 0.88,
+      "Modern Classical": 0.82,
+      "Minimalism": 0.72,
+      "Film Score": 0.65,
+      "Soundtrack": 0.6,
+      "Instrumental": 0.65,
+      "Post-Rock": 0.42,
+      "Ambient": 0.5,
+      "Jazz": 0.38,
+      "Folk": 0.32
+    }
+  },
+  "Baroque": {
+    "neighbors": {
+      "Classical": 0.88,
+      "Romantic Era Classical": 0.8,
+      "Modern Classical": 0.65,
+      "Minimalism": 0.6,
+      "Instrumental": 0.6,
+      "Film Score": 0.52,
+      "Jazz": 0.35
+    }
+  },
+  "Romantic Era Classical": {
+    "neighbors": {
+      "Classical": 0.88,
+      "Baroque": 0.8,
+      "Modern Classical": 0.78,
+      "Film Score": 0.68,
+      "Soundtrack": 0.62,
+      "Minimalism": 0.6,
+      "Instrumental": 0.6,
+      "Post-Rock": 0.42
+    }
+  },
+  "Modern Classical": {
+    "neighbors": {
+      "Classical": 0.82,
+      "Romantic Era Classical": 0.78,
+      "Baroque": 0.65,
+      "Minimalism": 0.78,
+      "Film Score": 0.68,
+      "Ambient": 0.58,
+      "IDM": 0.5,
+      "Post-Rock": 0.52,
+      "Instrumental": 0.65,
+      "Soundtrack": 0.62
+    }
+  },
+  "Minimalism": {
+    "neighbors": {
+      "Modern Classical": 0.78,
+      "Classical": 0.72,
+      "Ambient": 0.7,
+      "IDM": 0.58,
+      "Post-Rock": 0.58,
+      "Film Score": 0.62,
+      "Instrumental": 0.62,
+      "Baroque": 0.6,
+      "Chillout": 0.52,
+      "Shoegaze": 0.45,
+      "Slowcore": 0.45
+    }
+  },
+  "Soundtrack": {
+    "neighbors": {
+      "Film Score": 0.9,
+      "Classical": 0.6,
+      "Instrumental": 0.72,
+      "Modern Classical": 0.62,
+      "Anime OST": 0.72,
+      "Ambient": 0.52,
+      "Minimalism": 0.55,
+      "Post-Rock": 0.55,
+      "Synthwave": 0.42,
+      "Romantic Era Classical": 0.62
+    }
+  },
+  "Film Score": {
+    "neighbors": {
+      "Soundtrack": 0.9,
+      "Classical": 0.65,
+      "Modern Classical": 0.68,
       "Instrumental": 0.7,
-      "Soundtrack": 0.75
+      "Romantic Era Classical": 0.68,
+      "Ambient": 0.5,
+      "Minimalism": 0.62,
+      "Anime OST": 0.68,
+      "Synthwave": 0.45,
+      "Post-Rock": 0.55,
+      "Baroque": 0.52
+    }
+  },
+  "Instrumental": {
+    "neighbors": {
+      "Post-Rock": 0.72,
+      "Ambient": 0.58,
+      "Classical": 0.65,
+      "Film Score": 0.7,
+      "Soundtrack": 0.72,
+      "Modern Classical": 0.65,
+      "Jazz": 0.62,
+      "Jazz Fusion": 0.6,
+      "Progressive Rock": 0.6,
+      "Minimalism": 0.62,
+      "Folk": 0.45,
+      "Blues": 0.45
+    }
+  },
+  "Post-Rock": {
+    "neighbors": {
+      "Shoegaze": 0.78,
+      "Dream Pop": 0.68,
+      "Slowcore": 0.72,
+      "Ambient": 0.6,
+      "Instrumental": 0.72,
+      "Progressive Rock": 0.72,
+      "Alternative Rock": 0.65,
+      "Indie Rock": 0.68,
+      "Emo": 0.55,
+      "Minimalism": 0.58,
+      "Modern Classical": 0.52,
+      "IDM": 0.52,
+      "Psychedelic Rock": 0.62,
+      "Doom Metal": 0.55
+    }
+  },
+  "Shoegaze": {
+    "neighbors": {
+      "Dream Pop": 0.85,
+      "Post-Rock": 0.78,
+      "Slowcore": 0.72,
+      "Indie Rock": 0.72,
+      "Alternative Rock": 0.68,
+      "Indie Pop": 0.65,
+      "Ambient": 0.58,
+      "Post-Punk": 0.68,
+      "Psychedelic Rock": 0.65,
+      "Emo": 0.58,
+      "Midwest Emo": 0.55,
+      "Doom Metal": 0.45
+    }
+  },
+  "Slowcore": {
+    "neighbors": {
+      "Shoegaze": 0.72,
+      "Dream Pop": 0.72,
+      "Post-Rock": 0.72,
+      "Indie Folk": 0.52,
+      "Indie Rock": 0.55,
+      "Ambient": 0.58,
+      "Emo": 0.6,
+      "Midwest Emo": 0.58,
+      "Folk": 0.42,
+      "Alternative Rock": 0.52,
+      "Chillout": 0.55,
+      "Singer-Songwriter": 0.52
+    }
+  },
+  "Emo": {
+    "neighbors": {
+      "Pop Punk": 0.78,
+      "Midwest Emo": 0.88,
+      "Screamo": 0.8,
+      "Punk": 0.68,
+      "Hardcore Punk": 0.65,
+      "Indie Rock": 0.62,
+      "Post-Punk": 0.6,
+      "Shoegaze": 0.58,
+      "Alternative Rock": 0.6,
+      "Slowcore": 0.6,
+      "Post-Rock": 0.55,
+      "Metalcore": 0.6
+    }
+  },
+  "Midwest Emo": {
+    "neighbors": {
+      "Emo": 0.88,
+      "Screamo": 0.72,
+      "Pop Punk": 0.72,
+      "Indie Rock": 0.68,
+      "Indie Folk": 0.55,
+      "Punk": 0.62,
+      "Shoegaze": 0.55,
+      "Slowcore": 0.58,
+      "Alternative Rock": 0.62,
+      "Post-Rock": 0.58,
+      "Singer-Songwriter": 0.48,
+      "Hardcore Punk": 0.58
+    }
+  },
+  "Screamo": {
+    "neighbors": {
+      "Emo": 0.8,
+      "Hardcore Punk": 0.72,
+      "Metalcore": 0.65,
+      "Post-Punk": 0.55,
+      "Punk": 0.6,
+      "Midwest Emo": 0.72,
+      "Pop Punk": 0.58,
+      "Death Metal": 0.48,
+      "Black Metal": 0.45
+    }
+  },
+  "J-Rock": {
+    "neighbors": {
+      "J-Pop": 0.68,
+      "Alternative Rock": 0.6,
+      "Rock": 0.58,
+      "Post-Punk": 0.52,
+      "Anime OST": 0.65,
+      "Indie Rock": 0.6,
+      "Hard Rock": 0.55,
+      "Heavy Metal": 0.5,
+      "Punk": 0.52,
+      "K-Pop": 0.42
+    }
+  },
+  "K-Indie": {
+    "neighbors": {
+      "K-Pop": 0.72,
+      "Indie Rock": 0.75,
+      "Indie Pop": 0.72,
+      "Alternative Rock": 0.68,
+      "J-Rock": 0.55,
+      "Post-Punk": 0.58,
+      "Singer-Songwriter": 0.55,
+      "Dream Pop": 0.55,
+      "Shoegaze": 0.5,
+      "Folk Rock": 0.5
+    }
+  },
+  "Blues Rock": {
+    "neighbors": {
+      "Rock": 0.72,
+      "Hard Rock": 0.72,
+      "Classic Rock": 0.7,
+      "Electric Blues": 0.78,
+      "Blues": 0.7,
+      "Delta Blues": 0.55,
+      "Psychedelic Rock": 0.58
     }
   }
 }

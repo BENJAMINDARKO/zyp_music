@@ -21,6 +21,7 @@ import 'core/services/dj_history_ledger.dart';
 import 'core/services/genre_enrichment_service.dart';
 import 'core/services/country_bonus_service.dart';
 import 'core/services/genre_normalization_service.dart';
+import 'core/services/genre_proximity_graph.dart';
 import 'core/services/genre_similarity_engine.dart';
 import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
@@ -88,6 +89,8 @@ Future<void> main() async {
   await genreNormalization.initialize();
   final genreSimilarity = GenreSimilarityEngine();
   await genreSimilarity.initialize();
+  final genreProximityGraph = GenreProximityGraph();
+  await genreProximityGraph.initialize();
   // Spec 2E: load the country→region map before any
   // _sameGenre scoring runs. The asset is small (~5KB) and
   // the service is purely additive on the hot path.
@@ -248,6 +251,7 @@ Future<void> main() async {
       historyLedger: historyLedger,
     );
     final routingService = AutoDjRoutingService(
+      graph: genreProximityGraph,
       crateMiner: crateMiner,
       historyLedger: historyLedger,
       genreEnrichment: genreEnrichment,
