@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import '../screens/settings_screen.dart';
 
 class GlassSidebar extends StatelessWidget {
@@ -17,9 +18,9 @@ class GlassSidebar extends StatelessWidget {
     return Container(
       width: 240,
       decoration: BoxDecoration(
-        color: const Color(0xFF141414).withAlpha(200), // Card color with opacity
+        color: const Color(0xFF141414).withAlpha(200),
         border: const Border(
-          right: BorderSide(color: Color(0xFF2A2A2A), width: 1), // Border color
+          right: BorderSide(color: Color(0xFF2A2A2A), width: 1),
         ),
       ),
       child: ClipRRect(
@@ -42,15 +43,15 @@ class GlassSidebar extends StatelessWidget {
                       'ZYP MUSIC',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              _buildMenuItem(context, Icons.home, 'Home', 0),
-              _buildMenuItem(context, Icons.library_music, 'Library', 1),
+              _buildMenuItem(context, PhosphorIconsRegular.house, 'Home', 0),
+              _buildMenuItem(context, PhosphorIconsRegular.musicNotesSimple, 'Music Now', 1),
+              _buildMenuItem(context, PhosphorIconsRegular.bookOpen, 'Library', 2),
               const Spacer(),
               InkWell(
                 onTap: () {
@@ -62,13 +63,13 @@ class GlassSidebar extends StatelessWidget {
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.settings, color: Colors.white54, size: 24),
-                      SizedBox(width: 16),
+                      Icon(PhosphorIconsRegular.gear, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 24),
+                      const SizedBox(width: 16),
                       Text(
                         'Settings',
-                        style: TextStyle(color: Colors.white54, fontSize: 16),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 16),
                       ),
                     ],
                   ),
@@ -91,24 +92,24 @@ class GlassSidebar extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
-              color: isSelected ? Colors.white : Colors.transparent,
+              color: isSelected ? Theme.of(context).colorScheme.onSurface : Colors.transparent,
               width: 3,
             ),
           ),
-          color: isSelected ? Colors.white.withAlpha(25) : Colors.transparent,
+          color: isSelected ? Theme.of(context).colorScheme.onSurface.withAlpha(25) : Colors.transparent,
         ),
         child: Row(
           children: [
             Icon(
               icon,
-              color: isSelected ? Colors.white : Colors.white54,
+              color: isSelected ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
               size: 24,
             ),
             const SizedBox(width: 16),
             Text(
               title,
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white54,
+                color: isSelected ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 fontSize: 16,
               ),

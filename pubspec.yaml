@@ -37,6 +37,9 @@ dependencies:
   audio_video_progress_bar: ^2.0.3
   share_plus: ^12.0.2
   connectivity_plus: ^6.0.0
+  phosphoricons_flutter: ^1.0.0
+  flutter_svg: ^2.0.10+1
+  rxdart: ^0.28.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -67,3 +70,4 @@ flutter:
     - assets/data/genre_normalization.json
     - assets/data/genre_proximity_matrix.json
     - assets/data/country_to_region.json
+    - assets/icons/

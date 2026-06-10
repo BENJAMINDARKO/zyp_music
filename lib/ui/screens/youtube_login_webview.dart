@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../service/auth_service.dart';
 
@@ -68,7 +69,7 @@ class _YoutubeLoginWebviewState extends State<YoutubeLoginWebview> {
         backgroundColor: const Color(0xFF141414),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(PhosphorIconsRegular.arrowsClockwise),
             onPressed: () => _controller.reload(),
           ),
         ],

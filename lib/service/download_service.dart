@@ -116,6 +116,8 @@ class DownloadService {
         thumbnailUrl: track.thumbnailUrl,
         durationSeconds: track.duration?.inSeconds,
         author: track.author,
+        album: track.album,
+        year: track.year,
       );
       // C2: fire-and-forget duration backfill. If
       // `track.duration` was null (live stream / unlisted
@@ -172,6 +174,8 @@ class DownloadService {
           thumbnailUrl: track.thumbnailUrl,
           durationSeconds: track.duration?.inSeconds,
           author: track.author,
+          album: track.album,
+          year: track.year,
         );
         // C2: fire-and-forget duration backfill. See
         // `downloadTrack` above for the contract; this

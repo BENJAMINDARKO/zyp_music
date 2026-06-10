@@ -37,6 +37,7 @@ import 'service/auth_service.dart';
 import 'service/audio_handler.dart';
 import 'service/download_service.dart';
 import 'presentation/providers/download_provider.dart';
+import 'presentation/providers/home_feed_provider.dart';
 import 'presentation/providers/settings_provider.dart';
 
 Future<void> main() async {
@@ -128,6 +129,7 @@ Future<void> main() async {
         androidNotificationClickStartsActivity: true,
       ),
     );
+    debugPrint('[Main] audioHandler runtimeType=${audioHandler.runtimeType} hash=${identityHashCode(audioHandler)}');
 
     final lyricsDataSource = LyricsRemoteDataSource();
 
@@ -216,6 +218,8 @@ Future<void> main() async {
     );
     final downloadProvider = DownloadProvider(downloadService, hybridCache);
     await downloadProvider.init();
+
+    final homeFeedProvider = HomeFeedProvider(database: localDatabase);
 
     // QueueManager coordinates the manual playback queue and the explicit
     // Auto DJ engine. It listens to the connectivity service so the offline
@@ -337,6 +341,7 @@ Future<void> main() async {
       historyLedger: historyLedger,
       genreEnrichmentService: genreEnrichment,
       playlistDatabase: localDatabase,
+      homeFeedProvider: homeFeedProvider,
       routingService: routingService,
     ));
   } catch (e) {

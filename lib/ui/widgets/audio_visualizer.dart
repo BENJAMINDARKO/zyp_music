@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 class AudioVisualizer extends StatefulWidget {
   final String style; // 'Bars', 'Lines', 'Circles'

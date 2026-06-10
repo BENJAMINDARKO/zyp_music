@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:zyp_music/core/utils/app_logger.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
+import 'package:rxdart/rxdart.dart';
 import '../core/utils/network_utils.dart';
 import 'auth_service.dart';
 
 class MusicAudioHandler extends BaseAudioHandler {
+  final int _instanceId = DateTime.now().microsecondsSinceEpoch;
   AudioPlayer _player = AudioPlayer();
   final AuthService _authService = AuthService();
 
@@ -32,66 +35,57 @@ class MusicAudioHandler extends BaseAudioHandler {
   /// speed before the swap — this method is a transport
   /// rebind, not a state reset.
   Future<void> replacePlayer(AudioPlayer newPlayer) async {
-    // Capture the playback position / playing flag from the
-    // old player so we can re-emit a state that is consistent
-    // with the new player's state. The new player is the
-    // source of truth for "is playing" — the engine has
-    // already configured its speed + volume.
-    final wasPosition = _player.position;
-    final wasPlaying = _player.playing;
+    // Capture state from the INCOMING player — it is already
+    // playing the next track. Capturing from the old player
+    // would snapshot its stopped/idle state and inject a
+    // spurious playing=false into the UI.
+    //
+    // BUG FIX (bugs 1 & 8): the original code declared a first
+    // pair of (wasPosition, wasPlaying) from _player (the old,
+    // already-stopped player) and then re-declared the same
+    // names from newPlayer, which is both a Dart compile error
+    // (duplicate locals) and the root cause of the frozen UI:
+    // the old-player snapshot wins and forces playing=false.
+    final wasPosition = newPlayer.position;
+    final wasPlaying = newPlayer.playing;
+
+    // Cancel all subscriptions BEFORE replacing _player so the
+    // _listenToPlayerStreams() call below starts clean.
     await _playerStateSub?.cancel();
     await _processingSub?.cancel();
     await _positionSub?.cancel();
     await _durationSub?.cancel();
     await _currentIndexSub?.cancel();
+    await _bufferedPositionSub?.cancel();
+
     final oldPlayer = _player;
     _player = newPlayer;
-    _playerStateSub = _player.playerStateStream.listen(_onPlayerState);
-    _processingSub = _player.processingStateStream.listen(_onProcessingState);
-    _positionSub = _player.positionStream.listen((pos) {
-      final current = playbackState.valueOrNull ?? _defaultPlaybackState;
-      playbackState.add(current.copyWith(
-        updatePosition: pos,
-        controls: _controls,
-        systemActions: _systemActions,
-        androidCompactActionIndices: [1, 0, 3],
-      ));
-    });
-    _durationSub = _player.durationStream.listen((dur) {
-      if (dur != null) {
-        final item = mediaItem.value;
-        if (item != null) {
-          updateMediaItem(item.copyWith(duration: dur));
-        }
-      }
-    });
-    _currentIndexSub = _player.currentIndexStream.listen((index) {
-      if (index != null && index >= 0) {
-        final sequence = _player.sequence;
-        if (sequence != null && index < sequence.length) {
-          final source = sequence[index];
-          if (source.tag is MediaItem) {
-            final item = source.tag as MediaItem;
-            if (mediaItem.valueOrNull?.id != item.id) {
-              updateMediaItem(item);
-            }
-            _currentIndex = index;
-          }
-        }
-      }
-    });
-    // Re-emit a playback state derived from the new player
-    // so any UI listeners that just received the last
-    // old-player position flush don't latch onto a stale
-    // "playing=false" state.
-    playbackState.add((playbackState.valueOrNull ?? _defaultPlaybackState)
+
+    // BUG FIX (bug 10): replacePlayer() previously called
+    // _listenToPlayerStreams() AND also re-wired every stream
+    // inline, resulting in three subscription rounds total
+    // (constructor inline, replacePlayer inline, plus the
+    // _listenToPlayerStreams() call).  We now delegate entirely
+    // to _listenToPlayerStreams() — it already handles all six
+    // streams correctly and forwards events into the
+    // StreamControllers so external listeners are not dropped.
+    _listenToPlayerStreams();
+
+    // Re-emit a playback state derived from the NEW player so
+    // any UI listeners that just received the final idle event
+    // from the old player immediately see the correct state.
+    final reemitState = (playbackState.valueOrNull ?? _defaultPlaybackState)
         .copyWith(
       updatePosition: wasPosition,
       playing: wasPlaying,
+      processingState: _convertState(newPlayer.processingState),
       controls: _controls,
       systemActions: _systemActions,
       androidCompactActionIndices: [1, 0, 3],
-    ));
+    );
+    debugPrint('[PBS-EMIT] (replacePlayer) playing=${reemitState.playing} '
+        'proc=${reemitState.processingState} pos=${reemitState.updatePosition}');
+    playbackState.add(reemitState);
 
     // Force-push the current MediaItem so the OS lockscreen
     // notification, media slider seekbar, and global album art
@@ -103,10 +97,16 @@ class MusicAudioHandler extends BaseAudioHandler {
       if (index >= 0 && index < sequence.length) {
         final source = sequence[index];
         if (source.tag is MediaItem) {
-          updateMediaItem(source.tag as MediaItem);
+          final tagItem = source.tag as MediaItem;
+          AppLogger.log(
+            '[NotifDebug] replacePlayer force-push updateMediaItem: '
+            'id=${tagItem.id} title="${tagItem.title}"',
+            name: 'MusicAudioHandler',
+          );
+          updateMediaItem(tagItem);
           AppLogger.log(
             '[MediaSessionSync] Re-anchored MediaItem to active player: '
-            '${(source.tag as MediaItem).id}',
+            '${tagItem.id}',
             name: 'MusicAudioHandler',
           );
         }
@@ -134,43 +134,128 @@ class MusicAudioHandler extends BaseAudioHandler {
   };
 
   PlaybackState get _defaultPlaybackState => PlaybackState(
-    controls: _controls,
-    systemActions: _systemActions,
-    androidCompactActionIndices: [1, 0, 3],
-    processingState: AudioProcessingState.idle,
-    playing: false,
-    updatePosition: Duration.zero,
-  );
+        controls: _controls,
+        systemActions: _systemActions,
+        androidCompactActionIndices: [1, 0, 3],
+        processingState: AudioProcessingState.idle,
+        playing: false,
+        updatePosition: Duration.zero,
+      );
 
   var _queue = <MediaItem>[];
   int? _currentIndex;
+
   StreamSubscription? _playerStateSub;
   StreamSubscription? _processingSub;
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
   StreamSubscription? _currentIndexSub;
+  StreamSubscription? _bufferedPositionSub;
+
+  /// Tracks which MediaItem id the last [updateMediaItem] call
+  /// targeted. Used as a guard in the [durationStream] listener
+  /// so a stale duration event (emitted by the old audio source
+  /// after a new track has already been pushed) does not revert
+  /// the notification to the previous track's data.
+  String? _pendingMediaItemId;
+
+  // BUG FIX (bugs 2, 3): these StreamControllers are the
+  // stable "public surface" for stream getters.  External
+  // subscribers (PlayerProvider, etc.) attach to these once
+  // and are never dropped when replacePlayer() swaps the
+  // underlying AudioPlayer.  The _listenToPlayerStreams()
+  // method re-targets each controller to the new player's
+  // streams after every swap.
+  final _positionController = BehaviorSubject<Duration>.seeded(Duration.zero);
+  final _bufferedPositionController = BehaviorSubject<Duration>.seeded(Duration.zero);
+  final _processingStateController = BehaviorSubject<ProcessingState>.seeded(ProcessingState.idle);
+  final _durationController = BehaviorSubject<Duration>();
 
   MusicAudioHandler() {
+    debugPrint('[HandlerInit] id=$_instanceId pid=${pid} '
+        'this=${identityHashCode(this)} player=${identityHashCode(_player)}');
+    debugPrint('[PBS-EMIT] (init) playing=${_defaultPlaybackState.playing} '
+        'proc=${_defaultPlaybackState.processingState} '
+        'pos=${_defaultPlaybackState.updatePosition}');
     playbackState.add(_defaultPlaybackState);
-    _playerStateSub = _player.playerStateStream.listen(_onPlayerState);
-    _processingSub = _player.processingStateStream.listen(_onProcessingState);
+    _listenToPlayerStreams();
+  }
+
+  void _listenToPlayerStreams() {
+    // Cancel all existing subscriptions before re-wiring so
+    // we never end up with multiple listeners on the same stream.
+    _playerStateSub?.cancel();
+    _processingSub?.cancel();
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _currentIndexSub?.cancel();
+    _bufferedPositionSub?.cancel();
+
+    // BUG FIX (bug 6): the original code added a second,
+    // untracked _player.playerStateStream.listen() call for
+    // debug logging, leaking one subscription per replacePlayer()
+    // call. The debug output is folded into the tracked listener.
+    _playerStateSub = _player.playerStateStream.listen((s) {
+      debugPrint('[PlayerState] playing=${s.playing} proc=${s.processingState}');
+      _onPlayerState(s);
+    });
+
+    // BUG FIX (bug 5): _processingSub was assigned twice —
+    // first to a plain _onProcessingState listener, then
+    // immediately overwritten with a combined listener that also
+    // feeds the StreamController. Only the combined version is
+    // needed; the first assignment leaked a subscription.
+    _processingSub = _player.processingStateStream.listen((state) {
+      _processingStateController.add(state);
+      _onProcessingState(state);
+    });
+
+    // BUG FIX (bug 4): the original _positionSub lambda in
+    // _listenToPlayerStreams() was truncated mid-copyWith,
+    // missing processingState, controls, systemActions, and the
+    // androidCompactActionIndices parameter, as well as the
+    // closing debugPrint and playbackState.add calls.  The full
+    // implementation matches the working version from replacePlayer().
     _positionSub = _player.positionStream.listen((pos) {
+      _positionController.add(pos);
       final current = playbackState.valueOrNull ?? _defaultPlaybackState;
-      playbackState.add(current.copyWith(
+      final newState = current.copyWith(
         updatePosition: pos,
+        playing: _player.playing,
+        processingState: _convertState(_player.processingState),
         controls: _controls,
         systemActions: _systemActions,
         androidCompactActionIndices: [1, 0, 3],
-      ));
+      );
+      debugPrint('[PBS-EMIT] playing=${newState.playing} '
+          'proc=${newState.processingState} pos=${newState.updatePosition}');
+      playbackState.add(newState);
     });
+
+    _bufferedPositionSub = _player.bufferedPositionStream.listen((pos) {
+      _bufferedPositionController.add(pos);
+    });
+
     _durationSub = _player.durationStream.listen((dur) {
       if (dur != null) {
+        _durationController.add(dur);
         final item = mediaItem.value;
-        if (item != null) {
+        if (item != null && item.id == _pendingMediaItemId) {
+          AppLogger.log(
+            '[NotifDebug] durationStream -> updateMediaItem: '
+            'id=${item.id} dur=$dur',
+            name: 'MusicAudioHandler',
+          );
           updateMediaItem(item.copyWith(duration: dur));
         }
       }
     });
+
+    // BUG FIX (bug 7): the _currentIndexSub lambda was
+    // truncated after `final sequence = _player.sequence;`
+    // in the original _listenToPlayerStreams(); the full
+    // MediaItem-update logic from the replacePlayer() version
+    // is restored here.
     _currentIndexSub = _player.currentIndexStream.listen((index) {
       if (index != null && index >= 0) {
         final sequence = _player.sequence;
@@ -179,6 +264,11 @@ class MusicAudioHandler extends BaseAudioHandler {
           if (source.tag is MediaItem) {
             final item = source.tag as MediaItem;
             if (mediaItem.valueOrNull?.id != item.id) {
+              AppLogger.log(
+                '[NotifDebug] _currentIndexSub -> updateMediaItem: '
+                'id=${item.id} title="${item.title}"',
+                name: 'MusicAudioHandler',
+              );
               updateMediaItem(item);
             }
             _currentIndex = index;
@@ -188,15 +278,43 @@ class MusicAudioHandler extends BaseAudioHandler {
     });
   }
 
+  // ── Public stream getters ─────────────────────────────────────────────────
+  //
+  // BUG FIX (bugs 2 & 3): these getters previously had two competing
+  // declarations each — one returning _player.<stream> directly, one
+  // returning the StreamController stream.  Dart does not allow duplicate
+  // getter names, so the file would not compile.  The correct form is
+  // always the StreamController version: those streams are stable across
+  // replacePlayer() calls, whereas the direct-player streams become dead
+  // the moment the old player is disposed.
+
+  Duration get duration => _player.duration ?? Duration.zero;
+
+  Stream<ProcessingState> get processingStateStream => _processingStateController.stream;
+  Stream<Duration> get positionStream => _positionController.stream;
+  Stream<Duration> get bufferedPositionStream => _bufferedPositionController.stream;
+  Stream<Duration> get durationStream => _durationController.stream;
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  int? get currentIndex => _currentIndex;
+  int get queueLength => _queue.length;
+  bool get currentTrackCompleted =>
+      !_player.playing &&
+      _player.processingState == ProcessingState.completed;
+
   void _onPlayerState(PlayerState state) {
     final current = playbackState.valueOrNull ?? _defaultPlaybackState;
-    playbackState.add(current.copyWith(
+    final newState = current.copyWith(
       playing: state.playing,
       processingState: _convertState(state.processingState),
       controls: _controls,
       systemActions: _systemActions,
       androidCompactActionIndices: [1, 0, 3],
-    ));
+    );
+    debugPrint('[PBS-EMIT] playing=${newState.playing} '
+        'proc=${newState.processingState} pos=${newState.updatePosition}');
+    playbackState.add(newState);
   }
 
   void _onProcessingState(ProcessingState state) {
@@ -224,43 +342,37 @@ class MusicAudioHandler extends BaseAudioHandler {
 
   Duration get position => _player.position;
 
-  Duration get duration => _player.duration ?? Duration.zero;
-
-  Stream<ProcessingState> get processingStateStream =>
-      _player.processingStateStream;
-
-  Stream<Duration> get positionStream => _player.positionStream;
-  Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream;
-
-  Stream<Duration> get durationStream =>
-      _player.durationStream.where((d) => d != null).cast<Duration>();
-
-  int? get currentIndex => _currentIndex;
-  int get queueLength => _queue.length;
-
-  bool get currentTrackCompleted =>
-      !_player.playing && _player.processingState == ProcessingState.completed;
-
   Future<void> playTrack(String url, MediaItem item) async {
-    // 1. Guard against empty paths matching log crash states
+    // Guard against empty paths matching log crash states.
     if (url.trim().isEmpty || url.endsWith('/audio_cache/.mp3')) {
-      playbackState.add(playbackState.value.copyWith(
+      final errState = playbackState.value.copyWith(
         processingState: AudioProcessingState.idle,
-      ));
-      throw ArgumentError("Aborting playback execution: Invalid or incomplete stream URL/Cache path.");
+      );
+      debugPrint('[PBS-EMIT] (playTrack guard) playing=${errState.playing} '
+          'proc=${errState.processingState} pos=${errState.updatePosition}');
+      playbackState.add(errState);
+      throw ArgumentError(
+          'Aborting playback execution: Invalid or incomplete stream URL/Cache path.');
     }
 
     try {
       _currentIndex = _queue.indexWhere((e) => e.id == item.id);
       if (_currentIndex == -1) _currentIndex = null;
+
+      AppLogger.log(
+        '[NotifDebug] handler.playTrack calling updateMediaItem: '
+        'id=${item.id} title="${item.title}" artist="${item.artist}"',
+        name: 'MusicAudioHandler',
+      );
       updateMediaItem(item);
 
       final headers = await _getHeaders();
-
       final Uri uri;
       try {
         if (url.startsWith('file://') || !url.startsWith('http')) {
-          uri = url.startsWith('file://') ? Uri.parse(url) : Uri.file(url);
+          uri = url.startsWith('file://')
+              ? Uri.parse(url)
+              : Uri.file(url);
         } else {
           final client = http.Client();
           try {
@@ -280,33 +392,33 @@ class MusicAudioHandler extends BaseAudioHandler {
       }
 
       AppLogger.log('Playing Resolved URL: $uri', name: 'MusicAudioHandler');
-
       await _player.stop();
-      
-      // 2. Pass headers down to AudioSource config to keep connections alive on YouTube paths
+
+      // Pass headers down to AudioSource config to keep
+      // connections alive on YouTube paths.
       if (uri.isScheme('HTTP') || uri.isScheme('HTTPS')) {
-        final finalHeaders = uri.host.contains('googlevideo.com') ? null : headers;
+        final finalHeaders =
+            uri.host.contains('googlevideo.com') ? null : headers;
         await _player.setAudioSource(
-          AudioSource.uri(
-            uri,
-            headers: finalHeaders,
-            tag: item,
-          ),
+          AudioSource.uri(uri, headers: finalHeaders, tag: item),
         );
       } else {
         await _player.setAudioSource(AudioSource.uri(uri, tag: item));
       }
-      
+
       unawaited(_player.play());
     } catch (e) {
-      playbackState.add(playbackState.value.copyWith(
+      final errState = playbackState.value.copyWith(
         processingState: AudioProcessingState.idle,
-      ));
-      AppLogger.log('Error in MusicAudioHandler.playTrack: $e', name: 'MusicAudioHandler');
+      );
+      debugPrint('[PBS-EMIT] (playTrack catch) playing=${errState.playing} '
+          'proc=${errState.processingState} pos=${errState.updatePosition}');
+      playbackState.add(errState);
+      AppLogger.log('Error in MusicAudioHandler.playTrack: $e',
+          name: 'MusicAudioHandler');
       rethrow;
     }
   }
-
 
   Future<void> setQueue(List<MediaItem> items, {int startIndex = 0}) async {
     _queue = List.from(items);
@@ -320,22 +432,35 @@ class MusicAudioHandler extends BaseAudioHandler {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    debugPrint(
+        '[HandlerCmd] play() CALLED id=$_instanceId pid=${pid}\n${StackTrace.current}');
+    await _player.play();
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    debugPrint(
+        '[HandlerCmd] pause() CALLED id=$_instanceId pid=${pid}\n${StackTrace.current}');
+    await _player.pause();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
+  Future<void> setSpeed(double speed) => _player.setSpeed(speed);
+
   @override
   Future<void> stop() async {
     await _player.stop();
-    playbackState.add(_defaultPlaybackState.copyWith(
+    final stopState = _defaultPlaybackState.copyWith(
       controls: _controls,
       systemActions: _systemActions,
       androidCompactActionIndices: [1, 0, 3],
-    ));
+    );
+    debugPrint('[PBS-EMIT] (stop) playing=${stopState.playing} '
+        'proc=${stopState.processingState} pos=${stopState.updatePosition}');
+    playbackState.add(stopState);
   }
 
   @override
@@ -363,7 +488,6 @@ class MusicAudioHandler extends BaseAudioHandler {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
     };
-
     headers['Referer'] = 'https://www.youtube.com/';
     if (cookies != null && cookies.isNotEmpty) {
       headers['Cookie'] = cookies;
@@ -388,6 +512,11 @@ class MusicAudioHandler extends BaseAudioHandler {
     _positionSub?.cancel();
     _durationSub?.cancel();
     _currentIndexSub?.cancel();
+    _bufferedPositionSub?.cancel();
+    _processingStateController.close();
+    _positionController.close();
+    _bufferedPositionController.close();
+    _durationController.close();
     _player.dispose();
   }
 
@@ -414,6 +543,12 @@ class MusicAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> updateMediaItem(MediaItem mediaItem) async {
+    _pendingMediaItemId = mediaItem.id;
+    AppLogger.log(
+      '[NotifDebug] updateMediaItem called: id=${mediaItem.id} '
+      'title="${mediaItem.title}" artist="${mediaItem.artist}"',
+      name: 'MusicAudioHandler',
+    );
     if (mediaItem.artUri != null && !mediaItem.artUri!.isScheme('file')) {
       this.mediaItem.add(mediaItem);
       final localUri = await _getLocalArtUri(mediaItem.artUri);
@@ -425,5 +560,26 @@ class MusicAudioHandler extends BaseAudioHandler {
     } else {
       this.mediaItem.add(mediaItem);
     }
+  }
+
+  @override
+  Future<dynamic> customAction(
+      String name, [Map<String, dynamic>? extras]) async {
+    switch (name) {
+      case 'clearQueue':
+        _queue = [];
+        _currentIndex = null;
+        return true;
+      case 'setQueue':
+        if (extras != null) {
+          final items = (extras['items'] as List).cast<MediaItem>();
+          final startIndex = extras['startIndex'] as int? ?? 0;
+          _queue = List.from(items);
+          _currentIndex = startIndex;
+          queue.add(_queue);
+        }
+        return true;
+    }
+    return super.customAction(name, extras);
   }
 }

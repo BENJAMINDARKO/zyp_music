@@ -438,6 +438,9 @@ class QueueManager extends ChangeNotifier {
             duration: (downloaded['durationSeconds'] as int?) == null
                 ? null
                 : Duration(seconds: downloaded['durationSeconds'] as int),
+            albumId: downloaded['albumId'] as String?,
+            album: downloaded['album'] as String?,
+            year: downloaded['year'] as int?,
             source: TrackSource.youtube,
           );
         }

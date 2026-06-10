@@ -23,6 +23,119 @@ class CachedArtistGenres {
   });
 }
 
+/// Result of [PlaylistDatabase.getTopSongsPerTopGenre] — one track per
+/// top-listened genre.
+class TopGenreTrack {
+  final String trackId;
+  final String? title;
+  final String? artistName;
+  final String? thumbnailUrl;
+  final String primaryGenre;
+  final int playCount;
+
+  const TopGenreTrack({
+    required this.trackId,
+    required this.title,
+    required this.artistName,
+    required this.thumbnailUrl,
+    required this.primaryGenre,
+    required this.playCount,
+  });
+}
+
+/// Result of [PlaylistDatabase.getMostPlayedAlbumsAndSingles] — mixed list
+/// of albums and singles.
+class PopularItem {
+  final String kind;
+  final String id;
+  final String? title;
+  final String? artistName;
+  final String? thumbnailUrl;
+  final int playCount;
+
+  const PopularItem({
+    required this.kind,
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.thumbnailUrl,
+    required this.playCount,
+  });
+
+  bool get isAlbum => kind == 'album';
+  bool get isSingle => kind == 'single';
+}
+
+/// Result of [PlaylistDatabase.getListeningStats] — aggregate stats for
+/// the Library Stats UI.
+class ListeningStats {
+  final int distinctGenreCount;
+  final int distinctArtistCount;
+  final List<ArtistPlayStat> topArtists;
+  final List<AlbumPlayStat> topAlbums;
+
+  const ListeningStats({
+    required this.distinctGenreCount,
+    required this.distinctArtistCount,
+    required this.topArtists,
+    required this.topAlbums,
+  });
+
+  static const ListeningStats empty = ListeningStats(
+    distinctGenreCount: 0,
+    distinctArtistCount: 0,
+    topArtists: [],
+    topAlbums: [],
+  );
+}
+
+class ArtistPlayStat {
+  final String artistName;
+  final int playCount;
+  const ArtistPlayStat({required this.artistName, required this.playCount});
+}
+
+class HistoryArtistEntry {
+  final String artistName;
+  final int playCount;
+  final String? sampleTrackId;
+  final String? thumbnailUrl;
+
+  const HistoryArtistEntry({
+    required this.artistName,
+    required this.playCount,
+    required this.sampleTrackId,
+    required this.thumbnailUrl,
+  });
+}
+
+class AlbumPlayStat {
+  final String albumId;
+  final String? albumTitle;
+  final int playCount;
+  const AlbumPlayStat({
+    required this.albumId,
+    required this.albumTitle,
+    required this.playCount,
+  });
+}
+
+class _AlbumAggregate {
+  final String albumId;
+  final String? albumTitle;
+  final String? artistName;
+  final String? thumbnailUrl;
+  int playCount;
+
+  _AlbumAggregate({
+    required this.albumId,
+    required this.albumTitle,
+    required this.artistName,
+    required this.thumbnailUrl,
+    required this.playCount,
+  });
+}
+
 class PlaylistDatabase {
   /// Test-only factory: instantiates a fresh [PlaylistDatabase]
   /// backed by [path] (caller is responsible for the file's
@@ -88,7 +201,7 @@ class PlaylistDatabase {
     }
     return openDatabase(
       path,
-      version: 15,
+      version: 16,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -128,6 +241,9 @@ class PlaylistDatabase {
         thumbnailUrl TEXT,
         durationSeconds INTEGER DEFAULT 0,
         author TEXT,
+        album TEXT DEFAULT NULL,
+        albumId TEXT DEFAULT NULL,
+        year INTEGER DEFAULT NULL,
         filePath TEXT NOT NULL,
         downloadedAt INTEGER NOT NULL,
         source TEXT DEFAULT 'youtube'
@@ -480,6 +596,24 @@ class PlaylistDatabase {
         'country_code TEXT DEFAULT NULL',
       );
     }
+    if (oldVersion < 16) {
+      // Phase 1: add album/albumId/year columns to downloaded_tracks
+      // for the Home Feed data layer (album/single classification and
+      // album aggregation queries). Existing rows get NULL; new rows
+      // are populated by markTrackDownloaded from the Track entity.
+      await db.execute(
+        'ALTER TABLE downloaded_tracks ADD COLUMN '
+        'album TEXT DEFAULT NULL',
+      );
+      await db.execute(
+        'ALTER TABLE downloaded_tracks ADD COLUMN '
+        'albumId TEXT DEFAULT NULL',
+      );
+      await db.execute(
+        'ALTER TABLE downloaded_tracks ADD COLUMN '
+        'year INTEGER DEFAULT NULL',
+      );
+    }
   }
 
   Future<CachedArtistGenres?> getCachedArtistGenres(String normalizedArtist) async {
@@ -738,7 +872,8 @@ class PlaylistDatabase {
 
   Future<void> markTrackDownloaded(
       String trackId, String playlistId, String filePath,
-      {String title = '', String? thumbnailUrl, int? durationSeconds, String? author}) async {
+      {String title = '', String? thumbnailUrl, int? durationSeconds, String? author,
+      String? album, String? albumId, int? year}) async {
     final db = await database;
     await db.insert('downloaded_tracks', {
       'id': trackId,
@@ -747,6 +882,9 @@ class PlaylistDatabase {
       'thumbnailUrl': thumbnailUrl,
       'durationSeconds': durationSeconds,
       'author': author,
+      'album': album,
+      'albumId': albumId,
+      'year': year,
       'filePath': filePath,
       'downloadedAt': DateTime.now().millisecondsSinceEpoch,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -900,6 +1038,17 @@ class PlaylistDatabase {
     final db = await database;
     final result = await db.query('downloaded_tracks', columns: ['id']);
     return result.map((r) => r['id'] as String).toSet();
+  }
+
+  /// Returns all rows from downloaded_tracks, ordered by most recently
+  /// downloaded first.
+  Future<List<Map<String, dynamic>>> getAllDownloadedTracks() async {
+    final db = await database;
+    return db.rawQuery('''
+      SELECT *
+      FROM downloaded_tracks
+      ORDER BY downloadedAt DESC
+    ''');
   }
 
   Future<Set<String>> getFullyDownloadedPlaylistIds() async {
@@ -1175,5 +1324,266 @@ class PlaylistDatabase {
     );
     if (rows.isEmpty) return null;
     return rows.first['genre'] as String?;
+  }
+
+  // -------------------------------------------------------------------------
+  // Home Feed Queries (Phase 1)
+  // -------------------------------------------------------------------------
+
+  /// Returns the top track from each of the top N most-played genres in the
+  /// full 180-day window of dj_listening_history.
+  Future<List<TopGenreTrack>> getTopSongsPerTopGenre({
+    int genreLimit = 6,
+    int trackLimitPerGenre = 1,
+  }) async {
+    final db = await database;
+
+    final topGenresResult = await db.rawQuery('''
+      SELECT primary_genre, COUNT(*) as plays
+      FROM dj_listening_history
+      WHERE primary_genre != 'Unknown' AND primary_genre IS NOT NULL
+      GROUP BY primary_genre
+      ORDER BY plays DESC
+      LIMIT ?
+    ''', [genreLimit]);
+
+    if (topGenresResult.isEmpty) return [];
+
+    final result = <TopGenreTrack>[];
+
+    for (final genreRow in topGenresResult) {
+      final genre = genreRow['primary_genre'] as String;
+
+      final trackResult = await db.rawQuery('''
+        SELECT
+          h.track_id,
+          h.artist_name,
+          h.primary_genre,
+          COUNT(*) as plays,
+          dt.title,
+          dt.thumbnailUrl
+        FROM dj_listening_history h
+        LEFT JOIN downloaded_tracks dt ON dt.id = h.track_id
+        WHERE h.primary_genre = ?
+        GROUP BY h.track_id
+        ORDER BY plays DESC
+        LIMIT ?
+      ''', [genre, trackLimitPerGenre]);
+
+      for (final trackRow in trackResult) {
+        result.add(TopGenreTrack(
+          trackId: trackRow['track_id'] as String,
+          title: trackRow['title'] as String?,
+          artistName: trackRow['artist_name'] as String?,
+          thumbnailUrl: trackRow['thumbnailUrl'] as String?,
+          primaryGenre: trackRow['primary_genre'] as String,
+          playCount: trackRow['plays'] as int,
+        ));
+      }
+    }
+
+    return result;
+  }
+
+  /// Returns the top N most-played items, mixed between albums and singles,
+  /// ranked by total play count in the 180-day window.
+  Future<List<PopularItem>> getMostPlayedAlbumsAndSingles({
+    int limit = 10,
+  }) async {
+    final db = await database;
+
+    final rows = await db.rawQuery('''
+      SELECT
+        h.track_id,
+        h.artist_name,
+        COUNT(*) as plays,
+        dt.title,
+        dt.author,
+        dt.album,
+        dt.albumId,
+        dt.thumbnailUrl
+      FROM dj_listening_history h
+      LEFT JOIN downloaded_tracks dt ON dt.id = h.track_id
+      GROUP BY h.track_id
+    ''');
+
+    final albumAggregates = <String, _AlbumAggregate>{};
+    final singleEntries = <PopularItem>[];
+
+    for (final row in rows) {
+      final trackId = row['track_id'] as String;
+      final title = row['title'] as String?;
+      final album = row['album'] as String?;
+      final albumId = row['albumId'] as String?;
+      final plays = row['plays'] as int;
+      final artistName = row['author'] as String?;
+      final thumbnailUrl = row['thumbnailUrl'] as String?;
+
+      final isSingle = album == null ||
+          album.isEmpty ||
+          (title != null && album.toLowerCase() == title.toLowerCase());
+
+      if (isSingle) {
+        singleEntries.add(PopularItem(
+          kind: 'single',
+          id: trackId,
+          title: title ?? 'Unknown',
+          artistName: artistName,
+          thumbnailUrl: thumbnailUrl,
+          playCount: plays,
+        ));
+      } else if (albumId != null) {
+        final existing = albumAggregates[albumId];
+        if (existing == null) {
+          albumAggregates[albumId] = _AlbumAggregate(
+            albumId: albumId,
+            albumTitle: album,
+            artistName: artistName,
+            thumbnailUrl: thumbnailUrl,
+            playCount: plays,
+          );
+        } else {
+          existing.playCount += plays;
+        }
+      }
+    }
+
+    final albumEntries = albumAggregates.values.map((agg) => PopularItem(
+          kind: 'album',
+          id: agg.albumId,
+          title: agg.albumTitle,
+          artistName: agg.artistName,
+          thumbnailUrl: agg.thumbnailUrl,
+          playCount: agg.playCount,
+        ));
+
+    final all = [...albumEntries, ...singleEntries];
+    all.sort((a, b) => b.playCount.compareTo(a.playCount));
+
+    return all.take(limit).toList();
+  }
+
+  /// Returns aggregate listening statistics for the last 30 days.
+  Future<ListeningStats> getListeningStats() async {
+    final db = await database;
+    final cutoffMs = DateTime.now()
+        .subtract(const Duration(days: 30))
+        .millisecondsSinceEpoch;
+
+    final countsResult = await db.rawQuery('''
+      SELECT
+        COUNT(DISTINCT primary_genre) as genre_count,
+        COUNT(DISTINCT artist_name) as artist_count
+      FROM dj_listening_history
+      WHERE timestamp > ?
+        AND primary_genre IS NOT NULL
+        AND primary_genre != 'Unknown'
+        AND artist_name IS NOT NULL
+        AND artist_name != ''
+        AND artist_name != 'Unknown'
+    ''', [cutoffMs]);
+
+    if (countsResult.isEmpty) return ListeningStats.empty;
+
+    final distinctGenres = countsResult.first['genre_count'] as int? ?? 0;
+    final distinctArtists = countsResult.first['artist_count'] as int? ?? 0;
+
+    if (distinctArtists == 0) return ListeningStats.empty;
+
+    final topArtistsResult = await db.rawQuery('''
+      SELECT artist_name, COUNT(*) as plays
+      FROM dj_listening_history
+      WHERE timestamp > ?
+        AND artist_name IS NOT NULL
+        AND artist_name != ''
+        AND artist_name != 'Unknown'
+      GROUP BY artist_name
+      ORDER BY plays DESC
+      LIMIT 3
+    ''', [cutoffMs]);
+
+    final topArtists = topArtistsResult.map((r) => ArtistPlayStat(
+          artistName: r['artist_name'] as String,
+          playCount: r['plays'] as int,
+        )).toList();
+
+    final albumsRaw = await db.rawQuery('''
+      SELECT
+        dt.albumId,
+        dt.album,
+        COUNT(*) as plays
+      FROM dj_listening_history h
+      INNER JOIN downloaded_tracks dt ON dt.id = h.track_id
+      WHERE h.timestamp > ?
+        AND dt.albumId IS NOT NULL
+        AND dt.album IS NOT NULL
+        AND dt.album != ''
+        AND LOWER(dt.album) != LOWER(dt.title)
+      GROUP BY dt.albumId
+      ORDER BY plays DESC
+      LIMIT 3
+    ''', [cutoffMs]);
+
+    final topAlbums = albumsRaw.map((r) => AlbumPlayStat(
+          albumId: r['albumId'] as String,
+          albumTitle: r['album'] as String?,
+          playCount: r['plays'] as int,
+        )).toList();
+
+    return ListeningStats(
+      distinctGenreCount: distinctGenres,
+      distinctArtistCount: distinctArtists,
+      topArtists: topArtists,
+      topAlbums: topAlbums,
+    );
+  }
+
+  Future<List<HistoryArtistEntry>> getTopArtistsFromHistory({
+    int limit = 10,
+  }) async {
+    final db = await database;
+    final topArtistsResult = await db.rawQuery('''
+      SELECT artist_name, COUNT(*) as plays
+      FROM dj_listening_history
+      WHERE artist_name IS NOT NULL
+        AND artist_name != ''
+        AND artist_name != 'Unknown'
+      GROUP BY artist_name
+      ORDER BY plays DESC
+      LIMIT ?
+    ''', [limit]);
+
+    if (topArtistsResult.isEmpty) return [];
+
+    final result = <HistoryArtistEntry>[];
+
+    for (final artistRow in topArtistsResult) {
+      final artistName = artistRow['artist_name'] as String;
+      final playCount = artistRow['plays'] as int;
+
+      final sampleResult = await db.rawQuery('''
+        SELECT
+          h.track_id,
+          dt.thumbnailUrl,
+          COUNT(*) as track_plays
+        FROM dj_listening_history h
+        LEFT JOIN downloaded_tracks dt ON dt.id = h.track_id
+        WHERE h.artist_name = ?
+        GROUP BY h.track_id
+        ORDER BY track_plays DESC
+        LIMIT 1
+      ''', [artistName]);
+
+      final sampleRow = sampleResult.isNotEmpty ? sampleResult.first : null;
+
+      result.add(HistoryArtistEntry(
+        artistName: artistName,
+        playCount: playCount,
+        sampleTrackId: sampleRow?['track_id'] as String?,
+        thumbnailUrl: sampleRow?['thumbnailUrl'] as String?,
+      ));
+    }
+
+    return result;
   }
 }

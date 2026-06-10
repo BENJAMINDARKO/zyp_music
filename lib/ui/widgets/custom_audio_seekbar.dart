@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'dart:math';
 
 enum SeekbarStyle { gradient, waveform, minimal, wavy, segmented }

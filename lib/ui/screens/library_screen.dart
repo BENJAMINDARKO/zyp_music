@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/playlist_provider.dart';
@@ -9,6 +10,8 @@ import '../../domain/entities/artist.dart';
 import '../../domain/entities/video.dart';
 import '../../core/utils/format_duration.dart';
 import '../widgets/track_context_menu.dart';
+import '../widgets/listening_stats_view.dart';
+import '../widgets/downloaded_view.dart';
 import 'playlist_screen.dart';
 import 'album_screen.dart';
 import 'artist_screen.dart';
@@ -22,22 +25,42 @@ class LibraryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 6,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const TabBar(
+          TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             indicatorColor: Color(0xFFEAB308),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white54,
+            labelColor: Theme.of(context).colorScheme.onSurface,
+            unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
             dividerColor: Color(0xFF2A2A2A),
             tabs: [
-              Tab(text: "Tracks"),
-              Tab(text: "Albums"),
-              Tab(text: "Artists"),
-              Tab(text: "Playlists"),
+              Tab(
+                icon: Icon(PhosphorIconsRegular.musicNote, size: 18),
+                text: "Tracks",
+              ),
+              Tab(
+                icon: Icon(PhosphorIconsRegular.discoBall, size: 18),
+                text: "Albums",
+              ),
+              Tab(
+                icon: Icon(PhosphorIconsRegular.user, size: 18),
+                text: "Artists",
+              ),
+              Tab(
+                icon: Icon(PhosphorIconsRegular.playlist, size: 18),
+                text: "Playlists",
+              ),
+              Tab(
+                icon: Icon(PhosphorIconsRegular.chartBar, size: 18),
+                text: "Listening Stats",
+              ),
+              Tab(
+                icon: Icon(PhosphorIconsRegular.downloadSimple, size: 18),
+                text: "Downloaded",
+              ),
             ],
           ),
           Expanded(
@@ -47,6 +70,8 @@ class LibraryScreen extends StatelessWidget {
                 _buildLikedAlbumsTab(context),
                 _buildLikedArtistsTab(context),
                 _buildPlaylistsTab(context),
+                const ListeningStatsView(),
+                const DownloadedView(),
               ],
             ),
           ),
@@ -61,11 +86,11 @@ class LibraryScreen extends StatelessWidget {
         final favorites = provider.favoriteTracks;
 
         if (favorites.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
               "No liked songs yet.\nFavorite a song to see it here.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 16),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 16),
             ),
           );
         }
@@ -90,20 +115,20 @@ class LibraryScreen extends StatelessWidget {
                       child: CachedNetworkImage(
                         imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
                         fit: BoxFit.cover,
-                        errorWidget: (context, url, error) => const Icon(Icons.music_note, color: Colors.white54),
+                        errorWidget: (context, url, error) => const Icon(PhosphorIconsRegular.musicNote, color: Colors.white54),
                       ),
                     )
-                  : const Icon(Icons.music_note, color: Colors.white54),
+                  : const Icon(PhosphorIconsRegular.musicNote, color: Colors.white54),
               ),
               title: Text(
                 track.title,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontWeight: FontWeight.bold),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
                 track.author ?? 'Unknown Artist',
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -111,7 +136,7 @@ class LibraryScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.favorite, color: Color(0xFFEAB308)),
+                    icon: const Icon(PhosphorIconsFill.heart, color: Color(0xFFEAB308)),
                     onPressed: () {
                       final dl = context.read<DownloadProvider>();
                       provider.toggleFavorite(track, downloadProvider: dl);
@@ -119,7 +144,7 @@ class LibraryScreen extends StatelessWidget {
                   ),
                   TrackDownloadIcon(track: track, size: 20),
                   IconButton(
-                    icon: const Icon(Icons.more_vert, color: Colors.white54),
+                    icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
                     onPressed: () => TrackContextMenu.show(context, track),
                   ),
                 ],
@@ -143,11 +168,11 @@ class LibraryScreen extends StatelessWidget {
         final albums = provider.favoriteAlbums;
 
         if (albums.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
               "No liked albums yet.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 16),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 16),
             ),
           );
         }
@@ -168,18 +193,18 @@ class LibraryScreen extends StatelessWidget {
                         fit: BoxFit.cover,
                         errorWidget: (context, url, error) => Container(
                           width: 48, height: 48, color: Colors.grey[800],
-                          child: const Icon(Icons.album, color: Colors.white54),
+                          child: const Icon(PhosphorIconsRegular.discoBall, color: Colors.white54),
                         ),
                       )
                     : Container(
                         width: 48, height: 48, color: Colors.grey[800],
-                        child: const Icon(Icons.album, color: Colors.white54),
+                        child: const Icon(PhosphorIconsRegular.discoBall, color: Colors.white54),
                       ),
               ),
-              title: Text(album.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text('${album.artistName ?? 'Unknown'} • ${album.year ?? ''}', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: Text(album.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text('${album.artistName ?? 'Unknown'} • ${album.year ?? ''}', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)), maxLines: 1, overflow: TextOverflow.ellipsis),
               trailing: IconButton(
-                icon: const Icon(Icons.favorite, color: Colors.red),
+                icon: const Icon(PhosphorIconsFill.heart, color: Colors.red),
                 onPressed: () {
                   final dl = context.read<DownloadProvider>();
                   provider.toggleFavoriteAlbum(album, downloadProvider: dl);
@@ -206,11 +231,11 @@ class LibraryScreen extends StatelessWidget {
         final artists = provider.favoriteArtists;
 
         if (artists.isEmpty) {
-          return const Center(
+          return Center(
             child: Text(
               "No liked artists yet.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 16),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 16),
             ),
           );
         }
@@ -231,17 +256,17 @@ class LibraryScreen extends StatelessWidget {
                         fit: BoxFit.cover,
                         errorWidget: (context, url, error) => Container(
                           width: 48, height: 48, color: Colors.grey[800],
-                          child: const Icon(Icons.person, color: Colors.white54),
+                          child: const Icon(PhosphorIconsRegular.user, color: Colors.white54),
                         ),
                       )
                     : Container(
                         width: 48, height: 48, color: Colors.grey[800],
-                        child: const Icon(Icons.person, color: Colors.white54),
+                        child: const Icon(PhosphorIconsRegular.user, color: Colors.white54),
                       ),
               ),
-              title: Text(artist.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+              title: Text(artist.name, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
               trailing: IconButton(
-                icon: const Icon(Icons.favorite, color: Colors.red),
+                icon: const Icon(PhosphorIconsFill.heart, color: Colors.red),
                 onPressed: () {
                   provider.toggleFavoriteArtist(artist);
                 },
@@ -269,11 +294,11 @@ class LibraryScreen extends StatelessWidget {
         if (playlists.isEmpty) {
           return Stack(
             children: [
-              const Center(
+              Center(
                 child: Text(
                   "You don't have any playlists yet.\nTap + to create one.",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54, fontSize: 16),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 16),
                 ),
               ),
               Positioned(
@@ -286,7 +311,7 @@ class LibraryScreen extends StatelessWidget {
                       const SnackBar(content: Text('Playlist creation coming soon!')),
                     );
                   },
-                  child: const Icon(Icons.add, color: Colors.black),
+                  child: const Icon(PhosphorIconsRegular.plus, color: Colors.black),
                 ),
               ),
             ],
@@ -311,16 +336,16 @@ class LibraryScreen extends StatelessWidget {
                             fit: BoxFit.cover,
                             errorWidget: (context, url, error) => Container(
                               width: 48, height: 48, color: Colors.grey[800],
-                              child: const Icon(Icons.queue_music, color: Colors.white54),
+                              child: const Icon(PhosphorIconsRegular.queue, color: Colors.white54),
                             ),
                           )
                         : Container(
                             width: 48, height: 48, color: Colors.grey[800],
-                            child: const Icon(Icons.queue_music, color: Colors.white54),
+                            child: const Icon(PhosphorIconsRegular.queue, color: Colors.white54),
                           ),
                   ),
-                  title: Text(playlist.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(playlist.author ?? 'Local Playlist', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(playlist.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(playlist.author ?? 'Local Playlist', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)), maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -342,7 +367,7 @@ class LibraryScreen extends StatelessWidget {
                     const SnackBar(content: Text('Playlist creation coming soon!')),
                   );
                 },
-                child: const Icon(Icons.add, color: Colors.black),
+                child: const Icon(PhosphorIconsRegular.plus, color: Colors.black),
               ),
             ),
           ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:audio_service/audio_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/audio/dsp_crossfade_engine.dart';
 import 'domain/repositories/audio_repository.dart';
@@ -7,11 +8,11 @@ import 'domain/repositories/playlist_repository.dart';
 import 'presentation/providers/player_provider.dart';
 import 'presentation/providers/playlist_provider.dart';
 import 'presentation/providers/download_provider.dart';
+import 'presentation/providers/home_feed_provider.dart';
 import 'presentation/providers/settings_provider.dart';
 import 'presentation/providers/miniplayer_visibility_provider.dart';
 import 'presentation/providers/charts_provider.dart';
 import 'data/repositories/charts_repository_impl.dart';
-import 'service/audio_handler.dart';
 import 'ui/layout/main_layout.dart';
 import 'ui/widgets/bottom_player.dart';
 import 'ui/widgets/global_background.dart';
@@ -31,7 +32,7 @@ class MonochromeApp extends StatelessWidget {
   final dynamic chartsRepository;
   final DownloadProvider downloadProvider;
   final SettingsProvider settingsProvider;
-  final MusicAudioHandler audioHandler;
+  final AudioHandler audioHandler;
   final HybridCacheService hybridCache;
   final ConnectivityService connectivityService;
   final QueueManager queueManager;
@@ -57,6 +58,7 @@ class MonochromeApp extends StatelessWidget {
   /// to the widget tree so the Shuffle Library filter
   /// sub-menu can query `getGenreClusterCounts()` on open.
   final PlaylistDatabase playlistDatabase;
+  final HomeFeedProvider homeFeedProvider;
 
   const MonochromeApp({
     super.key,
@@ -74,6 +76,7 @@ class MonochromeApp extends StatelessWidget {
     required this.dspEngine,
     required this.genreEnrichmentService,
     required this.playlistDatabase,
+    required this.homeFeedProvider,
     this.routingService,
   });
 
@@ -133,6 +136,9 @@ class MonochromeApp extends StatelessWidget {
         ),
         ChangeNotifierProvider.value(
           value: downloadProvider,
+        ),
+        ChangeNotifierProvider.value(
+          value: homeFeedProvider,
         ),
         ChangeNotifierProvider(
           create: (_) => MiniplayerVisibilityProvider(),

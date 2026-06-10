@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/hybrid_cache_service.dart';
 import '../../domain/entities/album.dart';
@@ -133,15 +134,15 @@ class _AlbumDownloadIconState extends State<AlbumDownloadIcon> {
             break;
           case CachedState.success:
             icon = Icon(
-              isFullyDownloaded ? Icons.download_done : Icons.check_circle,
+              isFullyDownloaded ? PhosphorIconsFill.checkCircle : PhosphorIconsFill.checkCircle,
               color: Colors.red,
               size: widget.size,
             );
             break;
           case CachedState.idle:
             icon = Icon(
-              Icons.download_for_offline,
-              color: Colors.white54,
+              PhosphorIconsRegular.downloadSimple,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
               size: widget.size,
             );
             break;
@@ -153,8 +154,8 @@ class _AlbumDownloadIconState extends State<AlbumDownloadIcon> {
             // branch on it without re-deriving intent from the icon
             // widget.
             icon = Icon(
-              Icons.download_for_offline,
-              color: Colors.white54,
+              PhosphorIconsRegular.downloadSimple,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
               size: widget.size,
             );
             break;

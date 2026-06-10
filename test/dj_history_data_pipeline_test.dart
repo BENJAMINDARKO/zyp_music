@@ -115,7 +115,7 @@ void main() {
           trackId: track.id,
           artistName: track.author!,
           primaryGenre: primaryGenre,
-          timestampMs: 1_000,
+          timestampMs: DateTime.now().millisecondsSinceEpoch,
         ));
 
         final rows = await ledger.getAll();
@@ -148,7 +148,7 @@ void main() {
           trackId: track.id,
           artistName: track.author!,
           primaryGenre: primaryGenre,
-          timestampMs: 2_000,
+          timestampMs: DateTime.now().millisecondsSinceEpoch,
         ));
 
         final rows = await ledger.getAll();
@@ -177,7 +177,7 @@ void main() {
           trackId: track.id,
           artistName: track.author!,
           primaryGenre: primaryGenre,
-          timestampMs: 3_000,
+          timestampMs: DateTime.now().millisecondsSinceEpoch,
         ));
 
         final rows = await ledger.getAll();
@@ -209,7 +209,7 @@ void main() {
           trackId: track.id,
           artistName: track.author!,
           primaryGenre: primaryGenre,
-          timestampMs: 4_000,
+          timestampMs: DateTime.now().millisecondsSinceEpoch,
         ));
 
         final rows = await ledger.getAll();
@@ -266,7 +266,7 @@ void main() {
             trackId: track.id,
             artistName: track.author!,
             primaryGenre: pg,
-            timestampMs: 1_000 + track.id.hashCode,
+            timestampMs: DateTime.now().millisecondsSinceEpoch + track.id.hashCode,
           ));
         }
 

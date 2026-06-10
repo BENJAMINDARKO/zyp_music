@@ -490,6 +490,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
               ? null
               : Duration(seconds: s.duration!),
           author: s.artist.name,
+          albumId: s.album?.albumId,
           index: 0,
         )).toList(),
       );
@@ -532,6 +533,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
             ? null
             : Duration(seconds: s.duration!),
         author: a.name,
+        albumId: s.album?.albumId,
         index: 0,
       )).toList(),
     );

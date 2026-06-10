@@ -37,6 +37,7 @@ class Track {
   /// as `0:00`.
   final Duration? duration;
   final String? author;
+  final String? albumId;
   final String? album;
   final String? albumArtist;
   final int? year;
@@ -79,6 +80,7 @@ class Track {
     this.thumbnailUrl,
     this.duration,
     this.author,
+    this.albumId,
     this.album,
     this.albumArtist,
     this.year,
@@ -97,6 +99,7 @@ class Track {
     String? thumbnailUrl,
     Duration? duration,
     String? author,
+    String? albumId,
     String? album,
     String? albumArtist,
     int? year,
@@ -114,6 +117,7 @@ class Track {
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       duration: duration ?? this.duration,
       author: author ?? this.author,
+      albumId: albumId ?? this.albumId,
       album: album ?? this.album,
       albumArtist: albumArtist ?? this.albumArtist,
       year: year ?? this.year,

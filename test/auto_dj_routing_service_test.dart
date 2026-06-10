@@ -8,6 +8,7 @@
 //   * Simulate a network disconnect and verify all five modes
 //     extract local track URIs without throwing.
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -19,6 +20,7 @@ import 'package:zyp_music/core/services/auto_dj_routing_service.dart';
 import 'package:zyp_music/core/services/country_bonus_service.dart';
 import 'package:zyp_music/core/services/dj_history_ledger.dart';
 import 'package:zyp_music/core/services/genre_normalization_service.dart';
+import 'package:zyp_music/core/services/genre_proximity_graph.dart';
 import 'package:zyp_music/core/services/hybrid_cache_service.dart';
 import 'package:zyp_music/core/services/local_crate_miner.dart';
 import 'package:zyp_music/domain/entities/auto_dj_mode.dart';
@@ -100,8 +102,15 @@ void main() {
       await ledger.logTrack(entry);
     }
 
+    // Load the genre proximity graph so SameGenre BFS sweep
+    // can find candidates by genre. Without this, every
+    // SameGenre resolveNext returns null.
+    final graph = GenreProximityGraph();
+    graph.loadMatrixForTesting(_loadGraphMatrix());
+
     final router = AutoDjRoutingService(
       crateMiner: miner,
+      graph: graph,
       historyLedger: ledger,
       onlineFetcher: onlineFetcher,
       connectivityProbe: () => connectivity,
@@ -1332,4 +1341,18 @@ class _FakeHybridCache extends HybridCacheService {
 
   @override
   List<String> getCachedTrackIds() => _ids;
+}
+
+Map<String, Map<String, double>> _loadGraphMatrix() {
+  final f = File('assets/data/genre_proximity_matrix.json');
+  final decoded = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+  final matrix = <String, Map<String, double>>{};
+  for (final entry in decoded.entries) {
+    final neighbors = (entry.value as Map<String, dynamic>)['neighbors']
+        as Map<String, dynamic>?;
+    if (neighbors == null) continue;
+    matrix[entry.key] =
+        neighbors.map((k, v) => MapEntry(k, (v as num).toDouble()));
+  }
+  return matrix;
 }

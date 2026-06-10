@@ -144,7 +144,7 @@ void main() {
         // dictionary to a smaller set of matrix keys.
         final expectedKeys = <String>{
           'Hip-Hop',
-          'Afrobeats',
+          'Afro-Fusion',
         };
         expect(cached.normalizedGenres.toSet(), expectedKeys,
             reason: 'normalizeAll must dedupe hip-hop variants to Hip-Hop');
@@ -163,7 +163,7 @@ void main() {
 
       final normalized = await svc.readNormalized(track);
       expect(normalized, isNotEmpty);
-      expect(normalized.toSet(), {'Hip-Hop', 'Afrobeats'});
+      expect(normalized.toSet(), {'Hip-Hop', 'Afro-Fusion'});
     });
 
     test('Gate 5: cache miss returns empty list from readNormalized',

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:zyp_music/core/utils/app_logger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:audio_service/audio_service.dart';
@@ -77,6 +78,7 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
         _database = database,
         _cacheService = cacheService,
         _hybridCache = hybridCache {
+    debugPrint('[RepoInit] handler runtimeType=${_handler.runtimeType} hash=${identityHashCode(_handler)}');
     // Forward every successful on-disk write to the Hive cache tracker so
     // pre-buffered tracks register themselves in the box. This is what makes
     // the download icon flip to the checkmark for tracks that were cached
@@ -236,12 +238,22 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
     Future<void> executePlay(String url, MediaItem mediaItem) async {
       final queue = _handler.queue.value;
       if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
+        AppLogger.log(
+          '[NotifDebug] AudioRepo.playTrack -> updateMediaItem then handler.playTrack: '
+          'id=${mediaItem.id} title="${mediaItem.title}" artist="${mediaItem.artist}"',
+          name: 'AudioRepository',
+        );
         _handler.updateMediaItem(mediaItem);
         await _handler.playTrack(url, mediaItem);
       } else {
         final newQueue = List<MediaItem>.from(queue);
         newQueue.add(mediaItem);
         _handler.queue.add(newQueue);
+        AppLogger.log(
+          '[NotifDebug] AudioRepo.playTrack -> queue add then handler.playTrack: '
+          'id=${mediaItem.id} title="${mediaItem.title}" artist="${mediaItem.artist}"',
+          name: 'AudioRepository',
+        );
         await _handler.playTrack(url, mediaItem);
       }
     }
@@ -296,7 +308,10 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
   }
 
   @override
-  Future<void> pause() => _handler.pause();
+  Future<void> pause() async {
+    AppLogger.log('repo.pause() called', name: 'AudioRepository');
+    await _handler.pause();
+  }
 
   @override
   Future<void> resume() => _handler.play();
@@ -306,6 +321,10 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
 
   @override
   Future<void> seek(Duration position) => _handler.seek(position);
+
+  @override
+  Future<void> setPlaybackSpeed(double speed) =>
+      _handler.setSpeed(speed);
 
   @override
   Future<Duration> getPosition() async => _handler.position;
@@ -326,8 +345,7 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
   Future<bool> isPlaying() async => _handler.isPlaying;
 
   @override
-  Stream<bool> get playingStream => _handler.playbackState.map((state) => state.playing);
-
+  Stream<bool> get playingStream => _handler.playbackState.map((state) => state.playing).distinct();
   @override
   Stream<ProcessingState> get processingStateStream =>
       _handler.processingStateStream;
@@ -618,6 +636,7 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
           duration: e.duration == null
               ? null
               : Duration(seconds: e.duration!),
+          albumId: e.album?.albumId,
           source: TrackSource.youtube,
           genre: genre,
         );

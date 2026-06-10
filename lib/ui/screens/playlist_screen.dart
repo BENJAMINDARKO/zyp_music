@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/playlist_provider.dart';
@@ -82,7 +83,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
@@ -137,7 +138,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         Text(
                           _playlist!.title,
                           style: const TextStyle(
-                            color: Colors.white,
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
                           ),
@@ -148,14 +148,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         Text(
                           _playlist!.author ?? 'Unknown Author',
                           style: const TextStyle(
-                            color: Colors.white70,
                             fontSize: 16,
                           ),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
                           onPressed: _playAll,
-                          icon: const Icon(Icons.play_arrow, color: Colors.black),
+                          icon: const Icon(PhosphorIconsFill.play, color: Colors.black),
                           label: const Text("Play", style: TextStyle(color: Colors.black)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFEAB308),
@@ -170,7 +169,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               ),
             ),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
@@ -186,19 +185,18 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       child: Center(
                         child: Text(
                           '${index + 1}',
-                          style: const TextStyle(color: Colors.white54, fontSize: 16),
+                          style: const TextStyle(fontSize: 16),
                         ),
                       ),
                     ),
                     title: Text(
                       track.title,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
                       track.author ?? 'Unknown Artist',
-                      style: const TextStyle(color: Colors.white54),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -210,8 +208,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                             final isFav = playlistProvider.isFavorite(track.id);
                             return IconButton(
                               icon: Icon(
-                                isFav ? Icons.favorite : Icons.favorite_border,
-                                color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                                isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                                color: isFav ? const Color(0xFFEAB308) : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                                 size: 20,
                               ),
                               onPressed: () {
@@ -230,7 +228,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         const SizedBox(width: 8),
                         Text(
                           formatDuration(track.duration),
-                          style: const TextStyle(color: Colors.white54),
                         ),
                       ],
                     ),

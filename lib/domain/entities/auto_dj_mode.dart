@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import '../../ui/widgets/custom_svg_icon.dart';
 
 /// The set of Auto DJ engine modes surfaced through the in-app mode picker.
 ///
@@ -16,7 +18,6 @@ enum AutoDJMode {
   /// Engine disengaged. Playback stops when the manual queue ends.
   off(
     label: 'Off',
-    icon: Icons.power_settings_new,
     description: 'Playback stops when queue ends',
   ),
 
@@ -25,7 +26,6 @@ enum AutoDJMode {
   /// — the offline database is always consulted).
   shuffleLibrary(
     label: 'Shuffle Library',
-    icon: Icons.shuffle,
     description: 'Add random songs from your library',
   ),
 
@@ -35,21 +35,18 @@ enum AutoDJMode {
   /// songs.
   similarSongs(
     label: 'Similar Songs',
-    icon: Icons.queue_music,
     description: 'Add songs similar to what is playing',
   ),
 
   /// Add songs from the same genre as the currently playing track.
   sameGenre(
     label: 'Same Genre',
-    icon: Icons.category_outlined,
     description: 'Add songs from the same genre',
   ),
 
   /// Add more songs by the same artist as the currently playing track.
   sameArtist(
     label: 'Same Artist',
-    icon: Icons.person_outline,
     description: 'Add more songs by the same artist',
   ),
 
@@ -57,22 +54,17 @@ enum AutoDJMode {
   /// similarity + library shuffle + tempo / mood matching.
   smartDj(
     label: 'Smart DJ',
-    icon: Icons.auto_awesome,
     description: 'Auto mixes tracks from across your library',
   );
 
   const AutoDJMode({
     required this.label,
-    required this.icon,
     required this.description,
   });
 
   /// Human-readable label shown in the picker, miniplayer tooltip, and
   /// fullscreen player tooltip.
   final String label;
-
-  /// Leading icon for the picker ListTile.
-  final IconData icon;
 
   /// One-line subtitle shown beneath the label in the picker. Phrased as
   /// a present-tense statement so the user can scan the menu and pick
@@ -84,4 +76,37 @@ enum AutoDJMode {
   /// distinguish "disengaged" (white54 / outlined) from "engaged"
   /// (yellow / filled) regardless of which specific mode is active.
   bool get isActive => this != AutoDJMode.off;
+
+  Widget iconBuilder({double size = 24, Color? color}) {
+    return _builders[this]!(size: size, color: color);
+  }
 }
+
+typedef _IconBuilder = Widget Function({double size, Color? color});
+
+Map<AutoDJMode, _IconBuilder> _builders = {
+  AutoDJMode.off: ({double size = 24, Color? color}) =>
+      Icon(PhosphorIcons.power, size: size, color: color),
+  AutoDJMode.shuffleLibrary: ({double size = 24, Color? color}) =>
+      CustomSvgIcon(
+        assetPath: CustomIconPaths.shuffleLibrary,
+        size: size,
+        color: color,
+      ),
+  AutoDJMode.similarSongs: ({double size = 24, Color? color}) =>
+      CustomSvgIcon(
+        assetPath: CustomIconPaths.similarSongs,
+        size: size,
+        color: color,
+      ),
+  AutoDJMode.sameGenre: ({double size = 24, Color? color}) =>
+      CustomSvgIcon(
+        assetPath: CustomIconPaths.sameGenre,
+        size: size,
+        color: color,
+      ),
+  AutoDJMode.sameArtist: ({double size = 24, Color? color}) =>
+      Icon(PhosphorIcons.user, size: size, color: color),
+  AutoDJMode.smartDj: ({double size = 24, Color? color}) =>
+      Icon(PhosphorIcons.sparkle, size: size, color: color),
+};

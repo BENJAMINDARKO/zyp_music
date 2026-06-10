@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/playlist_provider.dart';
@@ -152,7 +153,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
   Widget _buildTrackList(List<Track> tracks) {
     if (tracks.isEmpty && !_isLoading && _error == null) {
-      return const Center(child: Text("No tracks found.", style: TextStyle(color: Colors.white54)));
+      return Center(child: Text("No tracks found.", style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))));
     }
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 120),
@@ -170,16 +171,16 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                     fit: BoxFit.cover,
                     errorWidget: (context, url, error) => Container(
                       width: 48, height: 48, color: Colors.grey[800],
-                      child: const Icon(Icons.music_note, color: Colors.white54),
+                      child: const Icon(PhosphorIconsRegular.musicNote, color: Colors.white54),
                     ),
                   )
                 : Container(
                     width: 48, height: 48, color: Colors.grey[800],
-                    child: const Icon(Icons.music_note, color: Colors.white54),
+                    child: const Icon(PhosphorIconsRegular.musicNote, color: Colors.white54),
                   ),
           ),
-          title: Text(track.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(track.author ?? 'Unknown Artist', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(track.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(track.author ?? 'Unknown Artist', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)), maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -188,8 +189,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                   final isFav = playlistProvider.isFavorite(track.id);
                   return IconButton(
                     icon: Icon(
-                      isFav ? Icons.favorite : Icons.favorite_border,
-                      color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                      isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                      color: isFav ? const Color(0xFFEAB308) : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                       size: 20,
                     ),
                     onPressed: () {
@@ -208,7 +209,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                 padding: const EdgeInsets.only(right: 8.0),
                 child: TrackDownloadIcon(track: track, size: 20),
               ),
-              Text(formatDuration(track.duration), style: const TextStyle(color: Colors.white54)),
+              Text(formatDuration(track.duration), style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
             ],
           ),
           onTap: () => _playTrack(track),
@@ -220,7 +221,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
   Widget _buildAlbumList() {
     if (_albumResults.isEmpty && !_isLoading && _error == null) {
-      return const Center(child: Text("No albums found.", style: TextStyle(color: Colors.white54)));
+      return Center(child: Text("No albums found.", style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))));
     }
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 120),
@@ -238,16 +239,16 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                     fit: BoxFit.cover,
                     errorWidget: (context, url, error) => Container(
                       width: 48, height: 48, color: Colors.grey[800],
-                      child: const Icon(Icons.album, color: Colors.white54),
+                      child: const Icon(PhosphorIconsRegular.discoBall, color: Colors.white54),
                     ),
                   )
                 : Container(
                     width: 48, height: 48, color: Colors.grey[800],
-                    child: const Icon(Icons.album, color: Colors.white54),
+                    child: const Icon(PhosphorIconsRegular.discoBall, color: Colors.white54),
                   ),
           ),
-          title: Text(album.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text('${album.artistName ?? 'Unknown'} • ${album.year ?? ''}', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(album.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text('${album.artistName ?? 'Unknown'} • ${album.year ?? ''}', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)), maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -256,8 +257,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                   final isFav = playlistProvider.isAlbumFavorite(album.id);
                   return IconButton(
                     icon: Icon(
-                      isFav ? Icons.favorite : Icons.favorite_border,
-                      color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                      isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                      color: isFav ? const Color(0xFFEAB308) : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                       size: 20,
                     ),
                     onPressed: () {
@@ -298,7 +299,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
   Widget _buildArtistList() {
     if (_artistResults.isEmpty && !_isLoading && _error == null) {
-      return const Center(child: Text("No artists found.", style: TextStyle(color: Colors.white54)));
+      return Center(child: Text("No artists found.", style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))));
     }
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 120),
@@ -316,22 +317,22 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                     fit: BoxFit.cover,
                     errorWidget: (context, url, error) => Container(
                       width: 48, height: 48, color: Colors.grey[800],
-                      child: const Icon(Icons.person, color: Colors.white54),
+                      child: const Icon(PhosphorIconsRegular.user, color: Colors.white54),
                     ),
                   )
                 : Container(
                     width: 48, height: 48, color: Colors.grey[800],
-                    child: const Icon(Icons.person, color: Colors.white54),
+                    child: const Icon(PhosphorIconsRegular.user, color: Colors.white54),
                   ),
           ),
-          title: Text(artist.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(artist.name, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: Consumer<PlaylistProvider>(
             builder: (context, playlistProvider, _) {
               final isFav = playlistProvider.isArtistFavorite(artist.id);
               return IconButton(
                 icon: Icon(
-                  isFav ? Icons.favorite : Icons.favorite_border,
-                  color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                  isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                  color: isFav ? const Color(0xFFEAB308) : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                   size: 20,
                 ),
                 onPressed: () {
@@ -363,7 +364,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
   Widget _buildPlaylistList() {
     if (_playlistResults.isEmpty && !_isLoading && _error == null) {
-      return const Center(child: Text("No playlists found.", style: TextStyle(color: Colors.white54)));
+      return Center(child: Text("No playlists found.", style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))));
     }
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 120),
@@ -381,16 +382,16 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                     fit: BoxFit.cover,
                     errorWidget: (context, url, error) => Container(
                       width: 48, height: 48, color: Colors.grey[800],
-                      child: const Icon(Icons.queue_music, color: Colors.white54),
+                      child: const Icon(PhosphorIconsRegular.queue, color: Colors.white54),
                     ),
                   )
                 : Container(
                     width: 48, height: 48, color: Colors.grey[800],
-                    child: const Icon(Icons.queue_music, color: Colors.white54),
+                    child: const Icon(PhosphorIconsRegular.queue, color: Colors.white54),
                   ),
           ),
-          title: Text(playlist.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(playlist.author ?? 'Unknown', style: const TextStyle(color: Colors.white54), maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(playlist.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(playlist.author ?? 'Unknown', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)), maxLines: 1, overflow: TextOverflow.ellipsis),
           onTap: () {
             Navigator.push(
               context,
@@ -409,7 +410,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white54),
+        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
         titleSpacing: 0,
         title: Container(
           height: 40,
@@ -425,12 +426,12 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
             decoration: InputDecoration(
               hintText: 'Search for tracks, artists, albums...',
               hintStyle: const TextStyle(color: Colors.white54),
-              prefixIcon: const Icon(Icons.search, color: Colors.white54, size: 20),
+              prefixIcon: const Icon(PhosphorIconsRegular.magnifyingGlass, color: Colors.white54, size: 20),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.white54, size: 20),
+                      icon: const Icon(PhosphorIconsRegular.x, color: Colors.white54, size: 20),
                       onPressed: () {
                         _searchController.clear();
                         setState(() {
@@ -448,7 +449,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.account_circle, color: Colors.white54),
+            icon: Icon(PhosphorIconsRegular.userCircle, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
             onPressed: () {},
           ),
         ],
@@ -457,8 +458,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           indicatorColor: const Color(0xFFEAB308),
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54,
+          labelColor: Theme.of(context).colorScheme.onSurface,
+          unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
           dividerColor: const Color(0xFF2A2A2A),
           tabs: const [
             Tab(text: "Tracks"),

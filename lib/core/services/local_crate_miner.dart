@@ -241,6 +241,8 @@ class LocalCrateMiner {
           duration: (row['durationSeconds'] as int?) == null
               ? null
               : Duration(seconds: row['durationSeconds'] as int),
+          albumId: row['albumId'] as String?,
+          album: row['album'] as String?,
           genre: row['genre'] as String?,
           // Spec 2F: year is read straight from the row when
           // present (test stubs populate it; production
@@ -288,6 +290,9 @@ class LocalCrateMiner {
                 duration: (downloaded['durationSeconds'] as int?) == null
                     ? null
                     : Duration(seconds: downloaded['durationSeconds'] as int),
+                albumId: downloaded['albumId'] as String?,
+                album: downloaded['album'] as String?,
+                year: downloaded['year'] as int?,
               );
               continue;
             }

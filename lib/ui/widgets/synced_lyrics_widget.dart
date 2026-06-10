@@ -249,7 +249,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
       return Center(
         child: Text(
           'Lyrics not available',
-          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 18),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 18),
         ),
       );
     }
@@ -272,8 +272,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
           padding: const EdgeInsets.only(bottom: 200, top: 8),
           child: Text(
             widget.lyricsText,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
               fontSize: 18,
               height: 1.8,
               fontWeight: FontWeight.normal,
@@ -353,8 +352,8 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
             child: Container(
               width: 8,
               height: 8,
-              decoration: const BoxDecoration(
-                color: Colors.white,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurface,
                 shape: BoxShape.circle,
               ),
             ),
@@ -391,7 +390,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
           child: Text(
             line.words,
             style: TextStyle(
-              color: Colors.white.withOpacity(opacity),
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(opacity),
               fontSize: fontSize,
               fontWeight: weight,
               height: 1.4,
@@ -421,8 +420,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
             currentLine,
             key: ValueKey(currentLine),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.bold,
               height: 1.4,

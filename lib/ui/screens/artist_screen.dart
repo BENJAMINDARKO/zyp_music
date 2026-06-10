@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/playlist_provider.dart';
@@ -83,7 +84,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
@@ -138,7 +139,6 @@ class _ArtistScreenState extends State<ArtistScreen> {
                         Text(
                           _artist!.name,
                           style: const TextStyle(
-                            color: Colors.white,
                             fontSize: 40,
                             fontWeight: FontWeight.bold,
                           ),
@@ -150,7 +150,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                           children: [
                             ElevatedButton.icon(
                               onPressed: _playAll,
-                              icon: const Icon(Icons.play_arrow, color: Colors.black),
+                              icon: const Icon(PhosphorIconsFill.play, color: Colors.black),
                               label: const Text("Play Top Tracks", style: TextStyle(color: Colors.black)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFEAB308),
@@ -164,8 +164,8 @@ class _ArtistScreenState extends State<ArtistScreen> {
                                 final isFav = pp.favoriteArtists.any((a) => a.id == _artist!.id);
                                 return IconButton(
                                   icon: Icon(
-                                    isFav ? Icons.favorite : Icons.favorite_border,
-                                    color: isFav ? Colors.red : Colors.white70,
+                                    isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                                    color: isFav ? Colors.red : Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
                                     size: 28,
                                   ),
                                   onPressed: () => pp.toggleFavoriteArtist(_artist!),
@@ -181,7 +181,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
               ),
             ),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
@@ -192,7 +192,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                 padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
                 child: Text(
                   "Top Tracks",
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -212,23 +212,22 @@ class _ArtistScreenState extends State<ArtistScreen> {
                             fit: BoxFit.cover,
                             errorWidget: (context, url, error) => Container(
                               width: 48, height: 48, color: Colors.grey[800],
-                              child: const Icon(Icons.music_note, color: Colors.white54),
+                              child: Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
                             ),
                           )
                         : Container(
                             width: 48, height: 48, color: Colors.grey[800],
-                            child: const Icon(Icons.music_note, color: Colors.white54),
+                            child: Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
                           ),
                   ),
                   title: Text(
                     track.title,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
                     track.author ?? 'Unknown Artist',
-                    style: const TextStyle(color: Colors.white54),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -240,8 +239,8 @@ class _ArtistScreenState extends State<ArtistScreen> {
                           final isFav = playlistProvider.isFavorite(track.id);
                           return IconButton(
                             icon: Icon(
-                              isFav ? Icons.favorite : Icons.favorite_border,
-                              color: isFav ? const Color(0xFFEAB308) : Colors.white54,
+                              isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                              color: isFav ? const Color(0xFFEAB308) : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                               size: 20,
                             ),
                             onPressed: () {
@@ -262,7 +261,6 @@ class _ArtistScreenState extends State<ArtistScreen> {
                       ),
                       Text(
                         formatDuration(track.duration),
-                        style: const TextStyle(color: Colors.white54),
                       ),
                     ],
                   ),
@@ -280,7 +278,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                 padding: EdgeInsets.fromLTRB(16, 32, 16, 16),
                 child: Text(
                   "Albums",
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -320,25 +318,25 @@ class _ArtistScreenState extends State<ArtistScreen> {
                                       fit: BoxFit.cover,
                                       errorWidget: (context, url, error) => Container(
                                         width: 140, height: 140, color: Colors.grey[800],
-                                        child: const Icon(Icons.album, color: Colors.white54, size: 40),
+                                        child: Icon(PhosphorIconsRegular.discoBall, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 40),
                                       ),
                                     )
                                   : Container(
                                       width: 140, height: 140, color: Colors.grey[800],
-                                      child: const Icon(Icons.album, color: Colors.white54, size: 40),
+                                      child: Icon(PhosphorIconsRegular.discoBall, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 40),
                                     ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               album.title,
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             if (album.year != null)
                               Text(
                                 album.year!,
-                                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                style: const TextStyle(fontSize: 12),
                                 maxLines: 1,
                               ),
                           ],

@@ -304,7 +304,7 @@ class GaplessQueueMixer {
       if (startAt != null) {
         await _player.seek(startAt);
       }
-      await _player.play();
+      unawaited(_player.play());
     }
     _concatenation = fresh;
   }

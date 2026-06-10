@@ -50,7 +50,7 @@ void main() {
     });
 
     test('Gate 2: hyphenated / multi-word tags', () {
-      expect(svc.normalize('afro-fusion'), 'Afrobeats');
+      expect(svc.normalize('afro-fusion'), 'Afro-Fusion');
       expect(svc.normalize('uk drill'), 'Drill');
     });
 

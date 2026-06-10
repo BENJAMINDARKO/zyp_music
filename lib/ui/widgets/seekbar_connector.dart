@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../presentation/providers/player_provider.dart';
@@ -76,7 +77,7 @@ class SeekbarConnector extends StatelessWidget {
               value: 0,
               secondaryValue: 0,
               activeColor: activeColor,
-              inactiveColor: inactiveColor ?? Colors.white24,
+              inactiveColor: inactiveColor ?? Theme.of(context).colorScheme.onSurface.withOpacity(0.24),
               style: style,
               invertColor: invertColor,
               isPlaying: isPlaying,
@@ -92,7 +93,7 @@ class SeekbarConnector extends StatelessWidget {
               1.0,
             ),
             activeColor: activeColor,
-            inactiveColor: inactiveColor ?? Colors.white24,
+            inactiveColor: inactiveColor ?? Theme.of(context).colorScheme.onSurface.withOpacity(0.24),
             style: style,
             invertColor: invertColor,
             isPlaying: isPlaying,

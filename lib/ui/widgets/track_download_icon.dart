@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/hybrid_cache_service.dart';
 import '../../domain/entities/video.dart';
@@ -117,7 +118,7 @@ class _TrackDownloadIconState extends State<TrackDownloadIcon> {
         switch (state) {
           case CachedState.success:
             return Icon(
-              Icons.check_circle,
+              PhosphorIconsFill.checkCircle,
               color: Colors.red,
               size: widget.size,
             );
@@ -137,8 +138,8 @@ class _TrackDownloadIconState extends State<TrackDownloadIcon> {
               behavior: HitTestBehavior.opaque,
               onTap: _onTap,
               child: Icon(
-                Icons.download_for_offline_outlined,
-                color: Colors.white54,
+                PhosphorIconsRegular.downloadSimple,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                 size: widget.size,
               ),
             );
@@ -154,8 +155,8 @@ class _TrackDownloadIconState extends State<TrackDownloadIcon> {
               behavior: HitTestBehavior.opaque,
               onTap: _onTap,
               child: Icon(
-                Icons.download_for_offline_outlined,
-                color: Colors.white54,
+                PhosphorIconsRegular.downloadSimple,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                 size: widget.size,
               ),
             );

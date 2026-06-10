@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -21,19 +22,20 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  MiniplayerVisibilityProvider? _visibilityProvider;
+
   @override
   void initState() {
     super.initState();
+    _visibilityProvider = context.read<MiniplayerVisibilityProvider>();
     Future.microtask(() {
-      if (mounted) context.read<MiniplayerVisibilityProvider>().hide();
+      if (mounted) _visibilityProvider?.hide();
     });
   }
 
   @override
   void dispose() {
-    Future.microtask(() {
-      if (mounted) context.read<MiniplayerVisibilityProvider>().show();
-    });
+    _visibilityProvider?.show();
     super.dispose();
   }
 
@@ -43,14 +45,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       length: 6,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          title: Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
           elevation: 0,
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             indicatorColor: Color(0xFFEAB308),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white54,
+            labelColor: Theme.of(context).colorScheme.onSurface,
+            unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
             dividerColor: Color(0xFF2A2A2A),
             tabs: [
               Tab(text: "Appearance"),
@@ -152,9 +154,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 24),
         _buildSectionHeader('System & Storage'),
         ListTile(
-          title: const Text('Disable Battery Optimization', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Prevent Android from killing the app in the background to ensure uninterrupted playback.', style: TextStyle(color: Colors.white54)),
-          trailing: const Icon(Icons.battery_alert, color: Colors.white54),
+          title: const Text('Disable Battery Optimization'),
+          subtitle: Text('Prevent Android from killing the app in the background to ensure uninterrupted playback.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+          trailing: Icon(PhosphorIconsRegular.batteryWarning, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
           onTap: () async {
             if (await Permission.ignoreBatteryOptimizations.isDenied) {
               await Permission.ignoreBatteryOptimizations.request();
@@ -163,8 +165,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         ListTile(
           title: const Text('Clear Cache & Reset Data', style: TextStyle(color: Colors.red)),
-          subtitle: const Text('Removes all downloaded audio cache and resets user settings to default.', style: TextStyle(color: Colors.white54)),
-          trailing: const Icon(Icons.delete_forever, color: Colors.red),
+          subtitle: Text('Removes all downloaded audio cache and resets user settings to default.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+          trailing: const Icon(PhosphorIconsRegular.trash, color: Colors.red),
           onTap: () async {
             final confirm = await showDialog<bool>(
               context: context,
@@ -238,8 +240,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 24),
         _buildSectionHeader('Services'),
         ListTile(
-          title: const Text('Last.fm', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Not connected', style: TextStyle(color: Colors.white54)),
+          title: const Text('Last.fm'),
+          subtitle: Text('Not connected', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
           trailing: ElevatedButton(
             onPressed: () {
               OAuthService().connectLastFm();
@@ -249,8 +251,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         ListTile(
-          title: const Text('Libre.fm', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Not connected', style: TextStyle(color: Colors.white54)),
+          title: const Text('Libre.fm'),
+          subtitle: Text('Not connected', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
           trailing: ElevatedButton(
             onPressed: () {
               OAuthService().connectLibreFm();
@@ -260,8 +262,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         ListTile(
-          title: const Text('ListenBrainz', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Not connected', style: TextStyle(color: Colors.white54)),
+          title: const Text('ListenBrainz'),
+          subtitle: Text('Not connected', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
           trailing: ElevatedButton(
             onPressed: () {
               OAuthService().connectListenBrainz();
@@ -310,8 +312,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 24),
         _buildSectionHeader('Accounts'),
         ListTile(
-          title: const Text('YouTube', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Not connected', style: TextStyle(color: Colors.white54)),
+          title: const Text('YouTube'),
+          subtitle: Text('Not connected', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
           trailing: ElevatedButton(
             onPressed: () {
               Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YoutubeLoginWebview()));
@@ -343,14 +345,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         ),
         ListTile(
-          title: const Text('Android Download Folder', style: TextStyle(color: Colors.white)),
-          subtitle: Text(provider.androidDownloadFolder, style: const TextStyle(color: Colors.white54)),
+          title: const Text('Android Download Folder'),
+          subtitle: Text(provider.androidDownloadFolder, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(icon: const Icon(Icons.clear, color: Colors.white54), onPressed: () {}),
+              IconButton(icon: Icon(PhosphorIconsRegular.x, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)), onPressed: () {}),
               IconButton(
-                icon: const Icon(Icons.folder, color: Colors.white54),
+                icon: Icon(PhosphorIconsRegular.folderSimple, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
                 onPressed: () async {
                   String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
                   if (selectedDirectory != null) {
@@ -384,9 +386,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         _buildSectionHeader('Diagnostics'),
         ListTile(
-          title: const Text('Export Application Logs', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Share the raw text logs to help debug issues.', style: TextStyle(color: Colors.white54)),
-          trailing: const Icon(Icons.share, color: Colors.white),
+          title: const Text('Export Application Logs'),
+          subtitle: Text('Share the raw text logs to help debug issues.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+          trailing: Icon(PhosphorIconsRegular.shareNetwork, color: Theme.of(context).colorScheme.onSurface),
           onTap: () async {
             final file = AppLogger.logFile;
             if (file != null && await file.exists()) {
@@ -404,7 +406,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSwitchTile(String title, bool value, ValueChanged<bool> onChanged) {
     return SwitchListTile(
-      title: Text(title, style: const TextStyle(color: Colors.white)),
+      title: Text(title),
       value: value,
       onChanged: onChanged,
       activeColor: const Color(0xFFEAB308),
@@ -435,8 +437,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required ValueChanged<T?> onChanged,
   }) {
     return ListTile(
-      title: Text(title, style: const TextStyle(color: Colors.white)),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)),
+      title: Text(title),
+      subtitle: Text(subtitle, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
@@ -450,7 +452,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: onChanged,
             dropdownColor: const Color(0xFF2A2A2A),
             style: const TextStyle(color: Colors.white),
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.white54),
+            icon: const Icon(PhosphorIconsRegular.caretDown, color: Colors.white54),
           ),
         ),
       ),
@@ -471,9 +473,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ListTile(
-          title: Text(title, style: const TextStyle(color: Colors.white)),
-          subtitle: Text(subtitle, style: const TextStyle(color: Colors.white54)),
-          trailing: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+      title: Text(title),
+          subtitle: Text(subtitle, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+          trailing: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         ),
         SliderTheme(
           data: const SliderThemeData(

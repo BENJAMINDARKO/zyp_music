@@ -24,9 +24,9 @@ import '../../domain/entities/auto_dj_mode.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/repositories/audio_repository.dart';
 import '../../domain/repositories/playlist_repository.dart';
-import '../../service/audio_handler.dart';
 import '../../services/playback_session.dart';
 import 'settings_provider.dart';
+import '../../service/audio_handler.dart';
 
 /// Phase 5: outcome of the cold-start path inside
 /// `setAutoDJMode`. The mode-picker UI reads this to pick
@@ -87,6 +87,15 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// the chain. Nullable so unit tests that build a
   /// `PlayerProvider` directly can run without one.
   GenreEnrichmentService? _genreEnrichment;
+
+  /// Phase 6: playback speed (0.5x – 2.0x). Reset to 1.0 on
+  /// every track change via [_resetPlaybackSpeed].
+  double _playbackSpeed = 1.0;
+
+  /// Phase 6: lyrics sync offset in milliseconds (−5000..5000).
+  /// Applied as an additive offset to the position fed to
+  /// [SyncedLyricsWidget]. Updated by [LyricsTimingSlider].
+  int _lyricsSyncOffsetMs = 0;
 
   /// Smart-DJ bootstrap fusion: the routing service reference
   /// used to:
@@ -156,6 +165,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// engine is slow (network stream, cold cache), the lock is
   /// force-cleared regardless of the delta check.
   bool _isSeeking = false;
+
+  /// Guards against re-entering the completion handler. Set before
+  /// seeking to zero in [_listenForCompletion] and cleared after the
+  /// seek completes. Prevents an infinite loop where the old track's
+  /// end position is loaded again and immediately emits
+  /// [ProcessingState.completed].
+  bool _isHandlingCompletion = false;
   Duration _seekPosition = Duration.zero;
   Timer? _seekTimeoutTimer;
 
@@ -194,6 +210,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     });
     // Drive the Hive-driven preload loop off the existing track-changed hook.
     addTrackChangedListener(_onTrackChangedForPreload);
+    // Phase 6: reset playback speed to 1.0x on every track change.
+    addTrackChangedListener(_resetPlaybackSpeed);
     // Auto DJ engine state must invalidate any UI bound to this provider.
     _queueManager?.addListener(notifyListeners);
     // Late-bind the reverse reference so QueueManager.toggleAutoDJ can route
@@ -590,9 +608,17 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
             ),
           )
           .toList();
-      await handler.setQueue(mediaItems, startIndex: _currentIndex);
+      await handler.customAction('setQueue', {
+        'items': mediaItems,
+        'startIndex': _currentIndex,
+      });
       if (_currentTrack != null && _currentIndex < mediaItems.length) {
         final activeMediaItem = mediaItems[_currentIndex];
+        AppLogger.log(
+          '[NotifDebug] _syncRestoredStateToAudioHandler -> updateMediaItem: '
+          'id=${activeMediaItem.id} title="${activeMediaItem.title}"',
+          name: 'PlayerProvider',
+        );
         handler.updateMediaItem(activeMediaItem);
       }
     } catch (e) {
@@ -636,6 +662,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // so the miniplayer is persistent and visible on startup!
       if (_recentlyPlayed.isNotEmpty && _currentTrack == null) {
         _currentTrack = _recentlyPlayed.first;
+        AppLogger.log(
+          '[NotifDebug] _currentTrack = recentlyPlayed.first: '
+          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+          name: 'PlayerProvider',
+        );
         _queue = [_currentTrack!];
         _currentIndex = 0;
         _processingState = ProcessingState.idle;
@@ -755,8 +786,18 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         _currentTrack = _deserializeTrack(
           Map<String, dynamic>.from(currentTrackMap),
         );
+        AppLogger.log(
+          '[NotifDebug] _currentTrack = deserialized from box: '
+          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+          name: 'PlayerProvider',
+        );
       } else if (_queue.isNotEmpty) {
         _currentTrack = _queue[_currentIndex];
+        AppLogger.log(
+          '[NotifDebug] _currentTrack = queue[_currentIndex] (restore fallback): '
+          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+          name: 'PlayerProvider',
+        );
       }
 
       if (_currentTrack == null) return;
@@ -773,7 +814,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       bufferedPositionNotifier.value = Duration.zero;
       _isPlaying = false;
       _processingState = ProcessingState.idle;
-      _pendingResumePosition = Duration.zero;
+      _pendingResumePosition = null;
 
       AppLogger.log(
         'Restored active track: ${_currentTrack!.id} at 0ms (forced) in Paused state (queue size ${_queue.length})',
@@ -799,11 +840,25 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// without ever firing `detached`.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    AppLogger.log(
+      '[SeekbarDebug] lifecycle: $state, '
+      'currentTrack=${_currentTrack?.id}, '
+      'position=${positionNotifier.value.inMilliseconds}ms, '
+      'playing=$_isPlaying processingState=$_processingState',
+      name: 'PlayerProvider',
+    );
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
         state == AppLifecycleState.inactive) {
       _saveAutoQueueState();
       _saveActiveTrackState();
+    }
+    if (state == AppLifecycleState.resumed) {
+      // Clear any stuck seek lock from an abandoned drag gesture
+      // that was interrupted by backgrounding.
+      _isSeeking = false;
+      _seekTimeoutTimer?.cancel();
+      _seekTimeoutTimer = null;
     }
   }
 
@@ -820,6 +875,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
           playFromQueue(_currentIndex);
         } else {
           _currentTrack = _queue[_currentIndex];
+          AppLogger.log(
+            '[NotifDebug] _currentTrack = queue[_currentIndex] (removeFromQueue fallback): '
+            'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+            name: 'PlayerProvider',
+          );
           _position = Duration.zero;
           _bufferedPosition = Duration.zero;
           notifyListeners();
@@ -885,6 +945,29 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   void setKaraokeMode(bool value) {
     _isKaraokeMode = value;
     notifyListeners();
+  }
+
+  double get playbackSpeed => _playbackSpeed;
+
+  Future<void> setPlaybackSpeed(double speed) async {
+    _playbackSpeed = speed.clamp(0.5, 2.0);
+    await _audioRepository.setPlaybackSpeed(_playbackSpeed);
+    notifyListeners();
+  }
+
+  int get lyricsSyncOffsetMs => _lyricsSyncOffsetMs;
+
+  void setLyricsSyncOffsetMs(int ms) {
+    _lyricsSyncOffsetMs = ms.clamp(-5000, 5000);
+    notifyListeners();
+  }
+
+  Future<void> _resetPlaybackSpeed() async {
+    if (_playbackSpeed != 1.0) {
+      _playbackSpeed = 1.0;
+      await _audioRepository.setPlaybackSpeed(1.0);
+      notifyListeners();
+    }
   }
 
   Future<void> _fetchLyricsForCurrentTrack() async {
@@ -1315,6 +1398,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queue.add(next);
     _currentIndex = 0;
     _currentTrack = next;
+    AppLogger.log(
+      '[NotifDebug] _currentTrack = next (cold start): '
+      'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+      name: 'PlayerProvider',
+    );
     try {
       await playFromQueue(0);
     } catch (e) {
@@ -1413,6 +1501,19 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     AudioQuality quality = AudioQuality.adaptive,
     Duration? startAt,
   }) async {
+    // MUST BE FIRST — reset position before anything else so the seekbar
+    // never shows a stale value from the previous track or playback cycle.
+    final resetPosition = startAt ?? Duration.zero;
+    positionNotifier.value = resetPosition;
+    _position = resetPosition;
+
+    AppLogger.log(
+      '[SeekbarDebug] playTrack ENTER: track=${track.id}, '
+      'positionNotifier=${positionNotifier.value.inMilliseconds}ms, '
+      'startAt=$startAt, '
+      'processingState=$_processingState',
+      name: 'PlayerProvider',
+    );
     _isLoading = true;
     _error = null;
     _stopPolling();
@@ -1424,7 +1525,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     // the restored track's MediaItem while the player switches to
     // the user's selection, causing a window of stale metadata and
     // potential hanging during the handoff.
-    _audioHandler?.clearQueue();
+    _audioHandler?.customAction('clearQueue');
 
     notifyListeners();
 
@@ -1437,10 +1538,42 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _pendingResumePosition = null;
 
     try {
+      AppLogger.log(
+        '[NotifDebug] playTrack entry: id=${track.id} title="${track.title}" '
+        'author="${track.author}" startAt=$effectiveStartAt',
+        name: 'PlayerProvider',
+      );
+      AppLogger.log(
+        '[NotifDebug] playTrack caller: ${StackTrace.current.toString().split("\n").getRange(0, 4).join(" | ")}',
+        name: 'PlayerProvider',
+      );
       _currentTrack = track;
+      AppLogger.log(
+        '[NotifDebug] _currentTrack = track (playTrack line 1): '
+        'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+        name: 'PlayerProvider',
+      );
       _position = effectiveStartAt ?? Duration.zero;
       _bufferedPosition = Duration.zero;
       _addToRecentlyPlayed(track);
+
+      // Push the new track's MediaItem immediately, before any await
+      // suspension points. This sets _pendingMediaItemId in the handler
+      // so the durationStream guard can suppress stale events that fire
+      // during the awaited operations below (PlaybackSession.resolve,
+      // mixer.playTrack, audioRepository.playTrack, etc.).
+      _audioHandler?.updateMediaItem(
+        MediaItem(
+          id: track.id,
+          title: track.title,
+          artist: track.author ?? '',
+          album: track.album,
+          artUri: track.thumbnailUrl != null
+              ? Uri.tryParse(track.thumbnailUrl!)
+              : null,
+          duration: track.duration,
+        ),
+      );
 
       // Kick off lyrics & color extraction concurrently — do NOT await either
       // here. Both are non-blocking background tasks: lyrics may take several
@@ -1455,6 +1588,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       if (sourceRef != null) {
         _currentTrack = track.copyWith(activeSource: sourceRef);
+        AppLogger.log(
+          '[NotifDebug] _currentTrack = track.copyWith(activeSource) (playTrack line 2): '
+          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+          name: 'PlayerProvider',
+        );
       }
 
       if (_mixer != null) {
@@ -1479,8 +1617,54 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _isPlaying = true;
       _startPolling();
       _listenForCompletion();
+      // Defer the state sync by one microtask so the audio player has
+      // time to complete its playing=true / ready transition before we
+      // read its state. This covers the broadcast stream miss where
+      // _playingSub and _processingStateSub are created after the
+      // initial transition events have already fired.
+      Future.microtask(() {
+        if (_audioHandler is MusicAudioHandler) {
+          final h = _audioHandler as MusicAudioHandler;
+          if (_processingState != h.player.processingState) {
+            _processingState = h.player.processingState;
+            notifyListeners();
+          }
+          if (_isPlaying != h.player.playing) {
+            _isPlaying = h.player.playing;
+            notifyListeners();
+          }
+        }
+      });
       for (final cb in _trackChangedListeners) {
         cb();
+      }
+
+      // Ensure the notification reflects the new track. The non-mixer
+      // path already calls updateMediaItem inside handler.playTrack(),
+      // but the mixer path relies on _currentIndexSub which may not
+      // fire when currentIndex stays at 0 after setAudioSource.
+      // This is idempotent via the handler's internal dedup guard.
+      if (_currentTrack != null) {
+        AppLogger.log(
+          '[NotifDebug] playTrack deferred updateMediaItem: '
+          'id=${_currentTrack!.id} title="${_currentTrack!.title}" '
+          'author="${_currentTrack!.author}"',
+          name: 'PlayerProvider',
+        );
+        unawaited(
+          _audioHandler?.updateMediaItem(
+            MediaItem(
+              id: _currentTrack!.id,
+              title: _currentTrack!.title,
+              artist: _currentTrack!.author ?? '',
+              album: _currentTrack!.album,
+              artUri: _currentTrack!.thumbnailUrl != null
+                  ? Uri.tryParse(_currentTrack!.thumbnailUrl!)
+                  : null,
+              duration: _currentTrack!.duration,
+            ),
+          ),
+        );
       }
 
       // Phase 6: kick background MusicBrainz enrichment for
@@ -1632,29 +1816,24 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> togglePlayPause() async {
     if (_isTransitioning) return;
+
+    final handlerPlaying = _audioHandler?.playbackState.value.playing ?? false;
+
+    AppLogger.log(
+      '[SeekbarDebug] togglePlayPause: providerIsPlaying=$_isPlaying, '
+      'handlerPlaying=$handlerPlaying, '
+      'processingState=$_processingState, currentTrack=${_currentTrack?.id}',
+      name: 'PlayerProvider',
+    );
+
     try {
       if (_isPlaying) {
         await _audioRepository.pause();
-        _isPlaying = false;
         _autoScroll = false;
-        // Persist immediately so a force-kill right after pause still
-        // restores the paused-at position on the next launch.
         await _saveActiveTrackState();
       } else {
-        // Cold-launch path: `_pendingResumePosition` was set by
-        // `_loadActiveTrackState` if there is a saved position and
-        // the audio handler has never been started. In that case a
-        // plain `resume()` would be a no-op (the handler is idle), so
-        // we route through `playTrack` with `startAt` so the audio
-        // loads, seeks to the saved position, and starts playing in
-        // one go.
         final pending = _pendingResumePosition;
         if (pending != null && _currentTrack != null) {
-          // The cold-launch path is a multi-step async load
-          // (URL resolve → mixer add → engine setSource → seek
-          // → play). While it is in flight, subsequent taps of
-          // the play/pause button must be ignored or two loads
-          // will race against the same engine instance.
           _isTransitioning = true;
           try {
             await playTrack(_currentTrack!, startAt: pending);
@@ -1662,8 +1841,17 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
             _isTransitioning = false;
           }
         } else {
-          await _audioRepository.resume();
-          _isPlaying = true;
+          if (_processingState == ProcessingState.completed) {
+            positionNotifier.value = Duration.zero;
+            _position = Duration.zero;
+            await _audioRepository.seek(Duration.zero);
+            await _audioRepository.resume();
+          } else if (_processingState == ProcessingState.idle &&
+              _currentTrack != null) {
+            await playTrack(_currentTrack!, startAt: Duration.zero);
+          } else {
+            await _audioRepository.resume();
+          }
         }
       }
       notifyListeners();
@@ -1693,9 +1881,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
       await _audioRepository.seek(position);
       _position = position;
+      positionNotifier.value = position;
       notifyListeners();
     } catch (e) {
       _position = position;
+      positionNotifier.value = position;
       notifyListeners();
       AppLogger.log(
         'Silent seek error (ignored on boot): $e',
@@ -1773,10 +1963,15 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _startPolling() {
+    if (_audioHandler != null && _audioHandler is MusicAudioHandler) {
+      final h = _audioHandler as MusicAudioHandler;
+      _isPlaying = h.playbackState.value.playing;
+      _processingState = h.player.processingState;
+    }
+
     _positionSub?.cancel();
     _bufferedPositionSub?.cancel();
     _durationSub?.cancel();
-    _playingSub?.cancel();
     _mediaItemSub?.cancel();
     _mediaItemSub = _audioHandler?.mediaItem.listen((item) {
       if (item == null) return;
@@ -1844,6 +2039,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         name: 'PlayerProvider',
       );
       _currentTrack = resolved;
+      AppLogger.log(
+        '[NotifDebug] _currentTrack = resolved (mediaItem stream): '
+        'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+        name: 'PlayerProvider',
+      );
       if (newIndex != null) _currentIndex = newIndex;
       // [UI-Sync] Always refresh duration from the incoming MediaItem
       // on a gapless boundary. The duration stream may not update
@@ -1893,6 +2093,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       if (resolved != null) {
         _currentTrack = resolved;
+        AppLogger.log(
+          '[NotifDebug] _currentTrack = resolved (synchronizeActiveTrackState): '
+          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
+          name: 'PlayerProvider',
+        );
         if (newIndex != null) _currentIndex = newIndex;
         _historyLoggedForCurrentTrack = false;
         _fetchLyricsForCurrentTrack();
@@ -1902,14 +2107,17 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     _positionSub = _audioRepository.positionStream.listen((pos) {
+      // Always update the backing field so internal reads are correct.
+      _position = pos;
+
+      AppLogger.log(
+        '[SeekbarDebug] position event: ${pos.inMilliseconds}ms, '
+        'currentTrack=${_currentTrack?.id}, isPlaying=$_isPlaying',
+        name: 'PlayerProvider',
+      );
       // Drag lock: while the user is dragging the seekbar, the
-      // position they painted is the source of truth. The first
-      // stream tick that lands within 500 ms of the seek target
-      // is treated as the engine having caught up, and the lock
-      // is released so subsequent ticks update the bar. The
-      // 2-second [_seekTimeoutTimer] is a hard fallback — if the
-      // engine never emits within that window (network stream,
-      // cold cache), the lock is force-cleared regardless.
+      // position they painted is the source of truth. Block UI
+      // updates only — the backing field is already updated above.
       if (_isSeeking) {
         final delta = (pos.inMilliseconds - _seekPosition.inMilliseconds).abs();
         if (delta < 500) {
@@ -1917,13 +2125,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
           _seekTimeoutTimer?.cancel();
           _seekTimeoutTimer = null;
         } else {
-          // Engine has not caught up yet — keep the optimistic
-          // value, do not run the side effects below (they would
-          // act on stale data), do not touch the notifier.
           return;
         }
       }
-      _position = pos;
       positionNotifier.value = pos;
       // Throttled persistence: Hive writes on every audio
       // frame (multiple per second) would thrash the disk. We coalesce
@@ -1991,7 +2195,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // lyrics, and any other duration-dependent layout.
       notifyListeners();
     });
+    _playingSub?.cancel();
     _playingSub = _audioRepository.playingStream.listen((isPlaying) {
+      AppLogger.log('[PlayingSub] playing=$isPlaying', name: 'PlayerProvider');
       if (_isPlaying != isPlaying) {
         _isPlaying = isPlaying;
         // Edge-triggered save: flipping playing→paused or paused→
@@ -2030,28 +2236,53 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _processingStateSub = null;
     _mediaItemSub?.cancel();
     _mediaItemSub = null;
+    // Safety: clear any stuck seek lock so the next track's position
+    // events are not swallowed by a drag that was abandoned mid-gesture
+    // (e.g. backgrounded during drag, widget tree disposed without
+    // calling endSeek).
+    _isSeeking = false;
+    _seekTimeoutTimer?.cancel();
+    _seekTimeoutTimer = null;
   }
 
   void _listenForCompletion() {
     _completionSubscription?.cancel();
     _completionSubscription = _audioRepository.processingStateStream.listen((
       state,
-    ) {
-      if (state == ProcessingState.completed && _queue.isNotEmpty) {
-        if (_repeatMode == repeat.PlaybackRepeatMode.one) {
-          seekTo(Duration.zero);
-          _audioRepository.resume();
-        } else if (_currentIndex + 1 < _queue.length) {
-          next();
-        } else if (_repeatMode == repeat.PlaybackRepeatMode.all) {
-          playFromQueue(0);
-        } else if (_queueManager?.isActive ?? false) {
-          _generateAutoDJNext();
-        } else {
-          // End of the manual queue with Auto DJ disengaged. Strict finite
-          // playback: stop without auto-rolling recommendations.
-          _stopAfterQueue();
-        }
+    ) async {
+      AppLogger.log(
+        '[SeekbarDebug] processingState event: $state, '
+        'track=${_currentTrack?.id}, '
+        'repeatMode=$_repeatMode, '
+        'position=${positionNotifier.value.inMilliseconds}ms',
+        name: 'PlayerProvider',
+      );
+      if (state != ProcessingState.completed) return;
+      if (_queue.isEmpty) return;
+      if (_isHandlingCompletion) return;
+
+      // Seek to zero before any restart action. Without this, the old
+      // track's end position is loaded again and the engine immediately
+      // emits ProcessingState.completed, creating an infinite loop.
+      _isHandlingCompletion = true;
+      try {
+        await _audioRepository.seek(Duration.zero);
+        positionNotifier.value = Duration.zero;
+        _position = Duration.zero;
+      } finally {
+        _isHandlingCompletion = false;
+      }
+
+      if (_repeatMode == repeat.PlaybackRepeatMode.one) {
+        _audioRepository.resume();
+      } else if (_currentIndex + 1 < _queue.length) {
+        await next();
+      } else if (_repeatMode == repeat.PlaybackRepeatMode.all) {
+        await playFromQueue(0);
+      } else if (_queueManager?.isActive ?? false) {
+        await _generateAutoDJNext();
+      } else {
+        _stopAfterQueue();
       }
     });
   }
@@ -2102,11 +2333,15 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queue = [];
     _currentIndex = 0;
     _currentTrack = null;
+    AppLogger.log(
+      '[NotifDebug] _currentTrack = null (clearQueue)',
+      name: 'PlayerProvider',
+    );
     _currentPlaylistId = null;
     _originalQueue = null;
     _shuffleMode = false;
     _queueManager?.disableAutoDJ();
-    _audioHandler?.clearQueue();
+    _audioHandler?.customAction('clearQueue');
     await stop();
     unawaited(_saveActiveTrackState());
     notifyListeners();
@@ -2128,10 +2363,30 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  MusicAudioHandler? _audioHandler;
+  AudioHandler? _audioHandler;
 
-  void setAudioHandler(MusicAudioHandler handler) {
+  void setAudioHandler(AudioHandler handler) {
+    debugPrint('[Provider] setAudioHandler runtimeType=${handler.runtimeType} hash=${identityHashCode(handler)}');
     _audioHandler = handler;
+    // Seed local state from the handler's current value so the UI is
+    // correct even before the first stream event arrives (cold boot
+    // with audio already playing).
+    _isPlaying = handler.playbackState.value.playing;
+    if (handler is MusicAudioHandler) {
+      _processingState = handler.player.processingState;
+    }
+    notifyListeners();
+
+    // Cancel any zombie subs created before the handler was ready.
+    // Without this, _playingSub/ _processingStateSub/ _mediaItemSub
+    // are created via ??= in _startPolling() against a null/old handler
+    // and never re-fire the initial state after the handler is wired.
+    _playingSub?.cancel();
+    _playingSub = null;
+    _processingStateSub?.cancel();
+    _processingStateSub = null;
+    _mediaItemSub?.cancel();
+    _mediaItemSub = null;
     _syncRestoredStateToAudioHandler();
     _startPolling();
   }
@@ -2141,6 +2396,12 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _sleepTimer?.cancel();
     _sleepTimerTick?.cancel();
     _seekTimeoutTimer?.cancel();
+    _playingSub?.cancel();
+    _playingSub = null;
+    _processingStateSub?.cancel();
+    _processingStateSub = null;
+    _mediaItemSub?.cancel();
+    _mediaItemSub = null;
     _stopPolling();
     _completionSubscription?.cancel();
     _skipNextSubscription?.cancel();

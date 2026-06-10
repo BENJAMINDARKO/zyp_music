@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  // Dark mode constants — UNCHANGED
   static const _primaryColor = Color(0xFF1DB954);
   static const _darkBg = Color(0xFF121212);
   static const _darkSurface = Color(0xFF1E1E1E);
   static const _darkCard = Color(0xFF282828);
+
+  // Shared semantic colors (accessibility-tuned)
+  static const _errorColor = Color(0xFFCF6679);
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -68,4 +72,5 @@ class AppTheme {
       ),
     );
   }
+
 }

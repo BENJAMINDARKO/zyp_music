@@ -79,6 +79,7 @@ class DJHistoryLedger {
   static const int _ledgerCap = 300;
   static const int _trimBatch = 10;
   static const int _minRowsForMarkov = 3;
+  static const int _maxAgeDays = 180;
 
   /// In-memory set of track IDs already logged during the current
   /// process lifetime. The 80% rule fires once per (session, track)
@@ -140,6 +141,16 @@ class DJHistoryLedger {
         entry.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+
+      // NEW: purge rows older than 180 days BEFORE the row-count check.
+      final cutoffMs = DateTime.now()
+          .subtract(const Duration(days: _maxAgeDays))
+          .millisecondsSinceEpoch;
+      await txn.rawDelete(
+        'DELETE FROM dj_listening_history WHERE timestamp < ?',
+        [cutoffMs],
+      );
+
       final count = Sqflite.firstIntValue(
             await txn.rawQuery('SELECT COUNT(*) FROM dj_listening_history'),
           ) ??

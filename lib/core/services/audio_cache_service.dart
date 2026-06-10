@@ -409,6 +409,8 @@ class AudioCacheService {
         thumbnailUrl: track.thumbnailUrl,
         durationSeconds: track.duration?.inSeconds,
         author: track.author,
+        album: track.album,
+        year: track.year,
       );
 
       // C2: fire-and-forget duration backfill. If
@@ -485,6 +487,8 @@ class AudioCacheService {
         filePath,
         title: track.title,
         durationSeconds: track.duration?.inSeconds,
+        album: track.album,
+        year: track.year,
       );
 
       // C2: fire-and-forget duration backfill. See sibling

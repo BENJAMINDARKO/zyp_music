@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../presentation/providers/player_provider.dart';
-import 'miniplayer_flyout_container.dart';
-import "../../core/utils/thumbnail_url.dart";
+import 'apple_music_sheet.dart';
 
 class MiniplayerTimerView extends StatefulWidget {
   const MiniplayerTimerView({super.key});
@@ -36,65 +36,45 @@ class _MiniplayerTimerViewState extends State<MiniplayerTimerView> {
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerProvider>();
-    final track = player.currentTrack;
     final activeColor = player.dominantColor ?? const Color(0xFFEAB308);
 
-    return MiniplayerFlyoutContainer(
-      thumbnailUrl: track?.thumbnailUrl,
+    return AppleMusicSheet(
+      title: 'Sleep Timer',
       child: SafeArea(
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
-              child: Row(
-                children: [
-                  const Text(
-                    'Sleep Timer',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
-
             const Spacer(),
-
             if (player.isSleepTimerActive && player.sleepTimerRemaining != null) ...[
-              const Text(
+              Text(
                 'Time remaining',
-                style: TextStyle(color: Colors.white54, fontSize: 14),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 14),
               ),
               const SizedBox(height: 12),
               Text(
                 _formatRemaining(player.sleepTimerRemaining!),
-                style: const TextStyle(color: Colors.white, fontSize: 64, fontWeight: FontWeight.w300),
+                style: TextStyle(fontSize: 64, fontWeight: FontWeight.w300),
               ),
               const SizedBox(height: 32),
               OutlinedButton(
                 onPressed: () => player.cancelSleepTimer(),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.white38),
+                  side: BorderSide(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.38)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
                 ),
-                child: const Text('Cancel Timer', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                child: Text('Cancel Timer', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70), fontSize: 16)),
               ),
             ] else ...[
-              const Text(
+              Text(
                 'Set auto-close timer',
-                style: TextStyle(color: Colors.white54, fontSize: 15),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 15),
               ),
               const SizedBox(height: 32),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _CircleButton(
-                    icon: Icons.remove,
+                    icon: PhosphorIconsRegular.minus,
                     onTap: () {
                       setState(() {
                         _minutes = (_minutes - 5).clamp(5, 180);
@@ -112,7 +92,7 @@ class _MiniplayerTimerViewState extends State<MiniplayerTimerView> {
                           controller: _minutesController,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.zero,
@@ -125,15 +105,15 @@ class _MiniplayerTimerViewState extends State<MiniplayerTimerView> {
                           },
                         ),
                       ),
-                      const Text(
+                      Text(
                         'min',
-                        style: TextStyle(color: Colors.white70, fontSize: 24, fontWeight: FontWeight.w500),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70), fontSize: 24, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
                   const SizedBox(width: 24),
                   _CircleButton(
-                    icon: Icons.add,
+                    icon: PhosphorIconsRegular.plus,
                     onTap: () {
                       setState(() {
                         _minutes = (_minutes + 5).clamp(5, 180);
@@ -150,7 +130,7 @@ class _MiniplayerTimerViewState extends State<MiniplayerTimerView> {
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: activeColor,
-                  foregroundColor: activeColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                  foregroundColor: activeColor.computeLuminance() > 0.5 ? Colors.black : Theme.of(context).colorScheme.onSurface,
                   padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                   elevation: 0,
@@ -158,7 +138,6 @@ class _MiniplayerTimerViewState extends State<MiniplayerTimerView> {
                 child: const Text('Start Timer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               ),
             ],
-
             const Spacer(),
           ],
         ),
@@ -182,9 +161,9 @@ class _CircleButton extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white38, width: 1.5),
+          border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.38), width: 1.5),
         ),
-        child: Icon(icon, color: Colors.white70, size: 22),
+        child: Icon(icon, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70), size: 22),
       ),
     );
   }

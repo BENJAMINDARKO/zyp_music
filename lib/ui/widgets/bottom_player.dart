@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -9,6 +10,7 @@ import '../../domain/entities/video.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/download_provider.dart';
+import '../../presentation/providers/miniplayer_visibility_provider.dart';
 import '../screens/playing_screen.dart';
 import '../screens/artist_screen.dart';
 import '../screens/album_screen.dart';
@@ -18,9 +20,6 @@ import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../presentation/providers/settings_provider.dart';
 import 'custom_audio_seekbar.dart';
 import 'seekbar_connector.dart';
-import '../widgets/miniplayer_timer_view.dart';
-import '../widgets/miniplayer_queue_view.dart';
-import '../widgets/miniplayer_lyrics_view.dart';
 import '../../core/navigation/navigator_key.dart';
 import "../../core/utils/thumbnail_url.dart";
 
@@ -66,8 +65,8 @@ class BottomPlayer extends StatelessWidget {
           onTap: () => navigateToArtist(track.author!, track.album),
           child: Text(
             track.author!,
-            style: const TextStyle(
-              color: Colors.white54,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
               fontSize: 11,
               decoration: TextDecoration.underline,
             ),
@@ -79,9 +78,9 @@ class BottomPlayer extends StatelessWidget {
     if (track.album != null && track.album!.isNotEmpty) {
       if (parts.isNotEmpty) {
         parts.add(
-          const Text(
+          Text(
             ' • ',
-            style: TextStyle(color: Colors.white54, fontSize: 11),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 11),
           ),
         );
       }
@@ -90,8 +89,8 @@ class BottomPlayer extends StatelessWidget {
           onTap: () => navigateToAlbum(track.album!),
           child: Text(
             track.album!,
-            style: const TextStyle(
-              color: Colors.white54,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
               fontSize: 11,
               decoration: TextDecoration.underline,
             ),
@@ -103,16 +102,16 @@ class BottomPlayer extends StatelessWidget {
     if (track.year != null) {
       if (parts.isNotEmpty) {
         parts.add(
-          const Text(
+          Text(
             ' • ',
-            style: TextStyle(color: Colors.white54, fontSize: 11),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 11),
           ),
         );
       }
       parts.add(
         Text(
           track.year.toString(),
-          style: const TextStyle(color: Colors.white54, fontSize: 11),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 11),
         ),
       );
     }
@@ -125,87 +124,84 @@ class BottomPlayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PlayerProvider>(
-      builder: (context, player, _) {
-        final isEmptyState = player.currentTrack == null;
-        final track =
-            player.currentTrack ??
-            const Track(
-              id: 'empty',
-              title: 'Not Playing',
-              author: 'Select a track to start listening',
-              duration: Duration.zero,
-              source: TrackSource.youtube,
-            );
-
-        final activeColor = !isEmptyState
-            ? (player.dominantColor ?? const Color(0xFFEAB308))
-            : Colors.grey;
-
-        final isDesktop = MediaQuery.of(context).size.width >= 800;
-
-        Widget playerWidget;
-        if (isDesktop) {
-          playerWidget = _buildDesktopPlayer(
-            context,
-            player,
-            track,
-            activeColor,
-            isEmptyState,
-          );
-        } else {
-          playerWidget = _buildMobilePlayer(
-            context,
-            player,
-            track,
-            activeColor,
-            isEmptyState,
-          );
+    return Consumer<MiniplayerVisibilityProvider>(
+      builder: (context, visibility, _) {
+        if (!visibility.isVisible) {
+          return const SizedBox.shrink();
         }
+        return Consumer<PlayerProvider>(
+          builder: (context, player, _) {
+            final isEmptyState = player.currentTrack == null;
+            if (isEmptyState) {
+              return const SizedBox.shrink();
+            }
 
-        if (player.error != null) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 40,
-                color: Colors.red.shade900,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                alignment: Alignment.center,
-                child: Row(
-                  children: [
-                    const Icon(Icons.error, color: Colors.white, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        player.error!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+            final track = player.currentTrack!;
+            final activeColor = player.dominantColor ?? const Color(0xFFEAB308);
+            final isDesktop = MediaQuery.of(context).size.width >= 800;
+
+            Widget playerWidget;
+            if (isDesktop) {
+              playerWidget = _buildDesktopPlayer(
+                context,
+                player,
+                track,
+                activeColor,
+                false,
+              );
+            } else {
+              playerWidget = _buildMobilePlayer(
+                context,
+                player,
+                track,
+                activeColor,
+              );
+            }
+
+            if (player.error != null) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 40,
+                    color: Colors.red.shade900,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.center,
+                    child: Row(
+                      children: [
+                        Icon(PhosphorIconsFill.warning, color: Theme.of(context).colorScheme.onSurface, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            player.error!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        IconButton(
+                          icon: Icon(
+                            PhosphorIconsRegular.x,
+                            color: Theme.of(context).colorScheme.onSurface,
+                            size: 16,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: player.clearError,
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: player.clearError,
-                    ),
-                  ],
-                ),
-              ),
-              playerWidget,
-            ],
-          );
-        }
+                  ),
+                  playerWidget,
+                ],
+              );
+            }
 
-        return playerWidget;
+            return playerWidget;
+          },
+        );
       },
     );
   }
@@ -292,14 +288,14 @@ class BottomPlayer extends StatelessWidget {
                                   width: 56,
                                   height: 56,
                                   color: Colors.grey[800],
-                                  child: const Icon(Icons.music_note),
+                                  child: const Icon(PhosphorIconsRegular.musicNote),
                                 ),
                               )
                             : Container(
                                 width: 56,
                                 height: 56,
                                 color: Colors.grey[800],
-                                child: const Icon(Icons.music_note),
+                                child: const Icon(PhosphorIconsRegular.musicNote),
                               ),
                       ),
                       const SizedBox(width: 16),
@@ -314,7 +310,6 @@ class BottomPlayer extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -322,8 +317,8 @@ class BottomPlayer extends StatelessWidget {
                               track.author ?? '',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white70,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
                                 fontSize: 12,
                               ),
                             ),
@@ -335,7 +330,7 @@ class BottomPlayer extends StatelessWidget {
                         width: 30,
                         height: 20,
                         child: MiniMusicVisualizer(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurface,
                           width: 4,
                           height: 15,
                           animate: player.isActuallyPlaying,
@@ -346,22 +341,22 @@ class BottomPlayer extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            icon: const Icon(
-                              Icons.skip_previous,
-                              color: Colors.white,
+                            icon: Icon(
+                              PhosphorIconsFill.skipBack,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                             onPressed: !isEmptyState && player.currentIndex > 0
                                 ? () => player.previous()
                                 : null,
                           ),
                           player.isBuffering
-                              ? const Padding(
+                              ? Padding(
                                   padding: EdgeInsets.symmetric(horizontal: 16),
                                   child: SizedBox(
                                     width: 24,
                                     height: 24,
                                     child: CircularProgressIndicator(
-                                      color: Colors.white,
+                                      color: Theme.of(context).colorScheme.onSurface,
                                       strokeWidth: 2,
                                     ),
                                   ),
@@ -369,21 +364,21 @@ class BottomPlayer extends StatelessWidget {
                               : IconButton(
                                   icon: Icon(
                                     player.isActuallyPlaying
-                                        ? Icons.pause_circle_filled
-                                        : Icons.play_circle_filled,
+                                        ? PhosphorIconsFill.pauseCircle
+                                        : PhosphorIconsFill.playCircle,
                                     size: 48,
                                     color: isEmptyState
-                                        ? Colors.white54
-                                        : Colors.white,
+                                        ? Theme.of(context).colorScheme.onSurface.withOpacity(0.54)
+                                        : Theme.of(context).colorScheme.onSurface,
                                   ),
                                   onPressed: isEmptyState
                                       ? null
                                       : player.togglePlayPause,
                                 ),
                           IconButton(
-                            icon: const Icon(
-                              Icons.skip_next,
-                              color: Colors.white,
+                            icon: Icon(
+                              PhosphorIconsFill.skipForward,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                             onPressed:
                                 !isEmptyState &&
@@ -402,17 +397,17 @@ class BottomPlayer extends StatelessWidget {
                           valueListenable: player.durationNotifier,
                           builder: (_, dur, __) => Text(
                             '${_formatDuration(pos)} / ${_formatDuration(dur)}',
-                            style: const TextStyle(
-                              color: Colors.white54,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                               fontSize: 12,
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 16),
-                      const Icon(
-                        Icons.volume_up,
-                        color: Colors.white54,
+                      Icon(
+                        PhosphorIconsRegular.speakerHigh,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                         size: 20,
                       ),
                       SizedBox(
@@ -423,8 +418,8 @@ class BottomPlayer extends StatelessWidget {
                             thumbShape: const RoundSliderThumbShape(
                               enabledThumbRadius: 6,
                             ),
-                            activeTrackColor: Colors.white,
-                            inactiveTrackColor: Colors.white24,
+                            activeTrackColor: Theme.of(context).colorScheme.onSurface,
+                            inactiveTrackColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.24),
                           ),
                           child: Slider(value: 1.0, onChanged: (v) {}),
                         ),
@@ -445,39 +440,33 @@ class BottomPlayer extends StatelessWidget {
     PlayerProvider player,
     dynamic track,
     Color activeColor,
-    bool isEmptyState,
   ) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () {
-        if (!isEmptyState && navigatorKey.currentState != null) {
+        if (navigatorKey.currentState != null) {
           navigatorKey.currentState!.push(
             MaterialPageRoute(builder: (_) => const PlayingScreen()),
           );
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        height: 80,
         decoration: BoxDecoration(
-          color: const Color(0xFF141414).withAlpha(240),
-          border: const Border(
-            top: BorderSide(color: Color(0xFF2A2A2A), width: 1),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
+              width: 0.5,
             ),
-          ],
+          ),
         ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Top Row: Art, Titles, Icons
-                Row(
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
                   children: [
                     Hero(
                       tag: 'now-playing-art',
@@ -489,349 +478,127 @@ class BottomPlayer extends StatelessWidget {
                                 width: 48,
                                 height: 48,
                                 fit: BoxFit.cover,
-                                errorWidget: (context, url, error) => Container(
-                                  width: 48,
-                                  height: 48,
-                                  color: Colors.grey[800],
-                                  child: const Icon(Icons.music_note),
-                                ),
+                                errorWidget: (_, __, ___) => _buildArtPlaceholder(context),
                               )
-                            : Container(
-                                width: 48,
-                                height: 48,
-                                color: Colors.grey[800],
-                                child: const Icon(Icons.music_note),
-                              ),
+                            : _buildArtPlaceholder(context),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             track.title,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
                           ),
-                          const SizedBox(height: 2),
-                          // Artist • Album • Year row (like Monochrome reference)
-                          _buildSubtitleRow(context, track),
+                          if (track.author != null && track.author!.isNotEmpty)
+                            Text(
+                              track.author!,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Consumer<PlaylistProvider>(
-                          builder: (context, playlistProvider, child) {
-                            final isFav = playlistProvider.isFavorite(track.id);
-                            return IconButton(
-                              icon: Icon(
-                                isFav ? Icons.favorite : Icons.favorite_border,
-                                color: isFav ? Colors.red : Colors.white54,
-                                size: 24,
-                              ),
-                              onPressed: () {
-                                playlistProvider.toggleFavorite(
-                                  track,
-                                  downloadProvider: context
-                                      .read<DownloadProvider>(),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.mic_none,
-                            color: Colors.white54,
-                            size: 18,
+                    const SizedBox(width: 8),
+                    Consumer<PlaylistProvider>(
+                      builder: (context, playlists, _) {
+                        final isFavorite = playlists.isFavorite(track.id);
+                        return IconButton(
+                          icon: Icon(
+                            isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                            color: isFavorite
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                            size: 22,
                           ),
                           onPressed: () {
-                            _showLyricsModal(context, player);
-                          },
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          constraints: const BoxConstraints(),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.playlist_add,
-                            color: Colors.white54,
-                            size: 18,
-                          ),
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (_) =>
-                                  PlaylistPickerDialog(track: track),
+                            playlists.toggleFavorite(
+                              track,
+                              downloadProvider: context.read<DownloadProvider>(),
                             );
                           },
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          padding: const EdgeInsets.all(8),
                           constraints: const BoxConstraints(),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.access_time,
-                            color: Colors.white54,
-                            size: 18,
-                          ),
-                          onPressed: () => _showTimerFlyout(context),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          constraints: const BoxConstraints(),
-                        ),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.format_list_bulleted,
-                            color: Colors.white54,
-                            size: 18,
-                          ),
-                          onPressed: () => _showQueueFlyout(context),
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
+                          tooltip: isFavorite ? 'Unlike' : 'Like',
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: Icon(
+                        player.isActuallyPlaying
+                            ? PhosphorIconsFill.pause
+                            : PhosphorIconsFill.play,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        size: 32,
+                      ),
+                      onPressed: player.togglePlayPause,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(),
+                      tooltip: player.isActuallyPlaying ? 'Pause' : 'Play',
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-
-                // Middle Row: Progress Slider
-                Row(
-                  children: [
-                    ValueListenableBuilder<Duration>(
-                      valueListenable: player.positionNotifier,
-                      builder: (_, pos, __) => Text(
-                        _formatDuration(pos),
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Consumer<SettingsProvider>(
-                        builder: (context, settings, _) {
-                          SeekbarStyle style = SeekbarStyle.minimal;
-                          switch (settings.seekbarStyle) {
-                            case 'Gradient':
-                              style = SeekbarStyle.gradient;
-                              break;
-                            case 'Waveform':
-                              style = SeekbarStyle.waveform;
-                              break;
-                            case 'Minimal':
-                              style = SeekbarStyle.minimal;
-                              break;
-                            case 'Wavy':
-                              style = SeekbarStyle.wavy;
-                              break;
-                            case 'Segmented':
-                              style = SeekbarStyle.segmented;
-                              break;
-                          }
-                          return SeekbarConnector(
-                            hasTrack: !isEmptyState,
-                            activeColor: activeColor,
-                            style: style,
-                            invertColor: settings.invertSeekbarColor,
-                            isPlaying: player.isActuallyPlaying,
-                            onChangeStart: () => player.startSeek(),
-                            onChanged: (v) {
-                              final pos = Duration(
-                                milliseconds:
-                                    (v * player.duration.inMilliseconds)
-                                        .round(),
-                              );
-                              player.updateSeek(pos);
-                            },
-                            onChangeEnd: (v) {
-                              final pos = Duration(
-                                milliseconds:
-                                    (v * player.duration.inMilliseconds)
-                                        .round(),
-                              );
-                              player.endSeek(pos);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    ValueListenableBuilder<Duration>(
-                      valueListenable: player.durationNotifier,
-                      builder: (_, dur, __) => Text(
-                        _formatDuration(dur),
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // Bottom Row: Controls
-                // Seven controls in a single fluid row distributed by
-                // MainAxisAlignment.spaceBetween. Edge icons stay clear of
-                // the miniplayer's curved borders via the 16dp horizontal
-                // bounding inset; all hitboxes are >= 40dp.
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 8.0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          // Reflect the picked mode in the icon glyph:
-                          // each [AutoDJMode] carries its own leading
-                          // icon, so the miniplayer icon morphs from the
-                          // generic "auto_awesome" to the specific
-                          // mode's glyph (shuffle, queue_music, etc.).
-                          // The off mode falls back to the outlined
-                          // variant for the "disengaged" look.
-                          player.autoDJMode == AutoDJMode.off
-                              ? Icons.auto_awesome_outlined
-                              : player.autoDJMode.icon,
-                          color: player.isAutoDJEnabled
-                              ? const Color(0xFFEAB308)
-                              : Colors.white54,
-                        ),
-                        tooltip: player.isAutoDJEnabled
-                            ? 'Auto DJ: ${player.autoDJMode.label} — tap to change'
-                            : 'Engage Auto DJ',
-                        onPressed: () {
-                          // Phase 0: tapping the icon opens the mode
-                          // picker instead of toggling. The picker
-                          // records the choice on PlayerProvider and
-                          // shows a "Phase 0 placeholder" snackbar — the
-                          // per-mode engine logic lands in Phase 1.
-                          AutoDJModePicker.show(context);
-                        },
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.shuffle,
-                          color: player.shuffleMode
-                              ? Colors.white
-                              : Colors.white54,
-                        ),
-                        onPressed: player.toggleShuffle,
-                      ),
-                      IconButton(
-                        icon: const Icon(
-                          Icons.skip_previous,
-                          color: Colors.white,
-                        ),
-                        onPressed: player.currentIndex > 0
-                            ? () => player.previous()
-                            : null,
-                      ),
-                      GestureDetector(
-                        onTap: player.togglePlayPause,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: activeColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: player.isBuffering
-                              ? const Center(
-                                  child: SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.black,
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                )
-                              : Icon(
-                                  player.isActuallyPlaying
-                                      ? Icons.pause
-                                      : Icons.play_arrow,
-                                  color: activeColor.computeLuminance() > 0.5
-                                      ? Colors.black
-                                      : Colors.white,
-                                  size: 28,
-                                ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.skip_next, color: Colors.white),
-                        onPressed: player.currentIndex + 1 < player.queue.length
-                            ? () => player.next()
-                            : null,
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          player.repeatMode == repeat.PlaybackRepeatMode.one
-                              ? Icons.repeat_one
-                              : Icons.repeat,
-                          color:
-                              player.repeatMode !=
-                                  repeat.PlaybackRepeatMode.none
-                              ? Colors.white
-                              : Colors.white54,
-                        ),
-                        onPressed: player.cycleRepeatMode,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.cast, color: Colors.white54),
-                        onPressed: () {},
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            ValueListenableBuilder<Duration>(
+              valueListenable: player.positionNotifier,
+              builder: (context, position, _) {
+                final duration = player.duration ?? Duration.zero;
+                final progress = duration.inMilliseconds > 0
+                    ? position.inMilliseconds / duration.inMilliseconds
+                    : 0.0;
+                return SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 2,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                    activeTrackColor: Colors.white,
+                    inactiveTrackColor: Colors.white.withOpacity(0.25),
+                    thumbColor: Colors.white,
+                    overlayColor: Colors.white.withOpacity(0.15),
+                    trackShape: const RectangularSliderTrackShape(),
+                  ),
+                  child: Slider(
+                    value: progress.clamp(0.0, 1.0),
+                    onChanged: (value) {
+                      player.seekTo(
+                        Duration(
+                          milliseconds: (value * duration.inMilliseconds).round(),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  void _showFlyout(BuildContext context, Widget content) {
-    final mediaQuery = MediaQuery.of(context);
-    final screenHeight = mediaQuery.size.height;
-    final statusBarHeight = mediaQuery.padding.top;
-    final appBarHeight = kToolbarHeight;
-    final bottomPlayerHeight = 146.0 + mediaQuery.padding.bottom;
-    final flyoutHeight =
-        screenHeight - statusBarHeight - appBarHeight - bottomPlayerHeight;
-
-    showBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return SizedBox(
-          height: flyoutHeight > 0 ? flyoutHeight : 450.0,
-          child: content,
-        );
-      },
+  Widget _buildArtPlaceholder(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      color: Theme.of(context).colorScheme.surfaceVariant,
+      child: Icon(
+        PhosphorIconsRegular.musicNote,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        size: 24,
+      ),
     );
-  }
-
-  void _showLyricsModal(BuildContext context, PlayerProvider player) {
-    _showFlyout(context, const MiniplayerLyricsView());
-  }
-
-  void _showTimerFlyout(BuildContext context) {
-    _showFlyout(context, const MiniplayerTimerView());
-  }
-
-  void _showQueueFlyout(BuildContext context) {
-    _showFlyout(context, const MiniplayerQueueView());
   }
 }

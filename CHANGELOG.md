@@ -2,6 +2,35 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
+## [1.3.0] — 2026-06-10
+
+### Added
+- **Major UI Redesign:** Implemented a massive visual overhaul across the entire app with a premium, modern aesthetic (Apple Music inspired).
+- **"Listen Now" Hub:** Added a brand new personalized "Listen Now" screen (`MusicNowScreen`).
+- **Listening Stats:** Added a dedicated listening stats view that tracks your most played artists, albums, and genres.
+- **Playback Speed Control:** Added a playback speed selector so you can adjust the tempo of any track.
+- **New Iconography System:** Swapped out the old icons for a sleek, unified `phosphoricons` suite and custom SVGs.
+- **Smooth Bottom Sheets:** Upgraded modals and flyouts to use smooth, draggable Apple Music-style bottom sheets.
+
+### Changed
+- **Unified Theme:** Updated `AppTheme`, shared cards, and global backgrounds to ensure strict visual consistency across Home, Library, Artist, and Search screens.
+- **Streamlined Player UI:** Refactored the full-screen player and bottom mini-player for a cleaner, more intuitive layout.
+- **Lyrics View Revamp:** Consolidated the lyrics experience with a new `LyricsTimingSlider` and a streamlined `SingleLineLyricsWidget`.
+- **Context Menus Polished:** Redesigned the Track and Album context menus to match the new UI language.
+
+### Removed
+- **Legacy UI Components:** Deleted outdated layout elements like `custom_lyrics_modal`, `miniplayer_flyout_container`, and `miniplayer_lyrics_view` to simplify the codebase and interface.
+
+---
+
+## [1.2.1] — 2026-06-10
+
+### Fixed
+- **Cold Start Playback UI Freeze:** Fixed an issue where tapping play after a cold start (when the app was completely closed and reopened) would cause the audio to play but the play button and seek bar would remain frozen in a paused state. The user interface now correctly syncs with the audio immediately on the first tap.
+- **Background Audio State Reliability:** Upgraded the internal audio state management to use more reliable data streams (`BehaviorSubject` via `rxdart`). This prevents rare edge cases where the app's visual state gets disconnected from what the audio player is actually doing in the background.
+
+---
+
 ## [1.2.0] — 2026-06-07
 
 ### feat(auto-dj): overhaul recommendation engine across all six modes
