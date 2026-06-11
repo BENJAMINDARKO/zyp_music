@@ -48,6 +48,12 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       throw Exception('Local playlist not found');
     }
 
+    // Prefer local cache if the playlist is already imported/saved
+    final cached = await getCachedPlaylist(playlistId);
+    if (cached != null && cached.tracks.isNotEmpty) {
+      return cached;
+    }
+
     try {
       final playlistModel = await remoteDataSource.getPlaylist(playlistId);
       await localDatabase.insertPlaylist(playlistModel);
@@ -55,7 +61,6 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       await localDatabase.insertTracks(playlistId, trackModels);
       return playlistModel.toEntity();
     } catch (e) {
-      final cached = await getCachedPlaylist(playlistId);
       if (cached != null) {
         return cached;
       }
@@ -170,6 +175,12 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   }
 
   @override
+  Future<void> renamePlaylist(String playlistId, String newTitle) async {
+    await localDatabase.renamePlaylist(playlistId, newTitle);
+  }
+
+  @override
+  @override
   Future<void> saveTrack(String playlistId, Track track) async {
     await localDatabase.insertTrack(playlistId, TrackModel(
       id: track.id,
@@ -182,6 +193,48 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   }
 
   @override
+  Future<void> saveLocalFileTrack(String playlistId, Track track, String filePath) async {
+    final trackModel = TrackModel(
+      id: track.id,
+      title: track.title,
+      thumbnailUrl: track.thumbnailUrl,
+      durationSeconds: track.duration?.inSeconds,
+      author: track.author,
+      album: track.album,
+      albumArtist: track.albumArtist,
+      year: track.year,
+      index: track.index,
+      source: track.source,
+    );
+    await localDatabase.insertTrack(playlistId, trackModel);
+    await localDatabase.markTrackDownloaded(
+      track.id,
+      playlistId,
+      filePath,
+      title: track.title,
+      thumbnailUrl: track.thumbnailUrl,
+      durationSeconds: track.duration?.inSeconds,
+      author: track.author,
+      album: track.album,
+      albumId: track.albumId,
+      year: track.year,
+    );
+  }
+
+  @override
+  Future<void> saveTracks(String playlistId, List<Track> tracks) async {
+    final models = tracks.map((track) => TrackModel(
+      id: track.id,
+      title: track.title,
+      thumbnailUrl: track.thumbnailUrl,
+      durationSeconds: track.duration?.inSeconds,
+      author: track.author,
+      index: track.index,
+    )).toList();
+    await localDatabase.insertTracks(playlistId, models);
+  }
+
+  @override
   Future<void> updatePlaylistTitle(String id, String newTitle) async {
     await localDatabase.updatePlaylistTitle(id, newTitle);
   }
@@ -189,6 +242,22 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   @override
   Future<void> removeTrack(String playlistId, String trackId) async {
     await localDatabase.removeTrack(playlistId, trackId);
+  }
+
+  @override
+  Future<void> updateTrackInPlaylist(String playlistId, String oldTrackId, Track newTrack) async {
+    await localDatabase.updateTrackInPlaylist(
+      playlistId,
+      oldTrackId,
+      TrackModel(
+        id: newTrack.id,
+        title: newTrack.title,
+        thumbnailUrl: newTrack.thumbnailUrl,
+        durationSeconds: newTrack.duration?.inSeconds,
+        author: newTrack.author,
+        index: newTrack.index,
+      ),
+    );
   }
 
   @override

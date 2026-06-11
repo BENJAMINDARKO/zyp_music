@@ -93,6 +93,7 @@ class DownloadService {
   }
 
   Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
+    if (track.id.startsWith('local_')) return;
     if (await _database.isTrackDownloaded(track.id)) return;
     final dir = await _getDownloadDir(playlistId);
     final filePath = p.join(dir, '${track.id}.mp4');
@@ -263,6 +264,7 @@ class DownloadService {
   }
 
   Future<void> deleteDownloadedTrack(String trackId) async {
+    if (trackId.startsWith('local_')) return;
     final path = await _database.getDownloadedFilePath(trackId);
     if (path != null) {
       try {

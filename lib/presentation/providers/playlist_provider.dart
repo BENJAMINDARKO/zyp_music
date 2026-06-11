@@ -514,6 +514,52 @@ class PlaylistProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> addTracksToPlaylist(String playlistId, List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    try {
+      await _repository.saveTracks(playlistId, tracks);
+      _lastAddedPlaylistId = playlistId;
+      
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('lastAddedPlaylistId', playlistId);
+      } catch (e) {
+        AppLogger.log('Failed to save lastAddedPlaylistId: $e', name: 'PlaylistProvider');
+      }
+      
+      // Update in-memory if it's the current playlist
+      if (_currentPlaylist?.id == playlistId) {
+        _currentPlaylist = Playlist(
+          id: _currentPlaylist!.id,
+          title: _currentPlaylist!.title,
+          description: _currentPlaylist!.description,
+          thumbnailUrl: _currentPlaylist!.thumbnailUrl ?? tracks.first.thumbnailUrl,
+          author: _currentPlaylist!.author,
+          videoCount: _currentPlaylist!.videoCount + tracks.length,
+          tracks: [..._currentPlaylist!.tracks, ...tracks],
+        );
+      }
+      
+      // Update the playlist list
+      final index = _playlists.indexWhere((p) => p.id == playlistId);
+      if (index != -1) {
+        _playlists[index] = Playlist(
+          id: _playlists[index].id,
+          title: _playlists[index].title,
+          description: _playlists[index].description,
+          thumbnailUrl: _playlists[index].thumbnailUrl ?? tracks.first.thumbnailUrl,
+          author: _playlists[index].author,
+          videoCount: _playlists[index].videoCount + tracks.length,
+          tracks: _playlists[index].tracks, // We don't cache all tracks here
+        );
+      }
+      notifyListeners();
+    } catch (e) {
+      AppLogger.log('Failed to add tracks to $playlistId: $e',
+          name: 'PlaylistProvider');
+    }
+  }
+
   Future<void> removeTrackFromPlaylist(
       String playlistId, String trackId) async {
     if (_currentPlaylist?.id == playlistId) {
@@ -786,6 +832,44 @@ class PlaylistProvider extends ChangeNotifier {
       // Return null on failure so caller can handle it gracefully
       return null;
     }
+  }
+
+  Future<Playlist> duplicatePlaylist(String playlistId) async {
+    final existing = _playlists.firstWhere((p) => p.id == playlistId, orElse: () => throw Exception('Playlist not found'));
+    final newPlaylist = await createPlaylist('${existing.title} (Copy)');
+    final tracks = await getCachedTracks(playlistId);
+    if (tracks != null && tracks.isNotEmpty) {
+      await addTracksToPlaylist(newPlaylist.id, tracks);
+    }
+    return newPlaylist;
+  }
+
+  Future<void> importLocalFiles(List<Map<String, String>> files) async {
+    const uploadsPlaylistId = 'local_uploads';
+    final idx = _playlists.indexWhere((p) => p.id == uploadsPlaylistId);
+    if (idx == -1) {
+      await _repository.savePlaylist(Playlist(
+        id: uploadsPlaylistId,
+        title: 'Uploads',
+        author: 'Local',
+        videoCount: 0,
+        tracks: [],
+      ));
+    }
+    
+    final tracks = files.map((f) => Track(
+      id: 'file_${f['path'].hashCode}',
+      title: f['title'] ?? f['name'] ?? 'Unknown Track',
+      author: f['author'] ?? 'Unknown Artist',
+      thumbnailUrl: f['thumbnailUrl'],
+      duration: const Duration(seconds: 0),
+    )).toList();
+    await addTracksToPlaylist(uploadsPlaylistId, tracks);
+  }
+
+  Future<void> resolveImportStubs(String playlistId) async {
+    // Stub background resolution
+    // Would normally try to fetch missing metadata for stub tracks
   }
 
   /// Spec 2G Fix #6: cancel any pending debounced refresh

@@ -11,6 +11,8 @@ import '../widgets/bottom_player.dart';
 import '../widgets/track_download_icon.dart';
 import '../../presentation/providers/download_provider.dart';
 import "../../core/utils/thumbnail_url.dart";
+import '../widgets/playing_track_mask.dart';
+import '../widgets/explicit_icon.dart';
 
 class PlaylistScreen extends StatefulWidget {
   final String playlistId;
@@ -72,7 +74,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Color(0xFFEAB308))),
         extendBody: true,
-        bottomNavigationBar: BottomPlayer(),
       );
     }
 
@@ -94,7 +95,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           ),
         ),
         extendBody: true,
-        bottomNavigationBar: const BottomPlayer(),
       );
     }
 
@@ -106,6 +106,58 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             backgroundColor: Colors.black,
             expandedHeight: 300,
             pinned: true,
+            actions: [
+              PopupMenuButton<String>(
+                icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Theme.of(context).colorScheme.onSurface),
+                onSelected: (value) async {
+                  final provider = context.read<PlaylistProvider>();
+                  if (value == 'rename') {
+                    final controller = TextEditingController(text: _playlist!.title);
+                    final newName = await showDialog<String>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Rename Playlist'),
+                        content: TextField(
+                          controller: controller,
+                          autofocus: true,
+                          decoration: const InputDecoration(hintText: 'Playlist Name'),
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                          TextButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Save')),
+                        ],
+                      ),
+                    );
+                    if (newName != null && newName.isNotEmpty && mounted) {
+                      await provider.renamePlaylist(_playlist!.id, newName);
+                      _loadPlaylist();
+                    }
+                  } else if (value == 'duplicate') {
+                    final newPlaylist = await provider.duplicatePlaylist(_playlist!.id);
+                    if (newPlaylist != null && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Duplicated to ${newPlaylist.title}')));
+                    }
+                  } else if (value == 'delete') {
+                    await provider.deletePlaylist(_playlist!.id);
+                    if (mounted) Navigator.pop(context);
+                  } else if (value == 'queue') {
+                    final player = context.read<PlayerProvider>();
+                    player.appendToQueue(_playlist!.tracks);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${_playlist!.tracks.length} tracks to queue')));
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'rename', child: Text('Rename Playlist')),
+                  const PopupMenuItem(value: 'duplicate', child: Text('Duplicate Playlist')),
+                  const PopupMenuItem(value: 'queue', child: Text('Add to Queue')),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete Playlist', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -179,22 +231,31 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final track = _playlist!.tracks[index];
-                  return ListTile(
-                    leading: SizedBox(
-                      width: 40,
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: const TextStyle(fontSize: 16),
+                  return PlayingTrackMask(
+                    track: track,
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 40,
+                        child: Center(
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(fontSize: 16),
+                          ),
                         ),
                       ),
-                    ),
-                    title: Text(
-                      track.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              track.title,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (track.isExplicit) const ExplicitIcon(),
+                        ],
+                      ),
                     subtitle: Text(
                       track.author ?? 'Unknown Artist',
                       maxLines: 1,
@@ -229,11 +290,26 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         Text(
                           formatDuration(track.duration),
                         ),
+                        PopupMenuButton<String>(
+                          icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+                          onSelected: (value) async {
+                            if (value == 'remove') {
+                              await context.read<PlaylistProvider>().removeTrackFromPlaylist(_playlist!.id, track.id);
+                              _loadPlaylist();
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'remove',
+                              child: Text('Remove from playlist', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                     onTap: () => _playTrack(index),
                     onLongPress: () => TrackContextMenu.show(context, track),
-                  );
+                  ));
                 },
                 childCount: _playlist!.tracks.length,
               ),
@@ -242,7 +318,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ],
       ),
       extendBody: true,
-      bottomNavigationBar: const BottomPlayer(),
     );
   }
 }

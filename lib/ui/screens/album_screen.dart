@@ -12,6 +12,8 @@ import '../widgets/album_download_icon.dart';
 import '../widgets/bottom_player.dart';
 import '../../presentation/providers/download_provider.dart';
 import "../../core/utils/thumbnail_url.dart";
+import '../widgets/playing_track_mask.dart';
+import '../widgets/explicit_icon.dart';
 
 class AlbumScreen extends StatefulWidget {
   final String albumId;
@@ -73,7 +75,6 @@ class _AlbumScreenState extends State<AlbumScreen> {
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Color(0xFFEAB308))),
         extendBody: true,
-        bottomNavigationBar: BottomPlayer(),
       );
     }
 
@@ -95,7 +96,6 @@ class _AlbumScreenState extends State<AlbumScreen> {
           ),
         ),
         extendBody: true,
-        bottomNavigationBar: const BottomPlayer(),
       );
     }
 
@@ -107,6 +107,25 @@ class _AlbumScreenState extends State<AlbumScreen> {
             backgroundColor: Colors.black,
             expandedHeight: 300,
             pinned: true,
+            actions: [
+              Consumer<PlaylistProvider>(
+                builder: (context, provider, _) {
+                  final isFavorite = provider.isAlbumFavorite(_album!.id);
+                  return IconButton(
+                    icon: Icon(isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart, color: isFavorite ? Colors.red : Colors.white),
+                    onPressed: () => provider.toggleFavoriteAlbum(_album!),
+                  );
+                },
+              ),
+              IconButton(
+                icon: const Icon(PhosphorIconsRegular.queue, color: Colors.white),
+                onPressed: () {
+                  final player = context.read<PlayerProvider>();
+                  player.appendToQueue(_album!.tracks);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${_album!.tracks.length} tracks to queue')));
+                },
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -204,22 +223,31 @@ class _AlbumScreenState extends State<AlbumScreen> {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final track = _album!.tracks[index];
-                  return ListTile(
-                    leading: SizedBox(
-                      width: 40,
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: const TextStyle(fontSize: 16),
+                  return PlayingTrackMask(
+                    track: track,
+                    child: ListTile(
+                      leading: SizedBox(
+                        width: 40,
+                        child: Center(
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(fontSize: 16),
+                          ),
                         ),
                       ),
-                    ),
-                    title: Text(
-                      track.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              track.title,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (track.isExplicit) const ExplicitIcon(),
+                        ],
+                      ),
                     subtitle: Text(
                       track.author ?? 'Unknown Artist',
                       maxLines: 1,
@@ -258,7 +286,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
                     ),
                     onTap: () => _playTrack(index),
                     onLongPress: () => TrackContextMenu.show(context, track),
-                  );
+                  ));
                 },
                 childCount: _album!.tracks.length,
               ),
@@ -267,7 +295,6 @@ class _AlbumScreenState extends State<AlbumScreen> {
         ],
       ),
       extendBody: true,
-      bottomNavigationBar: const BottomPlayer(),
     );
   }
 }

@@ -19,59 +19,145 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
+  bool _isSearching = false;
   String _searchQuery = '';
+  String _submittedQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final ValueNotifier<String> _searchNotifier = ValueNotifier<String>('');
+
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(), // Search navigator
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text;
+      });
+    });
+    _searchFocusNode.addListener(() {
+      if (_searchFocusNode.hasFocus) {
+        setState(() => _isSearching = true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchNotifier.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _selectTab(int index) {
+    if (_isSearching) {
+      setState(() {
+        _isSearching = false;
+        _searchController.clear();
+        _searchFocusNode.unfocus();
+        _selectedIndex = index;
+      });
+      return;
+    }
+    if (_selectedIndex == index) {
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+    } else {
+      setState(() => _selectedIndex = index);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
 
-    final List<Widget> screens = [
-      const HomeScreen(),
-      const MusicNowScreen(),
-      const LibraryScreen(),
-    ];
 
-    return Scaffold(
-      appBar: isDesktop ? null : AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        final activeIndex = _isSearching ? 3 : _selectedIndex;
+        final navigator = _navigatorKeys[activeIndex].currentState;
+        if (navigator != null && navigator.canPop()) {
+          navigator.pop();
+          return false;
+        }
+        if (_isSearching) {
+          setState(() {
+            _isSearching = false;
+            _searchController.clear();
+            _searchFocusNode.unfocus();
+          });
+          return false;
+        }
+        if (_selectedIndex != 0) {
+          setState(() => _selectedIndex = 0);
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+      appBar: AppBar(
         elevation: 0,
-        leading: GestureDetector(
-          onTap: () => setState(() => _selectedIndex = 0),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Image.asset('assets/logo.png', height: 36),
-          ),
+        backgroundColor: Colors.transparent,
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset('assets/logo.png', height: 36),
         ),
         leadingWidth: 52,
-        title: GestureDetector(
-          onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen()));
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: [
-                Icon(PhosphorIconsRegular.magnifyingGlass, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 20),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text('Search for tracks, artists...', style: TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ),
+        title: Container(
+          height: 40,
+          decoration: const ShapeDecoration(
+            color: Colors.white10,
+            shape: StadiumBorder(),
           ),
+          child: TextField(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Search for tracks, artists...',
+              hintStyle: const TextStyle(color: Colors.white54),
+              prefixIcon: const Icon(PhosphorIconsRegular.magnifyingGlass, color: Colors.white54, size: 20),
+              border: InputBorder.none,
+              filled: false,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(PhosphorIconsRegular.x, color: Colors.white54, size: 20),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {
+                          _submittedQuery = '';
+                        });
+                      },
+                    )
+                  : null,
+            ),
+              onSubmitted: (value) {
+                setState(() {
+                  _submittedQuery = value;
+                });
+                _searchNotifier.value = value;
+              },
+            ),
         ),
         actions: [
           IconButton(
-            key: const Key('settings-button'),
-            icon: Icon(PhosphorIconsRegular.gear),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            icon: const Icon(PhosphorIconsRegular.gear),
+            onPressed: () {
+              final activeIndex = _isSearching ? 3 : _selectedIndex;
+              _navigatorKeys[activeIndex].currentState?.push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen())
+              );
+            },
           ),
         ],
       ),
-
       body: Column(
         children: [
           Expanded(
@@ -80,14 +166,26 @@ class _MainLayoutState extends State<MainLayout> {
                 if (isDesktop)
                   GlassSidebar(
                     selectedIndex: _selectedIndex,
-                    onItemSelected: (index) {
-                      setState(() => _selectedIndex = index);
+                    onItemSelected: _selectTab,
+                    onSettingsTap: () {
+                      final activeIndex = _isSearching ? 3 : _selectedIndex;
+                      _navigatorKeys[activeIndex].currentState?.push(
+                        MaterialPageRoute(builder: (_) => const SettingsScreen())
+                      );
                     },
                   ),
                 Expanded(
                   child: IndexedStack(
-                    index: _selectedIndex,
-                    children: screens,
+                    index: _isSearching ? 3 : _selectedIndex,
+                    children: [
+                      _buildTabNavigator(0, const HomeScreen()),
+                      _buildTabNavigator(1, const MusicNowScreen()),
+                      _buildTabNavigator(2, const LibraryScreen()),
+                      _buildTabNavigator(3, SearchScreen(
+                        initialQuery: _submittedQuery,
+                        searchNotifier: _searchNotifier,
+                      )),
+                    ],
                   ),
                 ),
               ],
@@ -105,12 +203,12 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
               child: BottomNavigationBar(
-                currentIndex: _selectedIndex,
-                onTap: (index) => setState(() => _selectedIndex = index),
+                currentIndex: _isSearching ? 0 : _selectedIndex,
+                onTap: _selectTab,
                 type: BottomNavigationBarType.fixed,
                 backgroundColor: Colors.transparent,
                 elevation: 0,
-                selectedItemColor: Theme.of(context).colorScheme.onSurface,
+                selectedItemColor: _isSearching ? Theme.of(context).colorScheme.onSurface.withOpacity(0.54) : Theme.of(context).colorScheme.onSurface,
                 unselectedItemColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
                 items: const [
                   BottomNavigationBarItem(
@@ -133,6 +231,18 @@ class _MainLayoutState extends State<MainLayout> {
             ),
         ],
       ),
+      ),
+    );
+  }
+
+  Widget _buildTabNavigator(int index, Widget rootScreen) {
+    return Navigator(
+      key: _navigatorKeys[index],
+      onGenerateRoute: (routeSettings) {
+        return MaterialPageRoute(
+          builder: (context) => rootScreen,
+        );
+      },
     );
   }
 }

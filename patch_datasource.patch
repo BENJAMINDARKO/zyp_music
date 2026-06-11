@@ -1,0 +1,44 @@
+--- lib/data/datasources/remote/youtube_remote_datasource.dart
++++ lib/data/datasources/remote/youtube_remote_datasource.dart
+@@ -10,6 +10,7 @@
+ import 'youtube_audio_extractor.dart';
+ import '../../../core/utils/normalise.dart';
+ import '../../../core/utils/thumbnail_url.dart';
++import 'package:shared_preferences/shared_preferences.dart';
+ 
+ class YoutubeRemoteDataSource {
+   static const int _maxRetries = 3;
+@@ -194,6 +195,14 @@
+     if (!searchQuery.toLowerCase().contains('official') && !searchQuery.toLowerCase().contains('music')) {
+       searchQuery = '$searchQuery official audio';
+     }
++
++    final prefs = await SharedPreferences.getInstance();
++    final explicitFilter = prefs.getString('explicitFilter') ?? 'both';
++    if (explicitFilter == 'clean') {
++      searchQuery = '$searchQuery clean';
++    } else if (explicitFilter == 'explicit') {
++      searchQuery = '$searchQuery explicit';
++    }
+     
+     final results = await _yt.search.search(searchQuery);
+     final tracks = <TrackModel>[];
+@@ -226,7 +235,16 @@
+     // method with a refined query rather than paging the
+     // same query. If a future version exposes pagination,
+     // thread the `limit`/`page` arguments through here.
+-    final results = await _ytMusic.searchSongs(query);
++
++    var searchQuery = query;
++    final prefs = await SharedPreferences.getInstance();
++    final explicitFilter = prefs.getString('explicitFilter') ?? 'both';
++    if (explicitFilter == 'clean') {
++      searchQuery = '$searchQuery clean';
++    } else if (explicitFilter == 'explicit') {
++      searchQuery = '$searchQuery explicit';
++    }
++
++    final results = await _ytMusic.searchSongs(searchQuery);
+     final tracks = <TrackModel>[];
+ 
+     for (var i = 0; i < results.length; i++) {

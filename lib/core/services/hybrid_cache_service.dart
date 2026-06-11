@@ -141,6 +141,7 @@ class HybridCacheService extends ChangeNotifier {
         if (dot <= 0) continue;
         final trackId = name.substring(0, dot);
         if (trackId.isEmpty) continue;
+        if (trackId.startsWith('local_') || trackId.startsWith('importstub_')) continue;
         if (box.containsKey(trackId)) continue;
         orphans[trackId] = CacheTrackerModel(trackId: trackId, cachedAt: now);
       }
@@ -395,6 +396,10 @@ class HybridCacheService extends ChangeNotifier {
   }) async {
     final box = _box;
     if (box == null) return;
+    if (trackId.startsWith('local_') || trackId.startsWith('importstub_')) {
+      _activeCaching.remove(trackId);
+      return;
+    }
 
     if (expectedFilePath != null) {
       if (!File(expectedFilePath).existsSync()) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_explode;
 
 /// Lightweight, Dart port of PlayTorrio TV's `YouTubeExtractor` + `MusicAudioExtractor`.
 ///
@@ -167,8 +168,25 @@ class YoutubeAudioExtractor {
     // One retry with a forced config refresh (visitor_data / api key may have rotated).
     if (!config.forced) {
       _config = null;
-      return _getAudioUrlForceRefresh(videoId);
+      final retryUrl = await _getAudioUrlForceRefresh(videoId);
+      if (retryUrl != null) return retryUrl;
     }
+
+    // FINAL FALLBACK: If all InnerTube clients fail (e.g. LOGIN_REQUIRED block),
+    // use youtube_explode_dart which has built-in PO Token bypasses.
+    try {
+      _log('InnerTube clients failed, falling back to youtube_explode_dart...');
+      final yt = yt_explode.YoutubeExplode();
+      final manifest = await yt.videos.streamsClient.getManifest(videoId);
+      final audioInfo = manifest.audioOnly.withHighestBitrate();
+      yt.close();
+      
+      _streamCache[videoId] = _CachedStream(audioInfo.url.toString(), null);
+      return audioInfo.url.toString();
+    } catch (e) {
+      _log('youtube_explode_dart fallback failed: $e');
+    }
+
     return null;
   }
 

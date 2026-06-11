@@ -614,11 +614,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       });
       if (_currentTrack != null && _currentIndex < mediaItems.length) {
         final activeMediaItem = mediaItems[_currentIndex];
-        AppLogger.log(
-          '[NotifDebug] _syncRestoredStateToAudioHandler -> updateMediaItem: '
-          'id=${activeMediaItem.id} title="${activeMediaItem.title}"',
-          name: 'PlayerProvider',
-        );
         handler.updateMediaItem(activeMediaItem);
       }
     } catch (e) {
@@ -662,11 +657,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // so the miniplayer is persistent and visible on startup!
       if (_recentlyPlayed.isNotEmpty && _currentTrack == null) {
         _currentTrack = _recentlyPlayed.first;
-        AppLogger.log(
-          '[NotifDebug] _currentTrack = recentlyPlayed.first: '
-          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-          name: 'PlayerProvider',
-        );
         _queue = [_currentTrack!];
         _currentIndex = 0;
         _processingState = ProcessingState.idle;
@@ -786,18 +776,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         _currentTrack = _deserializeTrack(
           Map<String, dynamic>.from(currentTrackMap),
         );
-        AppLogger.log(
-          '[NotifDebug] _currentTrack = deserialized from box: '
-          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-          name: 'PlayerProvider',
-        );
       } else if (_queue.isNotEmpty) {
         _currentTrack = _queue[_currentIndex];
-        AppLogger.log(
-          '[NotifDebug] _currentTrack = queue[_currentIndex] (restore fallback): '
-          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-          name: 'PlayerProvider',
-        );
       }
 
       if (_currentTrack == null) return;
@@ -840,13 +820,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// without ever firing `detached`.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    AppLogger.log(
-      '[SeekbarDebug] lifecycle: $state, '
-      'currentTrack=${_currentTrack?.id}, '
-      'position=${positionNotifier.value.inMilliseconds}ms, '
-      'playing=$_isPlaying processingState=$_processingState',
-      name: 'PlayerProvider',
-    );
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
         state == AppLifecycleState.inactive) {
@@ -875,11 +848,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
           playFromQueue(_currentIndex);
         } else {
           _currentTrack = _queue[_currentIndex];
-          AppLogger.log(
-            '[NotifDebug] _currentTrack = queue[_currentIndex] (removeFromQueue fallback): '
-            'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-            name: 'PlayerProvider',
-          );
           _position = Duration.zero;
           _bufferedPosition = Duration.zero;
           notifyListeners();
@@ -1398,11 +1366,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queue.add(next);
     _currentIndex = 0;
     _currentTrack = next;
-    AppLogger.log(
-      '[NotifDebug] _currentTrack = next (cold start): '
-      'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-      name: 'PlayerProvider',
-    );
     try {
       await playFromQueue(0);
     } catch (e) {
@@ -1507,13 +1470,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     positionNotifier.value = resetPosition;
     _position = resetPosition;
 
-    AppLogger.log(
-      '[SeekbarDebug] playTrack ENTER: track=${track.id}, '
-      'positionNotifier=${positionNotifier.value.inMilliseconds}ms, '
-      'startAt=$startAt, '
-      'processingState=$_processingState',
-      name: 'PlayerProvider',
-    );
     _isLoading = true;
     _error = null;
     _stopPolling();
@@ -1538,24 +1494,38 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _pendingResumePosition = null;
 
     try {
-      AppLogger.log(
-        '[NotifDebug] playTrack entry: id=${track.id} title="${track.title}" '
-        'author="${track.author}" startAt=$effectiveStartAt',
-        name: 'PlayerProvider',
-      );
-      AppLogger.log(
-        '[NotifDebug] playTrack caller: ${StackTrace.current.toString().split("\n").getRange(0, 4).join(" | ")}',
-        name: 'PlayerProvider',
-      );
-      _currentTrack = track;
-      AppLogger.log(
-        '[NotifDebug] _currentTrack = track (playTrack line 1): '
-        'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-        name: 'PlayerProvider',
-      );
+      Track actualTrack = track;
+      if (track.id.startsWith('importstub_') && _playlistRepository != null) {
+        try {
+          final query = '${track.title} ${track.author ?? ''}';
+          final results = await _playlistRepository!.searchTracks(query);
+          if (results.isNotEmpty) {
+            final bestMatch = results.first;
+            actualTrack = Track(
+              id: bestMatch.id,
+              title: track.title, // keep original title
+              author: track.author, // keep original artist
+              thumbnailUrl: track.thumbnailUrl?.isNotEmpty == true ? track.thumbnailUrl : bestMatch.thumbnailUrl,
+              duration: bestMatch.duration,
+              source: TrackSource.youtube,
+              sources: bestMatch.sources,
+            );
+            
+            // Replace the stub in the active queue so the UI uses the real track
+            final index = _queue.indexWhere((t) => t.id == track.id);
+            if (index != -1) {
+              _queue[index] = actualTrack;
+            }
+          }
+        } catch (e) {
+          AppLogger.log('Failed to resolve stub track: $e', name: 'PlayerProvider');
+        }
+      }
+
+      _currentTrack = actualTrack;
       _position = effectiveStartAt ?? Duration.zero;
       _bufferedPosition = Duration.zero;
-      _addToRecentlyPlayed(track);
+      _addToRecentlyPlayed(actualTrack);
 
       // Push the new track's MediaItem immediately, before any await
       // suspension points. This sets _pendingMediaItemId in the handler
@@ -1564,14 +1534,14 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // mixer.playTrack, audioRepository.playTrack, etc.).
       _audioHandler?.updateMediaItem(
         MediaItem(
-          id: track.id,
-          title: track.title,
-          artist: track.author ?? '',
-          album: track.album,
-          artUri: track.thumbnailUrl != null
-              ? Uri.tryParse(track.thumbnailUrl!)
+          id: actualTrack.id,
+          title: actualTrack.title,
+          artist: actualTrack.author ?? '',
+          album: actualTrack.album,
+          artUri: actualTrack.thumbnailUrl != null
+              ? Uri.tryParse(actualTrack.thumbnailUrl!)
               : null,
-          duration: track.duration,
+          duration: actualTrack.duration,
         ),
       );
 
@@ -1581,18 +1551,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // provider to time them out (1500 ms) before the APIs had a chance to
       // respond, resulting in "No lyrics available" for most tracks.
       _fetchLyricsForCurrentTrack();
-      _extractDominantColor(track.thumbnailUrl);
+      _extractDominantColor(actualTrack.thumbnailUrl);
 
-      final sourceRef = await PlaybackSession().resolve(track, _fallbackEngine);
+      final sourceRef = await PlaybackSession().resolve(actualTrack, _fallbackEngine);
       final qualityStr = sourceRef?.quality ?? 'adaptive';
 
       if (sourceRef != null) {
         _currentTrack = track.copyWith(activeSource: sourceRef);
-        AppLogger.log(
-          '[NotifDebug] _currentTrack = track.copyWith(activeSource) (playTrack line 2): '
-          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-          name: 'PlayerProvider',
-        );
       }
 
       if (_mixer != null) {
@@ -1645,12 +1610,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // fire when currentIndex stays at 0 after setAudioSource.
       // This is idempotent via the handler's internal dedup guard.
       if (_currentTrack != null) {
-        AppLogger.log(
-          '[NotifDebug] playTrack deferred updateMediaItem: '
-          'id=${_currentTrack!.id} title="${_currentTrack!.title}" '
-          'author="${_currentTrack!.author}"',
-          name: 'PlayerProvider',
-        );
         unawaited(
           _audioHandler?.updateMediaItem(
             MediaItem(
@@ -1819,12 +1778,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     final handlerPlaying = _audioHandler?.playbackState.value.playing ?? false;
 
-    AppLogger.log(
-      '[SeekbarDebug] togglePlayPause: providerIsPlaying=$_isPlaying, '
-      'handlerPlaying=$handlerPlaying, '
-      'processingState=$_processingState, currentTrack=${_currentTrack?.id}',
-      name: 'PlayerProvider',
-    );
 
     try {
       if (_isPlaying) {
@@ -2039,11 +1992,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         name: 'PlayerProvider',
       );
       _currentTrack = resolved;
-      AppLogger.log(
-        '[NotifDebug] _currentTrack = resolved (mediaItem stream): '
-        'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-        name: 'PlayerProvider',
-      );
       if (newIndex != null) _currentIndex = newIndex;
       // [UI-Sync] Always refresh duration from the incoming MediaItem
       // on a gapless boundary. The duration stream may not update
@@ -2093,11 +2041,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       if (resolved != null) {
         _currentTrack = resolved;
-        AppLogger.log(
-          '[NotifDebug] _currentTrack = resolved (synchronizeActiveTrackState): '
-          'id=${_currentTrack!.id} title="${_currentTrack!.title}"',
-          name: 'PlayerProvider',
-        );
         if (newIndex != null) _currentIndex = newIndex;
         _historyLoggedForCurrentTrack = false;
         _fetchLyricsForCurrentTrack();
@@ -2110,11 +2053,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // Always update the backing field so internal reads are correct.
       _position = pos;
 
-      AppLogger.log(
-        '[SeekbarDebug] position event: ${pos.inMilliseconds}ms, '
-        'currentTrack=${_currentTrack?.id}, isPlaying=$_isPlaying',
-        name: 'PlayerProvider',
-      );
       // Drag lock: while the user is dragging the seekbar, the
       // position they painted is the source of truth. Block UI
       // updates only — the backing field is already updated above.
@@ -2250,13 +2188,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _completionSubscription = _audioRepository.processingStateStream.listen((
       state,
     ) async {
-      AppLogger.log(
-        '[SeekbarDebug] processingState event: $state, '
-        'track=${_currentTrack?.id}, '
-        'repeatMode=$_repeatMode, '
-        'position=${positionNotifier.value.inMilliseconds}ms',
-        name: 'PlayerProvider',
-      );
       if (state != ProcessingState.completed) return;
       if (_queue.isEmpty) return;
       if (_isHandlingCompletion) return;
@@ -2333,10 +2264,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queue = [];
     _currentIndex = 0;
     _currentTrack = null;
-    AppLogger.log(
-      '[NotifDebug] _currentTrack = null (clearQueue)',
-      name: 'PlayerProvider',
-    );
     _currentPlaylistId = null;
     _originalQueue = null;
     _shuffleMode = false;

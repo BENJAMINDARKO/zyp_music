@@ -68,7 +68,14 @@ class _MockPlaylistRepo implements PlaylistRepository {
   @override Future<Playlist> getFromUrl(String url) => throw UnimplementedError();
   @override Future<void> savePlaylist(Playlist p) async {}
   @override Future<void> deletePlaylist(String id) async {}
-  @override Future<void> saveTrack(String pid, Track t) async {}
+  @override Future<void> renamePlaylist(String id, String newName) async {}
+  @override Future<void> updateTrackInPlaylist(String playlistId, Track track) async {}
+  @override
+  Future<void> saveTrack(String playlistId, Track track) async {}
+  @override
+  Future<void> saveTracks(String playlistId, List<Track> tracks) async {}
+  @override
+  Future<void> saveLocalFileTrack(String playlistId, Track track, String filePath) async {}
   @override Future<List<Track>> getCachedTracks(String pid) async => [];
   @override Future<Playlist?> getCachedPlaylist(String pid) async => null;
   @override Future<List<Track>> search(String q) async => [];

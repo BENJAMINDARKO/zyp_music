@@ -6,11 +6,13 @@ import '../screens/settings_screen.dart';
 class GlassSidebar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
+  final VoidCallback onSettingsTap;
 
   const GlassSidebar({
     super.key,
     required this.selectedIndex,
     required this.onItemSelected,
+    required this.onSettingsTap,
   });
 
   @override
@@ -54,13 +56,7 @@ class GlassSidebar extends StatelessWidget {
               _buildMenuItem(context, PhosphorIconsRegular.bookOpen, 'Library', 2),
               const Spacer(),
               InkWell(
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                  );
-                },
+                onTap: onSettingsTap,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   child: Row(

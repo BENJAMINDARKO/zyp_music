@@ -2,7 +2,21 @@
 
 All notable changes to the `zyp_music` project are documented in this file.
 
-## [1.3.0] — 2026-06-10
+## [1.2.5] — 2026-06-10
+
+### Fixed
+- **Search Bar Theme:** Stripped global `InputDecorationTheme` overrides that were hiding the custom pill-shaped search bar.
+- **Imported Playlist Editing:** Removed a destructive synchronization loop where opening an imported playlist would overwrite the local database with the live YouTube version, erasing local track deletions.
+- **Search Result Limits:** Modified the search engine to aggressively fetch additional pages under the hood, vastly increasing the number of displayed results (e.g. 60+ instead of just 20).
+- **Suggested Artists Thumbnail Fix:** Artists in the Suggested section now correctly load their thumbnail images from the cache if they were previously downloaded.
+- **Full Screen Lyrics Scrolling Fix:** Fixed a bug where full-screen lyrics would not scroll to the active line.
+
+### Added
+- **Major UI Overhaul:** Implemented a major visual redesign to make the app feel modern, sleek, and premium.
+- **"Your Music" Offline Upload Button:** Added an "Upload Offline Library" button to the Playlist tab.
+- **Third-Party Playlist Import UI:** Added an "Import Playlist" button in the Playlist tab to paste a URL.
+
+
 
 ### Added
 - **Major UI Redesign:** Implemented a massive visual overhaul across the entire app with a premium, modern aesthetic (Apple Music inspired).

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'explicit_icon.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -15,6 +16,7 @@ import 'album_download_icon.dart';
 import "../screens/album_screen.dart";
 import "../screens/artist_screen.dart";
 import "../../core/utils/thumbnail_url.dart";
+import 'playing_track_mask.dart';
 
 class TrackCard extends StatelessWidget {
   final Track track;
@@ -23,8 +25,10 @@ class TrackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
+    return PlayingTrackMask(
+      track: track,
+      child: Material(
+        color: Colors.transparent,
       child: InkWell(
         onTap: () {
           final player = context.read<PlayerProvider>();
@@ -117,11 +121,18 @@ class TrackCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      track.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            track.title,
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (track.isExplicit) const ExplicitIcon(),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -135,6 +146,7 @@ class TrackCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

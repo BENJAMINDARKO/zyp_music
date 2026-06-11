@@ -30,6 +30,7 @@ class SettingsProvider extends ChangeNotifier {
   // Search Sources
   static const _keySearchSourceYoutube = 'searchSourceYoutube';
   static const _keySearchSourceYTMusic = 'searchSourceYTMusic';
+  static const _keyExplicitFilter = 'explicitFilter';
 
   // Downloads
   static const _keyDownloadQuality = 'downloadQuality';
@@ -69,6 +70,7 @@ class SettingsProvider extends ChangeNotifier {
 
   bool _searchSourceYoutube = true;
   bool _searchSourceYTMusic = true;
+  String _explicitFilter = 'both';
 
   int get prebufferCount => _prebufferCount;
   AudioQuality get audioQuality => _audioQuality;
@@ -106,6 +108,7 @@ class SettingsProvider extends ChangeNotifier {
 
   bool get searchSourceYoutube => _searchSourceYoutube;
   bool get searchSourceYTMusic => _searchSourceYTMusic;
+  String get explicitFilter => _explicitFilter;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -133,6 +136,7 @@ class SettingsProvider extends ChangeNotifier {
 
     _searchSourceYoutube = prefs.getBool(_keySearchSourceYoutube) ?? true;
     _searchSourceYTMusic = prefs.getBool(_keySearchSourceYTMusic) ?? true;
+    _explicitFilter = prefs.getString(_keyExplicitFilter) ?? 'both';
 
     _scrobbleThreshold = prefs.getInt(_keyScrobbleThreshold) ?? 75;
 
@@ -206,6 +210,7 @@ class SettingsProvider extends ChangeNotifier {
       case _keyDownloadQuality: _downloadQuality = value; break;
       case _keyAndroidDownloadFolder: _androidDownloadFolder = value; break;
       case _keyBulkDownloadMethod: _bulkDownloadMethod = value; break;
+      case _keyExplicitFilter: _explicitFilter = value; break;
       case _keyVisualizerStyle: _visualizerStyle = value; break;
       case _keySeekbarStyle: _seekbarStyle = value; break;
     }

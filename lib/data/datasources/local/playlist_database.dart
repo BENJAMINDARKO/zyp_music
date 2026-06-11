@@ -41,6 +41,24 @@ class TopGenreTrack {
     required this.primaryGenre,
     required this.playCount,
   });
+
+  TopGenreTrack copyWith({
+    String? trackId,
+    String? title,
+    String? artistName,
+    String? thumbnailUrl,
+    String? primaryGenre,
+    int? playCount,
+  }) {
+    return TopGenreTrack(
+      trackId: trackId ?? this.trackId,
+      title: title ?? this.title,
+      artistName: artistName ?? this.artistName,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      primaryGenre: primaryGenre ?? this.primaryGenre,
+      playCount: playCount ?? this.playCount,
+    );
+  }
 }
 
 /// Result of [PlaylistDatabase.getMostPlayedAlbumsAndSingles] — mixed list
@@ -64,6 +82,24 @@ class PopularItem {
 
   bool get isAlbum => kind == 'album';
   bool get isSingle => kind == 'single';
+
+  PopularItem copyWith({
+    String? kind,
+    String? id,
+    String? title,
+    String? artistName,
+    String? thumbnailUrl,
+    int? playCount,
+  }) {
+    return PopularItem(
+      kind: kind ?? this.kind,
+      id: id ?? this.id,
+      title: title ?? this.title,
+      artistName: artistName ?? this.artistName,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      playCount: playCount ?? this.playCount,
+    );
+  }
 }
 
 /// Result of [PlaylistDatabase.getListeningStats] — aggregate stats for
@@ -107,6 +143,20 @@ class HistoryArtistEntry {
     required this.sampleTrackId,
     required this.thumbnailUrl,
   });
+
+  HistoryArtistEntry copyWith({
+    String? artistName,
+    int? playCount,
+    String? sampleTrackId,
+    String? thumbnailUrl,
+  }) {
+    return HistoryArtistEntry(
+      artistName: artistName ?? this.artistName,
+      playCount: playCount ?? this.playCount,
+      sampleTrackId: sampleTrackId ?? this.sampleTrackId,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+    );
+  }
 }
 
 class AlbumPlayStat {
@@ -199,12 +249,22 @@ class PlaylistDatabase {
       final dbPath = await getDatabasesPath();
       path = join(dbPath, 'ytmusix.db');
     }
-    return openDatabase(
+    final db = await openDatabase(
       path,
       version: 16,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
+    
+    // One-time sanitization of any leaked " - Topic" data
+    try {
+      await db.execute("UPDATE tracks SET author = REPLACE(author, ' - Topic', '') WHERE author LIKE '% - Topic'");
+      await db.execute("UPDATE track_metadata SET artistName = REPLACE(artistName, ' - Topic', '') WHERE artistName LIKE '% - Topic'");
+      await db.execute("UPDATE downloaded_tracks SET author = REPLACE(author, ' - Topic', '') WHERE author LIKE '% - Topic'");
+      await db.execute("UPDATE favorite_tracks SET author = REPLACE(author, ' - Topic', '') WHERE author LIKE '% - Topic'");
+    } catch (_) {}
+    
+    return db;
   }
 
   Future<void> _createTables(Database db, int version) async {
@@ -816,6 +876,48 @@ class PlaylistDatabase {
         where: 'id = ?', whereArgs: [playlistId]);
   }
 
+  Future<void> updateTrackInPlaylist(String playlistId, String oldTrackId, TrackModel newTrack) async {
+    final db = await database;
+    final existing = await db.query('tracks', where: 'id = ? AND playlistId = ?', whereArgs: [oldTrackId, playlistId]);
+    if (existing.isNotEmpty) {
+      final idx = existing.first['idx'] as int;
+      await db.delete('tracks', where: 'id = ? AND playlistId = ?', whereArgs: [oldTrackId, playlistId]);
+      await db.insert('tracks', {
+        'id': newTrack.id,
+        'playlistId': playlistId,
+        'title': newTrack.title,
+        'thumbnailUrl': newTrack.thumbnailUrl,
+        'durationSeconds': newTrack.durationSeconds,
+        'author': newTrack.author,
+        'idx': idx,
+      });
+
+      if (idx == 0 && newTrack.thumbnailUrl != null) {
+        await db.update(
+          'playlists',
+          {'thumbnailUrl': newTrack.thumbnailUrl},
+          where: 'id = ?',
+          whereArgs: [playlistId],
+        );
+      }
+
+      // Update downloaded_tracks metadata if this track was already downloaded
+      final downloaded = await db.query('downloaded_tracks', where: 'id = ?', whereArgs: [oldTrackId]);
+      if (downloaded.isNotEmpty) {
+        await db.update('downloaded_tracks', {
+          'id': newTrack.id,
+          'title': newTrack.title,
+          'thumbnailUrl': newTrack.thumbnailUrl,
+          'durationSeconds': newTrack.durationSeconds,
+          'author': newTrack.author,
+          'album': newTrack.album,
+          'albumId': null,
+          'year': newTrack.year,
+        }, where: 'id = ?', whereArgs: [oldTrackId]);
+      }
+    }
+  }
+
   Future<void> reorderTracks(
       String playlistId, List<String> trackIdsInOrder) async {
     final db = await database;
@@ -834,6 +936,11 @@ class PlaylistDatabase {
     await db.delete('playlists', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<void> renamePlaylist(String id, String newTitle) async {
+    final db = await database;
+    await db.update('playlists', {'title': newTitle}, where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<List<PlaylistModel>> getAllPlaylists() async {
     final db = await database;
     final maps = await db.query('playlists', orderBy: 'createdAt DESC');
@@ -842,10 +949,12 @@ class PlaylistDatabase {
 
   Future<void> insertTrack(String playlistId, TrackModel track) async {
     final db = await database;
-    await db.insert('tracks', {
-      ...track.toMap(),
-      'playlistId': playlistId,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    final map = track.toMap();
+    map.remove('album');
+    map.remove('albumArtist');
+    map.remove('year');
+    map['playlistId'] = playlistId;
+    await db.insert('tracks', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> insertTracks(
@@ -853,10 +962,12 @@ class PlaylistDatabase {
     final db = await database;
     final batch = db.batch();
     for (final track in tracks) {
-      batch.insert('tracks', {
-        ...track.toMap(),
-        'playlistId': playlistId,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      final map = track.toMap();
+      map.remove('album');
+      map.remove('albumArtist');
+      map.remove('year');
+      map['playlistId'] = playlistId;
+      batch.insert('tracks', map, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }
@@ -1017,21 +1128,21 @@ class PlaylistDatabase {
 
   Future<void> removeDownloadedTrack(String trackId) async {
     final db = await database;
-    await db.delete('downloaded_tracks', where: 'id = ?', whereArgs: [trackId]);
+    await db.delete('downloaded_tracks', where: 'id = ? AND id NOT LIKE "local_%"', whereArgs: [trackId]);
   }
 
   Future<List<String>> getDownloadedFilePaths(String playlistId) async {
     final db = await database;
     final result = await db.query('downloaded_tracks',
         columns: ['filePath'],
-        where: 'playlistId = ?', whereArgs: [playlistId]);
+        where: 'playlistId = ? AND id NOT LIKE "local_%"', whereArgs: [playlistId]);
     return result.map((r) => r['filePath'] as String).toList();
   }
 
   Future<void> removeDownloadedPlaylist(String playlistId) async {
     final db = await database;
     await db.delete('downloaded_tracks',
-        where: 'playlistId = ?', whereArgs: [playlistId]);
+        where: 'playlistId = ? AND id NOT LIKE "local_%"', whereArgs: [playlistId]);
   }
 
   Future<Set<String>> getAllDownloadedTrackIds() async {
@@ -1047,6 +1158,7 @@ class PlaylistDatabase {
     return db.rawQuery('''
       SELECT *
       FROM downloaded_tracks
+      WHERE id NOT LIKE 'local_%'
       ORDER BY downloadedAt DESC
     ''');
   }

@@ -1,0 +1,61 @@
+--- lib/ui/screens/playlist_screen.dart
++++ lib/ui/screens/playlist_screen.dart
+@@ -107,6 +107,59 @@
+             backgroundColor: Colors.black,
+             expandedHeight: 300,
+             pinned: true,
++            actions: [
++              PopupMenuButton<String>(
++                icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Theme.of(context).colorScheme.onSurface),
++                onSelected: (value) async {
++                  final provider = context.read<PlaylistProvider>();
++                  if (value == 'rename') {
++                    final controller = TextEditingController(text: _playlist!.title);
++                    final newName = await showDialog<String>(
++                      context: context,
++                      builder: (context) => AlertDialog(
++                        title: const Text('Rename Playlist'),
++                        content: TextField(
++                          controller: controller,
++                          autofocus: true,
++                          decoration: const InputDecoration(hintText: 'Playlist Name'),
++                        ),
++                        actions: [
++                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
++                          TextButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Save')),
++                        ],
++                      ),
++                    );
++                    if (newName != null && newName.isNotEmpty && mounted) {
++                      await provider.renamePlaylist(_playlist!.id, newName);
++                      _loadPlaylist();
++                    }
++                  } else if (value == 'duplicate') {
++                    final newPlaylist = await provider.duplicatePlaylist(_playlist!.id);
++                    if (newPlaylist != null && mounted) {
++                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Duplicated to ${newPlaylist.title}')));
++                    }
++                  } else if (value == 'delete') {
++                    await provider.deletePlaylist(_playlist!.id);
++                    if (mounted) Navigator.pop(context);
++                  } else if (value == 'queue') {
++                    final player = context.read<PlayerProvider>();
++                    player.addTracksToQueue(_playlist!.tracks);
++                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${_playlist!.tracks.length} tracks to queue')));
++                  }
++                },
++                itemBuilder: (context) => [
++                  const PopupMenuItem(value: 'rename', child: Text('Rename Playlist')),
++                  const PopupMenuItem(value: 'duplicate', child: Text('Duplicate Playlist')),
++                  const PopupMenuItem(value: 'queue', child: Text('Add to Queue')),
++                  const PopupMenuDivider(),
++                  const PopupMenuItem(
++                    value: 'delete',
++                    child: Text('Delete Playlist', style: TextStyle(color: Colors.red)),
++                  ),
++                ],
++              ),
++            ],
+             flexibleSpace: FlexibleSpaceBar(
+               background: Stack(
+                 fit: StackFit.expand,

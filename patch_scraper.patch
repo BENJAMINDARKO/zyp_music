@@ -1,0 +1,18 @@
+--- lib/core/services/playlist_scraper_service.dart
++++ lib/core/services/playlist_scraper_service.dart
+@@ -4,6 +4,7 @@
+ import 'package:dart_ytmusic_api/dart_ytmusic_api.dart';
+ import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_explode;
++import '../utils/normalise.dart';
+ 
+ class PlaylistScraperService {
+@@ -109,7 +110,7 @@
+         final mappedTracks = videos.map((track) {
+           return {
+             'id': track.id.value,
+             'title': track.title,
+-            'artist': track.author,
++            'artist': cleanArtistName(track.author),
+             'albumArt': track.thumbnails.mediumResUrl.toString(),
+           };
+         }).toList();

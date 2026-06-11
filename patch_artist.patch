@@ -1,0 +1,20 @@
+--- lib/ui/screens/artist_screen.dart
++++ lib/ui/screens/artist_screen.dart
+@@ -107,6 +107,17 @@
+             backgroundColor: Colors.black,
+             expandedHeight: 300,
+             pinned: true,
++            actions: [
++              Consumer<PlaylistProvider>(
++                builder: (context, provider, _) {
++                  final isFavorite = provider.isArtistFavorite(_artist!.id);
++                  return IconButton(
++                    icon: Icon(isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart, color: isFavorite ? Colors.red : Colors.white),
++                    onPressed: () => provider.toggleFavoriteArtist(_artist!),
++                  );
++                },
++              ),
++            ],
+             flexibleSpace: FlexibleSpaceBar(
+               background: Stack(
+                 fit: StackFit.expand,

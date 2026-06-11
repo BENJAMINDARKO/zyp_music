@@ -145,6 +145,17 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
     String quality = 'adaptive',
   }) async {
     try {
+      if (track.id.startsWith('local_')) {
+        // Track ID contains the path's hashcode. We actually just need to get it from the database since it's saved there.
+        // Wait, for local tracks, we can retrieve the path from SQLite. The original path was saved to SQLite downloaded_tracks.
+        final localPath = await _database.getDownloadedFilePath(track.id);
+        if (localPath != null && File(localPath).existsSync()) {
+          return localPath;
+        } else {
+          throw Exception('Local file not found for \${track.id}');
+        }
+      }
+
       // 1. Local downloaded file takes priority over everything
       final localPath = await _database.getDownloadedFilePath(track.id);
       if (localPath != null && File(localPath).existsSync()) {
@@ -238,22 +249,12 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
     Future<void> executePlay(String url, MediaItem mediaItem) async {
       final queue = _handler.queue.value;
       if (queue.isNotEmpty && queue.any((e) => e.id == track.id)) {
-        AppLogger.log(
-          '[NotifDebug] AudioRepo.playTrack -> updateMediaItem then handler.playTrack: '
-          'id=${mediaItem.id} title="${mediaItem.title}" artist="${mediaItem.artist}"',
-          name: 'AudioRepository',
-        );
         _handler.updateMediaItem(mediaItem);
         await _handler.playTrack(url, mediaItem);
       } else {
         final newQueue = List<MediaItem>.from(queue);
         newQueue.add(mediaItem);
         _handler.queue.add(newQueue);
-        AppLogger.log(
-          '[NotifDebug] AudioRepo.playTrack -> queue add then handler.playTrack: '
-          'id=${mediaItem.id} title="${mediaItem.title}" artist="${mediaItem.artist}"',
-          name: 'AudioRepository',
-        );
         await _handler.playTrack(url, mediaItem);
       }
     }
@@ -369,6 +370,10 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
     // been attached (the brief startup window before
     // `attachConnectivity` runs in main.dart).
     if (_connectivity?.isOffline ?? false) {
+      return getLyricsOffline(track);
+    }
+
+    if (track.id.startsWith('local_')) {
       return getLyricsOffline(track);
     }
 

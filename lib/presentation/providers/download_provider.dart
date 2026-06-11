@@ -116,7 +116,7 @@ class DownloadProvider extends ChangeNotifier {
     _downloadingPlaylists.remove(playlist.id);
     _playlistDownloadProgress.remove(playlist.id);
     final allDownloaded =
-        playlist.tracks.every((t) => _downloadedTrackIds.contains(t.id));
+        playlist.tracks.every((t) => _downloadedTrackIds.contains(t.id) || t.id.startsWith('local_'));
     if (allDownloaded) {
       _downloadedPlaylists.add(playlist.id);
     }
@@ -127,6 +127,7 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<void> downloadTrack(Track track, String playlistId, {String quality = 'medium'}) async {
+    if (track.id.startsWith('local_')) return;
     if (_downloadedTrackIds.contains(track.id)) return;
     if (_activeDownloads.containsKey(track.id)) return;
 
@@ -182,7 +183,7 @@ class DownloadProvider extends ChangeNotifier {
     _downloadingPlaylists.remove(album.id);
     _playlistDownloadProgress.remove(album.id);
     final allDownloaded =
-        album.tracks.every((t) => _downloadedTrackIds.contains(t.id));
+        album.tracks.every((t) => _downloadedTrackIds.contains(t.id) || t.id.startsWith('local_'));
     if (allDownloaded) {
       _downloadedPlaylists.add(album.id);
     }
@@ -217,6 +218,7 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<bool> isTrackDownloaded(String trackId) async {
+    if (trackId.startsWith('local_')) return true;
     return _downloadService.isTrackDownloaded(trackId);
   }
 

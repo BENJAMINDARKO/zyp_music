@@ -20,14 +20,16 @@ class AppleMusicSheet extends StatelessWidget {
 
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-      child: Container(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withOpacity(0.95),
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(16),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface.withOpacity(0.95),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(16),
+            ),
           ),
-        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -39,6 +41,7 @@ class AppleMusicSheet extends StatelessWidget {
             Flexible(child: child),
           ],
         ),
+      ),
       ),
     );
   }

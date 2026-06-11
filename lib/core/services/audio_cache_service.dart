@@ -184,6 +184,8 @@ class AudioCacheService {
     String? playlistId,
     bool writeToLibraryOnSuccess = false,
   }) async {
+    if (track.id.startsWith('local_')) return;
+    
     final repo = _audioRepository;
     final cache = _hybridCache;
     if (repo == null || cache == null) {

@@ -17,23 +17,31 @@ import '../widgets/album_context_menu.dart';
 import 'album_screen.dart';
 import 'artist_screen.dart';
 import "../../core/utils/thumbnail_url.dart";
+import '../widgets/playing_track_mask.dart';
+import '../widgets/explicit_icon.dart';
+
+import '../widgets/global_top_bar.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSuggestedSongs(context),
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSuggestedSongs(context),
           _buildLikedSongs(context),
           _buildFeaturedAlbums(context),
-          _buildFavouriteArtists(context),
-          _buildGlobalHot(context),
-        ],
+            _buildFavouriteArtists(context),
+            _buildGlobalHot(context),
+          ],
+        ),
       ),
     );
   }
@@ -297,8 +305,10 @@ class _CompactTrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
+    return PlayingTrackMask(
+      track: track,
+      child: Material(
+        color: Colors.transparent,
       child: InkWell(
         onTap: () {
           final player = context.read<PlayerProvider>();
@@ -336,11 +346,18 @@ class _CompactTrackTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      track.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            track.title,
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (track.isExplicit) const ExplicitIcon(),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -376,6 +393,7 @@ class _CompactTrackTile extends StatelessWidget {
               TrackDownloadIcon(track: track, size: 20),
             ],
           ),
+          ),
         ),
       ),
     );
@@ -396,8 +414,10 @@ class _TrackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
+    return PlayingTrackMask(
+      track: track,
+      child: Material(
+        color: Colors.transparent,
       child: InkWell(
         onTap: () {
           final player = context.read<PlayerProvider>();
@@ -490,11 +510,18 @@ class _TrackCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      track.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            track.title,
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (track.isExplicit) const ExplicitIcon(),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -507,6 +534,7 @@ class _TrackCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),

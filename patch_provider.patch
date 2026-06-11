@@ -1,0 +1,36 @@
+--- lib/presentation/providers/playlist_provider.dart
++++ lib/presentation/providers/playlist_provider.dart
+@@ -440,6 +440,31 @@
+     return playlist;
+   }
+ 
++  Future<void> renamePlaylist(String id, String newTitle) async {
++    await _repository.renamePlaylist(id, newTitle);
++    await _reloadSilently();
++    if (_currentPlaylist?.id == id) {
++      _currentPlaylist = await _repository.getCachedPlaylist(id);
++    }
++    notifyListeners();
++  }
++
++  Future<void> deletePlaylist(String id) async {
++    await _repository.deletePlaylist(id);
++    await _reloadSilently();
++    if (_currentPlaylist?.id == id) {
++      _currentPlaylist = null;
++    }
++    notifyListeners();
++  }
++
++  Future<Playlist?> duplicatePlaylist(String id) async {
++    final oldPlaylist = await _repository.getCachedPlaylist(id);
++    if (oldPlaylist == null) return null;
++    final newPlaylist = await createPlaylist('${oldPlaylist.title} (Copy)');
++    await _repository.saveTracks(newPlaylist.id, oldPlaylist.tracks);
++    await _reloadSilently();
++    notifyListeners();
++    return newPlaylist;
++  }
++
+   Future<void> resolveImportStubs(String playlistId) async {
+     final playlist = await _repository.getCachedPlaylist(playlistId);

@@ -1,0 +1,8 @@
+@@ -10,6 +10,7 @@
+   Future<void> removeTrackFromPlaylist(String playlistId, String trackId);
+   Future<void> updateTrackInPlaylist(String playlistId, String oldTrackId, Track newTrack);
+   Future<void> deletePlaylist(String playlistId);
++  Future<void> renamePlaylist(String playlistId, String newTitle);
+   
+   // Tracks/Playlists fetching
+   Future<Playlist?> getCachedPlaylist(String id);

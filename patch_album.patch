@@ -1,0 +1,28 @@
+--- lib/ui/screens/album_screen.dart
++++ lib/ui/screens/album_screen.dart
+@@ -107,6 +107,24 @@
+             backgroundColor: Colors.black,
+             expandedHeight: 300,
+             pinned: true,
++            actions: [
++              Consumer<PlaylistProvider>(
++                builder: (context, provider, _) {
++                  final isFavorite = provider.isAlbumFavorite(_album!.id);
++                  return IconButton(
++                    icon: Icon(isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart, color: isFavorite ? Colors.red : Colors.white),
++                    onPressed: () => provider.toggleFavoriteAlbum(_album!),
++                  );
++                },
++              ),
++              IconButton(
++                icon: const Icon(PhosphorIconsRegular.queue, color: Colors.white),
++                onPressed: () {
++                  final player = context.read<PlayerProvider>();
++                  player.addTracksToQueue(_album!.tracks);
++                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${_album!.tracks.length} tracks to queue')));
++                },
++              ),
++            ],
+             flexibleSpace: FlexibleSpaceBar(
+               background: Stack(
+                 fit: StackFit.expand,

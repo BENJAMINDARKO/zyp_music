@@ -4,6 +4,8 @@ import '../../domain/entities/video.dart';
 import '../../presentation/providers/home_feed_provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../core/utils/format_duration.dart';
+import 'playing_track_mask.dart';
+import 'explicit_icon.dart';
 
 class DownloadedView extends StatefulWidget {
   const DownloadedView({super.key});
@@ -53,10 +55,12 @@ class _DownloadedViewState extends State<DownloadedView> {
 
   Widget _buildTrackRow(BuildContext context, Track track) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: () => _playTrack(context, track),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
+    return PlayingTrackMask(
+      track: track,
+      child: InkWell(
+        onTap: () => _playTrack(context, track),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Row(
           children: [
@@ -77,11 +81,18 @@ class _DownloadedViewState extends State<DownloadedView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    track.title,
-                    style: theme.textTheme.bodyLarge,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          track.title,
+                          style: theme.textTheme.bodyLarge,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (track.isExplicit) const ExplicitIcon(),
+                    ],
                   ),
                   if (track.author != null && track.author!.isNotEmpty)
                     Text(
@@ -108,7 +119,7 @@ class _DownloadedViewState extends State<DownloadedView> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _placeholderThumbnail(BuildContext context) {

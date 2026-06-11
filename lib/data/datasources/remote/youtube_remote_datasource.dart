@@ -1,3 +1,5 @@
+import '../../../core/utils/normalise.dart';
+
 import 'dart:async';
 import 'package:zyp_music/core/utils/app_logger.dart';
 import 'package:http/http.dart' as http;
@@ -5,11 +7,13 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart'
     hide Playlist, Video;
 import 'package:dart_ytmusic_api/yt_music.dart' as ytm;
 import 'package:dart_ytmusic_api/types.dart' as ytm_types;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../domain/entities/album.dart';
 import '../../../domain/entities/artist.dart';
 import '../../models/playlist_model.dart';
 import '../../models/video_model.dart';
 import '../../../service/auth_service.dart';
+import '../../../core/utils/thumbnail_url.dart';
 import 'authenticated_client.dart';
 import 'youtube_audio_extractor.dart';
 
@@ -86,7 +90,7 @@ class YoutubeRemoteDataSource {
             tracks.add(TrackModel(
               id: v.videoId,
               title: v.name,
-              author: v.artist.name,
+              author: cleanArtistName(v.artist.name),
               durationSeconds: v.duration,
               thumbnailUrl: v.thumbnails.lastOrNull?.url,
               index: i,
@@ -96,7 +100,7 @@ class YoutubeRemoteDataSource {
           return PlaylistModel(
             id: playlistId,
             title: p.name,
-            author: p.artist.name,
+            author: cleanArtistName(p.artist.name),
             thumbnailUrl: p.thumbnails.lastOrNull?.url,
             videoCount: p.videoCount,
             tracks: tracks,
@@ -134,7 +138,7 @@ class YoutubeRemoteDataSource {
             tracks.add(TrackModel(
               id: video.id.value,
               title: video.title,
-              author: video.author,
+              author: cleanArtistName(video.author),
               durationSeconds: video.duration?.inSeconds,
               thumbnailUrl: video.thumbnails.mediumResUrl,
               index: i,
@@ -146,7 +150,7 @@ class YoutubeRemoteDataSource {
           return PlaylistModel(
             id: playlistId,
             title: title,
-            author: author,
+            author: cleanArtistName(author),
             thumbnailUrl: thumbnailUrl,
             videoCount: tracks.length,
             tracks: tracks,
@@ -176,7 +180,7 @@ class YoutubeRemoteDataSource {
     return TrackModel(
       id: video.id.value,
       title: video.title,
-      author: video.author,
+      author: cleanArtistName(video.author),
       durationSeconds: video.duration?.inSeconds,
       thumbnailUrl: video.thumbnails.mediumResUrl,
       index: 0,
@@ -257,27 +261,53 @@ class YoutubeRemoteDataSource {
       searchQuery = '$searchQuery official audio';
     }
     
+    final prefs = await SharedPreferences.getInstance();
+    final explicitFilter = prefs.getString('explicitFilter') ?? 'both';
+    if (explicitFilter == 'clean') {
+      searchQuery = '$searchQuery clean';
+    } else if (explicitFilter == 'explicit') {
+      searchQuery = '$searchQuery explicit';
+    }
+    
     final results = await _yt.search.search(searchQuery);
     final tracks = <TrackModel>[];
-    for (var i = 0; i < results.length; i++) {
-      final video = results[i];
-      // Try to parse artist - topic channel format: "Artist - Topic"
-      String author = video.author;
-      String? album;
-      if (author.endsWith(' - Topic')) {
-        author = author.replaceAll(' - Topic', '');
+    
+    void addVideos(Iterable videos) {
+      for (final video in videos) {
+        String author = video.author;
+        String? album;
+        if (author.endsWith(' - Topic')) {
+          author = author.replaceAll(' - Topic', '');
+        }
+        
+        tracks.add(TrackModel(
+          id: video.id.value,
+          title: video.title,
+          author: cleanArtistName(author),
+          album: album,
+          durationSeconds: video.duration?.inSeconds,
+          thumbnailUrl: video.thumbnails.mediumResUrl,
+          index: tracks.length,
+        ));
       }
-      
-      tracks.add(TrackModel(
-        id: video.id.value,
-        title: video.title,
-        author: author,
-        album: album,
-      durationSeconds: video.duration?.inSeconds,
-        thumbnailUrl: video.thumbnails.mediumResUrl,
-        index: i,
-      ));
     }
+
+    addVideos(results);
+
+    // Fetch up to 2 additional pages to ensure >20 results
+    try {
+      var currentPage = results;
+      for (int i = 0; i < 2; i++) {
+        final nextPage = await currentPage.nextPage();
+        if (nextPage != null && nextPage.isNotEmpty) {
+          addVideos(nextPage);
+          currentPage = nextPage;
+        } else {
+          break;
+        }
+      }
+    } catch (_) {}
+
     return tracks;
   }
 
@@ -291,7 +321,17 @@ class YoutubeRemoteDataSource {
     // method with a refined query rather than paging the
     // same query. If a future version exposes pagination,
     // thread the `limit`/`page` arguments through here.
-    final results = await _ytMusic.searchSongs(query);
+    
+    var searchQuery = query;
+    final prefs = await SharedPreferences.getInstance();
+    final explicitFilter = prefs.getString('explicitFilter') ?? 'both';
+    if (explicitFilter == 'clean') {
+      searchQuery = '$searchQuery clean';
+    } else if (explicitFilter == 'explicit') {
+      searchQuery = '$searchQuery explicit';
+    }
+
+    final results = await _ytMusic.searchSongs(searchQuery);
     final tracks = <TrackModel>[];
 
     for (var i = 0; i < results.length; i++) {
@@ -299,10 +339,10 @@ class YoutubeRemoteDataSource {
       tracks.add(TrackModel(
         id: song.videoId,
         title: song.name,
-        author: song.artist.name,
+        author: cleanArtistName(song.artist.name),
         album: song.album?.name,
         durationSeconds: song.duration,
-        thumbnailUrl: song.thumbnails.lastOrNull?.url,
+        thumbnailUrl: rewriteThumbnailSize(song.thumbnails.lastOrNull?.url),
         index: i,
       ));
     }
@@ -320,7 +360,7 @@ class YoutubeRemoteDataSource {
       title: a.name,
       artistName: a.artist.name,
       year: a.year?.toString(),
-      thumbnailUrl: a.thumbnails.lastOrNull?.url,
+      thumbnailUrl: rewriteThumbnailSize(a.thumbnails.lastOrNull?.url),
     )).toList();
   }
 
@@ -333,7 +373,7 @@ class YoutubeRemoteDataSource {
     return results.map((a) => Artist(
       id: a.artistId,
       name: a.name,
-      thumbnailUrl: a.thumbnails.lastOrNull?.url,
+      thumbnailUrl: rewriteThumbnailSize(a.thumbnails.lastOrNull?.url),
     )).toList();
   }
 
@@ -346,8 +386,8 @@ class YoutubeRemoteDataSource {
     return results.map((p) => PlaylistModel(
       id: p.playlistId,
       title: p.name,
-      author: p.artist.name,
-      thumbnailUrl: p.thumbnails.lastOrNull?.url,
+      author: cleanArtistName(p.artist.name),
+      thumbnailUrl: rewriteThumbnailSize(p.thumbnails.lastOrNull?.url),
       videoCount: 0,
     )).toList();
   }

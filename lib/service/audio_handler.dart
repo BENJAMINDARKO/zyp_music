@@ -98,11 +98,6 @@ class MusicAudioHandler extends BaseAudioHandler {
         final source = sequence[index];
         if (source.tag is MediaItem) {
           final tagItem = source.tag as MediaItem;
-          AppLogger.log(
-            '[NotifDebug] replacePlayer force-push updateMediaItem: '
-            'id=${tagItem.id} title="${tagItem.title}"',
-            name: 'MusicAudioHandler',
-          );
           updateMediaItem(tagItem);
           AppLogger.log(
             '[MediaSessionSync] Re-anchored MediaItem to active player: '
@@ -241,11 +236,6 @@ class MusicAudioHandler extends BaseAudioHandler {
         _durationController.add(dur);
         final item = mediaItem.value;
         if (item != null && item.id == _pendingMediaItemId) {
-          AppLogger.log(
-            '[NotifDebug] durationStream -> updateMediaItem: '
-            'id=${item.id} dur=$dur',
-            name: 'MusicAudioHandler',
-          );
           updateMediaItem(item.copyWith(duration: dur));
         }
       }
@@ -264,11 +254,6 @@ class MusicAudioHandler extends BaseAudioHandler {
           if (source.tag is MediaItem) {
             final item = source.tag as MediaItem;
             if (mediaItem.valueOrNull?.id != item.id) {
-              AppLogger.log(
-                '[NotifDebug] _currentIndexSub -> updateMediaItem: '
-                'id=${item.id} title="${item.title}"',
-                name: 'MusicAudioHandler',
-              );
               updateMediaItem(item);
             }
             _currentIndex = index;
@@ -359,11 +344,6 @@ class MusicAudioHandler extends BaseAudioHandler {
       _currentIndex = _queue.indexWhere((e) => e.id == item.id);
       if (_currentIndex == -1) _currentIndex = null;
 
-      AppLogger.log(
-        '[NotifDebug] handler.playTrack calling updateMediaItem: '
-        'id=${item.id} title="${item.title}" artist="${item.artist}"',
-        name: 'MusicAudioHandler',
-      );
       updateMediaItem(item);
 
       final headers = await _getHeaders();
@@ -544,11 +524,6 @@ class MusicAudioHandler extends BaseAudioHandler {
   @override
   Future<void> updateMediaItem(MediaItem mediaItem) async {
     _pendingMediaItemId = mediaItem.id;
-    AppLogger.log(
-      '[NotifDebug] updateMediaItem called: id=${mediaItem.id} '
-      'title="${mediaItem.title}" artist="${mediaItem.artist}"',
-      name: 'MusicAudioHandler',
-    );
     if (mediaItem.artUri != null && !mediaItem.artUri!.isScheme('file')) {
       this.mediaItem.add(mediaItem);
       final localUri = await _getLocalArtUri(mediaItem.artUri);

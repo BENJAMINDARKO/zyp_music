@@ -7,3 +7,10 @@ String normalise(String str) {
   result = result.replaceAll(RegExp(r'\b(feat|ft|featuring|with|vs|&)\b.*$'), '').trim();
   return result;
 }
+
+String cleanArtistName(String? name) {
+  if (name == null) return '';
+  var cleaned = name.trim();
+  cleaned = cleaned.replaceAll(RegExp(r'\s*-\s*Topic$', caseSensitive: false), '');
+  return cleaned.trim();
+}

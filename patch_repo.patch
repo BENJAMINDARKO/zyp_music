@@ -1,0 +1,24 @@
+--- lib/domain/repositories/playlist_repository.dart
++++ lib/domain/repositories/playlist_repository.dart
+@@ -10,6 +10,7 @@
+   Future<void> removeTrackFromPlaylist(String playlistId, String trackId);
+   Future<void> updateTrackInPlaylist(String playlistId, String oldTrackId, Track newTrack);
+   Future<void> deletePlaylist(String playlistId);
++  Future<void> renamePlaylist(String playlistId, String newTitle);
+   
+   // Tracks/Playlists fetching
+   Future<Playlist?> getCachedPlaylist(String id);
+--- lib/data/repositories/playlist_repository_impl.dart
++++ lib/data/repositories/playlist_repository_impl.dart
+@@ -169,6 +169,11 @@
+     await localDatabase.deletePlaylist(playlistId);
+   }
+ 
++  @override
++  Future<void> renamePlaylist(String playlistId, String newTitle) async {
++    await localDatabase.renamePlaylist(playlistId, newTitle);
++  }
++
+   @override
+   Future<void> saveTrack(String playlistId, Track track) async {
+     await localDatabase.insertTrack(playlistId, TrackModel(

@@ -12,6 +12,8 @@ import '../widgets/track_download_icon.dart';
 import '../widgets/bottom_player.dart';
 import '../../presentation/providers/download_provider.dart';
 import "../../core/utils/thumbnail_url.dart";
+import '../widgets/playing_track_mask.dart';
+import '../widgets/explicit_icon.dart';
 
 class ArtistScreen extends StatefulWidget {
   final String artistId;
@@ -73,7 +75,6 @@ class _ArtistScreenState extends State<ArtistScreen> {
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Color(0xFFEAB308))),
         extendBody: true,
-        bottomNavigationBar: BottomPlayer(),
       );
     }
 
@@ -95,7 +96,6 @@ class _ArtistScreenState extends State<ArtistScreen> {
           ),
         ),
         extendBody: true,
-        bottomNavigationBar: const BottomPlayer(),
       );
     }
 
@@ -107,6 +107,17 @@ class _ArtistScreenState extends State<ArtistScreen> {
             backgroundColor: Colors.black,
             expandedHeight: 300,
             pinned: true,
+            actions: [
+              Consumer<PlaylistProvider>(
+                builder: (context, provider, _) {
+                  final isFavorite = provider.isArtistFavorite(_artist!.id);
+                  return IconButton(
+                    icon: Icon(isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart, color: isFavorite ? Colors.red : Colors.white),
+                    onPressed: () => provider.toggleFavoriteArtist(_artist!),
+                  );
+                },
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -201,31 +212,40 @@ class _ArtistScreenState extends State<ArtistScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final track = _artist!.topTracks[index];
-                return ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: (track.thumbnailUrl?.isNotEmpty ?? false)
-                        ? CachedNetworkImage(
-                            imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, url, error) => Container(
-                              width: 48, height: 48, color: Colors.grey[800],
-                              child: Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+                  return PlayingTrackMask(
+                    track: track,
+                    child: ListTile(
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: (track.thumbnailUrl?.isNotEmpty ?? false)
+                            ? CachedNetworkImage(
+                                imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                                errorWidget: (context, url, error) => Container(
+                                  width: 48, height: 48, color: Colors.grey[800],
+                                  child: Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+                                ),
+                              )
+                            : Container(
+                                width: 48, height: 48, color: Colors.grey[800],
+                                child: Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+                              ),
+                      ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              track.title,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          )
-                        : Container(
-                            width: 48, height: 48, color: Colors.grey[800],
-                            child: Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
                           ),
-                  ),
-                  title: Text(
-                    track.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                          if (track.isExplicit) const ExplicitIcon(),
+                        ],
+                      ),
                   subtitle: Text(
                     track.author ?? 'Unknown Artist',
                     maxLines: 1,
@@ -266,7 +286,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                   ),
                   onTap: () => _playTrack(index),
                   onLongPress: () => TrackContextMenu.show(context, track),
-                );
+                ));
               },
               childCount: _artist!.topTracks.length,
             ),
@@ -354,7 +374,6 @@ class _ArtistScreenState extends State<ArtistScreen> {
         ],
       ),
       extendBody: true,
-      bottomNavigationBar: const BottomPlayer(),
     );
   }
 }

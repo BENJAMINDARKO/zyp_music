@@ -85,6 +85,7 @@ class MonochromeApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<PlaylistDatabase>.value(value: playlistDatabase),
+        Provider<AudioRepository>.value(value: audioRepository),
         ChangeNotifierProvider.value(value: settingsProvider),
         ChangeNotifierProvider.value(value: hybridCache),
         ChangeNotifierProvider.value(value: connectivityService),

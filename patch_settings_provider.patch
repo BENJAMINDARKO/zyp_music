@@ -1,0 +1,39 @@
+--- lib/presentation/providers/settings_provider.dart
++++ lib/presentation/providers/settings_provider.dart
+@@ -29,6 +29,7 @@
+   static const _keyYoutubeMusicQuality = 'youtubeMusicQuality';
+   static const _keySearchSourceYoutube = 'searchSourceYoutube';
+   static const _keySearchSourceYTMusic = 'searchSourceYTMusic';
++  static const _keyExplicitFilter = 'explicitFilter';
+ 
+   static const _keyDownloadQuality = 'downloadQuality';
+   static const _keyBulkDownloadMethod = 'bulkDownloadMethod';
+@@ -65,6 +66,7 @@
+   bool _searchSourceYoutube = true;
+   bool _searchSourceYTMusic = true;
++  String _explicitFilter = 'both';
+ 
+   String _downloadQuality = 'AAC 320kbps';
+   String _bulkDownloadMethod = 'ZIP Archive';
+@@ -102,6 +104,7 @@
+   bool get searchSourceYoutube => _searchSourceYoutube;
+   bool get searchSourceYTMusic => _searchSourceYTMusic;
++  String get explicitFilter => _explicitFilter;
+ 
+   String get downloadQuality => _downloadQuality;
+   String get bulkDownloadMethod => _bulkDownloadMethod;
+@@ -142,6 +145,7 @@
+     _searchSourceYoutube = prefs.getBool(_keySearchSourceYoutube) ?? true;
+     _searchSourceYTMusic = prefs.getBool(_keySearchSourceYTMusic) ?? true;
++    _explicitFilter = prefs.getString(_keyExplicitFilter) ?? 'both';
+ 
+     _downloadQuality = prefs.getString(_keyDownloadQuality) ?? 'AAC 320kbps';
+     _bulkDownloadMethod = prefs.getString(_keyBulkDownloadMethod) ?? 'ZIP Archive';
+@@ -208,6 +212,7 @@
+       case _keyYoutubeMusicQuality: _youtubeMusicQuality = value; break;
+       case _keyDownloadQuality: _downloadQuality = value; break;
+       case _keyBulkDownloadMethod: _bulkDownloadMethod = value; break;
++      case _keyExplicitFilter: _explicitFilter = value; break;
+     }
+     notifyListeners();
+   }

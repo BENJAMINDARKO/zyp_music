@@ -1,0 +1,12 @@
+--- lib/data/datasources/local/playlist_database.dart
++++ lib/data/datasources/local/playlist_database.dart
+@@ -911,6 +911,11 @@
+     await db.delete('playlists', where: 'id = ?', whereArgs: [id]);
+   }
+ 
++  Future<void> renamePlaylist(String id, String newTitle) async {
++    final db = await database;
++    await db.update('playlists', {'title': newTitle}, where: 'id = ?', whereArgs: [id]);
++  }
++
+   // Favorites

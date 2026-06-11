@@ -11,6 +11,7 @@ import '../../presentation/providers/playlist_provider.dart';
 import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../domain/entities/video.dart';
 import '../widgets/auto_dj_mode_picker.dart';
+import '../widgets/playing_track_mask.dart';
 import '../widgets/playlist_picker_dialog.dart';
 import '../widgets/synced_lyrics_widget.dart';
 import '../widgets/single_line_lyrics_widget.dart';
@@ -160,8 +161,13 @@ class _PlayingScreenState extends State<PlayingScreen>
                     ? CachedNetworkImage(
                         imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
                         fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) =>
-                            Container(color: const Color(0xFF0A0A0A)),
+                        errorWidget: (_, __, ___) => track.thumbnailUrl?.contains('maxresdefault.jpg') == true || rewriteThumbnailSize(track.thumbnailUrl, 1200).contains('maxresdefault.jpg')
+                            ? CachedNetworkImage(
+                                imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200).replaceFirst('maxresdefault.jpg', 'hqdefault.jpg'),
+                                fit: BoxFit.cover,
+                                errorWidget: (____, _____, ______) => Container(color: const Color(0xFF0A0A0A)),
+                              )
+                            : Container(color: const Color(0xFF0A0A0A)),
                       )
                     : Container(color: const Color(0xFF0A0A0A)),
               ),
@@ -365,7 +371,7 @@ class _PlayingScreenState extends State<PlayingScreen>
                                                     player.lyricsSyncOffsetMs,
                                           ),
                                           karaokeMode: false,
-                                          autoScroll: player.autoScroll,
+                                          autoScroll: !_lyricsScrollPaused,
                                         ),
                                       );
                                     },
@@ -414,15 +420,31 @@ class _PlayingScreenState extends State<PlayingScreen>
                                 ? CachedNetworkImage(
                                     imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
                                     fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) =>
-                                        Container(
-                                          color: const Color(0xFF0A0A0A),
-                                          child: Icon(
-                                            PhosphorIconsRegular.musicNote,
-                                            size: 80,
-                                            color: Colors.white38,
+                                    errorWidget: (_, __, ___) => track.thumbnailUrl?.contains('maxresdefault.jpg') == true || rewriteThumbnailSize(track.thumbnailUrl, 1200).contains('maxresdefault.jpg')
+                                        ? CachedNetworkImage(
+                                            imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200).replaceFirst('maxresdefault.jpg', 'sddefault.jpg'),
+                                            fit: BoxFit.cover,
+                                            errorWidget: (____, _____, ______) => CachedNetworkImage(
+                                              imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200).replaceFirst('maxresdefault.jpg', 'hqdefault.jpg'),
+                                              fit: BoxFit.cover,
+                                              errorWidget: (_______, ________, _________) => Container(
+                                                color: const Color(0xFF0A0A0A),
+                                                child: Icon(
+                                                  PhosphorIconsRegular.musicNote,
+                                                  size: 80,
+                                                  color: Colors.white38,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : Container(
+                                            color: const Color(0xFF0A0A0A),
+                                            child: Icon(
+                                              PhosphorIconsRegular.musicNote,
+                                              size: 80,
+                                              color: Colors.white38,
+                                            ),
                                           ),
-                                        ),
                                   )
                                 : Container(
                                     color: const Color(0xFF0A0A0A),
@@ -986,54 +1008,57 @@ class _PlayingScreenState extends State<PlayingScreen>
                       itemBuilder: (context, index) {
                         final t = queue[index];
                         final isPlaying = index == currentIndex;
-                        return ListTile(
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: (t.thumbnailUrl?.isNotEmpty ?? false)
-                                ? CachedNetworkImage(
-                                    imageUrl: rewriteThumbnailSize(t.thumbnailUrl),
-                                    width: 48,
-                                    height: 48,
-                                    fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) =>
-                                        Container(color: Colors.grey[800]),
-                                  )
-                                : Container(
-                                    width: 48,
-                                    height: 48,
-                                    color: Colors.grey[800],
-                                  ),
-                          ),
-                          title: Text(
-                            t.title,
-                            style: TextStyle(
-                              fontWeight: isPlaying
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                        return PlayingTrackMask(
+                          track: t,
+                          child: ListTile(
+                            leading: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: (t.thumbnailUrl?.isNotEmpty ?? false)
+                                  ? CachedNetworkImage(
+                                      imageUrl: rewriteThumbnailSize(t.thumbnailUrl),
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (_, __, ___) =>
+                                          Container(color: Colors.grey[800]),
+                                    )
+                                  : Container(
+                                      width: 48,
+                                      height: 48,
+                                      color: Colors.grey[800],
+                                    ),
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            t.author ?? 'Unknown',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: IconButton(
-                            icon: Icon(
-                              PhosphorIconsRegular.x,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                            title: Text(
+                              t.title,
+                              style: TextStyle(
+                                fontWeight: isPlaying
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            onPressed: () {
-                              provider.removeFromQueue(index);
+                            subtitle: Text(
+                              t.author ?? 'Unknown',
+                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: IconButton(
+                              icon: Icon(
+                                PhosphorIconsRegular.x,
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                              ),
+                              onPressed: () {
+                                provider.removeFromQueue(index);
+                              },
+                            ),
+                            onTap: () {
+                              provider.playFromQueue(index);
+                              _queueSheetController?.close();
+                              _queueSheetController = null;
                             },
                           ),
-                          onTap: () {
-                            provider.playFromQueue(index);
-                            _queueSheetController?.close();
-                            _queueSheetController = null;
-                          },
                         );
                       },
                     ),

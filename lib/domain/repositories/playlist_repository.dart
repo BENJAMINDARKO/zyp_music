@@ -9,7 +9,10 @@ abstract class PlaylistRepository {
   Future<List<Playlist>> getSavedPlaylists();
   Future<void> savePlaylist(Playlist playlist);
   Future<void> deletePlaylist(String playlistId);
+  Future<void> renamePlaylist(String playlistId, String newTitle);
   Future<void> saveTrack(String playlistId, Track track);
+  Future<void> saveTracks(String playlistId, List<Track> tracks);
+  Future<void> saveLocalFileTrack(String playlistId, Track track, String filePath);
   Future<List<Track>> getCachedTracks(String playlistId);
   Future<Playlist?> getCachedPlaylist(String playlistId);
   Future<List<Track>> search(String query);
@@ -35,5 +38,6 @@ abstract class PlaylistRepository {
 
   Future<void> updatePlaylistTitle(String id, String newTitle);
   Future<void> removeTrack(String playlistId, String trackId);
+  Future<void> updateTrackInPlaylist(String playlistId, String oldTrackId, Track newTrack);
   Future<void> reorderTracks(String playlistId, List<String> trackIdsInOrder);
 }

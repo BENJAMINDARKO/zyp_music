@@ -1,0 +1,63 @@
+--- lib/presentation/providers/home_feed_provider.dart
++++ lib/presentation/providers/home_feed_provider.dart
+@@ -2,6 +2,7 @@
+ import 'package:flutter/material.dart';
+ import '../../core/services/audio_cache_service.dart';
+ import '../../data/datasources/local/playlist_database.dart';
++import 'package:audiotagger/audiotagger.dart';
+ import '../../domain/entities/track.dart';
+ import '../../domain/entities/album.dart';
+ import '../../domain/entities/artist.dart';
+@@ -163,18 +164,39 @@
+ 
+     try {
+       final rows = await _database.getAllDownloadedTracks();
+-      final List<Track> tracks = rows.map((row) => Track(
+-        id: row['id'] as String,
+-        title: row['title'] as String? ?? 'Unknown',
+-        author: row['author'] as String?,
+-        album: row['album'] as String?,
+-        albumId: row['albumId'] as String?,
+-        year: row['year'] as int?,
+-        thumbnailUrl: row['thumbnailUrl'] as String?,
+-        duration: (row['durationSeconds'] as int?) != null
+-            ? Duration(seconds: row['durationSeconds'] as int)
+-            : null,
+-      )).toList();
++      final tagger = Audiotagger();
++      final List<Track> tracks = [];
++      
++      for (final row in rows) {
++        String title = row['title'] as String? ?? '';
++        String? author = row['author'] as String?;
++        
++        if (title.isEmpty || title == 'Unknown') {
++          try {
++            final filePath = row['filePath'] as String?;
++            if (filePath != null) {
++              final map = await tagger.readTags(path: filePath);
++              if (map != null && map.title != null && map.title!.isNotEmpty) {
++                title = map.title!;
++                author = map.artist ?? author;
++              }
++            }
++          } catch (_) {}
++          if (title.isEmpty) title = 'Unknown';
++        }
++        
++        tracks.add(Track(
++          id: row['id'] as String,
++          title: title,
++          author: author,
++          album: row['album'] as String?,
++          albumId: row['albumId'] as String?,
++          year: row['year'] as int?,
++          thumbnailUrl: row['thumbnailUrl'] as String?,
++          duration: (row['durationSeconds'] as int?) != null
++              ? Duration(seconds: row['durationSeconds'] as int)
++              : null,
++        ));
++      }
+ 
+       if (_cacheService != null) {
+         final hiveIds = _cacheService!.getCachedTrackIds();

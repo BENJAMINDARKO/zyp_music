@@ -219,7 +219,10 @@ Future<void> main() async {
     final downloadProvider = DownloadProvider(downloadService, hybridCache);
     await downloadProvider.init();
 
-    final homeFeedProvider = HomeFeedProvider(database: localDatabase);
+    final homeFeedProvider = HomeFeedProvider(
+      database: localDatabase,
+      cacheService: hybridCache,
+    );
 
     // QueueManager coordinates the manual playback queue and the explicit
     // Auto DJ engine. It listens to the connectivity service so the offline

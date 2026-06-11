@@ -22,20 +22,14 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  MiniplayerVisibilityProvider? _visibilityProvider;
 
   @override
   void initState() {
     super.initState();
-    _visibilityProvider = context.read<MiniplayerVisibilityProvider>();
-    Future.microtask(() {
-      if (mounted) _visibilityProvider?.hide();
-    });
   }
 
   @override
   void dispose() {
-    _visibilityProvider?.show();
     super.dispose();
   }
 
@@ -293,6 +287,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
           onChanged: (val) {
             if (val != null) provider.setStringSetting('youtubeMusicQuality', val);
+          },
+        ),
+        _buildDropdownSetting<String>(
+          title: 'Explicit Content Filter',
+          subtitle: 'Choose which versions of tracks to play.',
+          value: provider.explicitFilter,
+          items: [
+            const DropdownMenuItem(value: 'both', child: Text('Both')),
+            const DropdownMenuItem(value: 'clean', child: Text('Clean Only')),
+            const DropdownMenuItem(value: 'explicit', child: Text('Explicit Only')),
+          ],
+          onChanged: (val) {
+            if (val != null) provider.setStringSetting('explicitFilter', val);
           },
         ),
         const SizedBox(height: 24),

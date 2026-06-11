@@ -65,6 +65,10 @@ class Track {
   /// "no tempo matching" — the crossfade runs at 1.0x.
   final double? bpm;
 
+  bool get isExplicit => 
+      title.toLowerCase().contains('(explicit)') ||
+      title.toLowerCase().contains('[explicit]');
+
   /// ISO 3166-1 alpha-2 country code for the track's primary
   /// artist, sourced from MusicBrainz's `country` field at enrichment
   /// time and looked up at mine-time by [LocalCrateMiner] against

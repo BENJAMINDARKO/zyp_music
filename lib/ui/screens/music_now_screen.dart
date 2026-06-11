@@ -5,12 +5,17 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/home_feed_provider.dart';
 import '../../presentation/providers/charts_provider.dart';
 import '../../presentation/providers/playlist_provider.dart';
+import '../../presentation/providers/player_provider.dart';
 import '../../data/datasources/local/playlist_database.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/entities/artist.dart';
 import '../widgets/shared_cards.dart';
 import "../screens/artist_screen.dart";
+import "../screens/album_screen.dart";
 import "../../core/utils/thumbnail_url.dart";
+import '../widgets/playing_track_mask.dart';
+
+import '../widgets/global_top_bar.dart';
 
 class MusicNowScreen extends StatefulWidget {
   const MusicNowScreen({super.key});
@@ -31,6 +36,7 @@ class _MusicNowScreenState extends State<MusicNowScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -338,10 +344,25 @@ class _TopGenreTrackCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
+    final t = Track(
+      id: track.trackId,
+      title: track.title ?? 'Unknown Track',
+      author: track.artistName,
+      thumbnailUrl: track.thumbnailUrl,
+    );
+    return PlayingTrackMask(
+      track: t,
+      child: Material(
+        color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          final player = context.read<PlayerProvider>();
+          player.setQueue([t]);
+          player.playFromQueue(0);
+        },
+        child: Container(
+          decoration: BoxDecoration(
           color: const Color(0xFF141414),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -425,7 +446,9 @@ class _TopGenreTrackCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
