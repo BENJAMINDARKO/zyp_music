@@ -111,40 +111,57 @@ class _MainLayoutState extends State<MainLayout> {
         leadingWidth: 52,
         title: Container(
           height: 40,
-          decoration: const ShapeDecoration(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
             color: Colors.white10,
-            shape: StadiumBorder(),
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: TextField(
-            controller: _searchController,
-            focusNode: _searchFocusNode,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'Search for tracks, artists...',
-              hintStyle: const TextStyle(color: Colors.white54),
-              prefixIcon: const Icon(PhosphorIconsRegular.magnifyingGlass, color: Colors.white54, size: 20),
-              border: InputBorder.none,
-              filled: false,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(PhosphorIconsRegular.x, color: Colors.white54, size: 20),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {
-                          _submittedQuery = '';
-                        });
-                      },
-                    )
-                  : null,
-            ),
-              onSubmitted: (value) {
-                setState(() {
-                  _submittedQuery = value;
-                });
-                _searchNotifier.value = value;
-              },
-            ),
+          child: Row(
+            children: [
+              Icon(PhosphorIconsRegular.magnifyingGlass, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  style: const TextStyle(fontSize: 14, color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Search for tracks, artists...',
+                    hintStyle: TextStyle(fontSize: 14, color: Colors.white54),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _submittedQuery = value;
+                    });
+                    _searchNotifier.value = value;
+                  },
+                  onSubmitted: (value) {
+                    setState(() {
+                      _submittedQuery = value;
+                    });
+                    _searchNotifier.value = value;
+                  },
+                ),
+              ),
+              if (_searchQuery.isNotEmpty)
+                IconButton(
+                  icon: const Icon(PhosphorIconsRegular.x, color: Colors.white54, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                      _submittedQuery = '';
+                    });
+                    _searchNotifier.value = '';
+                  },
+                ),
+            ],
+          ),
         ),
         actions: [
           IconButton(

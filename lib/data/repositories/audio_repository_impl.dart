@@ -627,7 +627,8 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
         // crate miner still falls back to
         // `dj_listening_history.primary_genre` when this
         // proxy is weak or null.
-        final genre = _captureGenreSignal(e);
+        // Inherit the seed track's genre to ensure AutoDJ routing works correctly.
+        final genre = track.genre ?? _captureGenreSignal(e);
         final t = Track(
           id: e.videoId!,
           title: e.title ?? 'Unknown',

@@ -1034,13 +1034,20 @@ class _PlayingScreenState extends State<PlayingScreen>
                                 fontWeight: isPlaying
                                     ? FontWeight.bold
                                     : FontWeight.normal,
+                                color: isPlaying
+                                    ? const Color(0xFFEAB308)
+                                    : Theme.of(context).colorScheme.onSurface,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
                               t.author ?? 'Unknown',
-                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+                              style: TextStyle(
+                                color: isPlaying
+                                    ? const Color(0xFFEAB308).withOpacity(0.8)
+                                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

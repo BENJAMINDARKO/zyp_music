@@ -559,8 +559,8 @@ class AutoDjRoutingService {
   /// the parameter. Callers MUST pass an immutable list (the
   /// routing service does not mutate it).
   Future<Track?> resolveNext({
-    required AutoDJMode mode,
     required Track current,
+    required AutoDJMode mode,
     required Set<String> recentIds,
     List<Track> history = const <Track>[],
   }) async {
@@ -585,24 +585,29 @@ class AutoDjRoutingService {
       return null;
     }
 
-    switch (mode) {
-      case AutoDJMode.off:
-        return null;
+    try {
+      switch (mode) {
+        case AutoDJMode.off:
+          return null;
 
-      case AutoDJMode.shuffleLibrary:
-        return _shuffleLibrary(current, exclude);
+        case AutoDJMode.shuffleLibrary:
+          return await _shuffleLibrary(current, exclude);
 
-      case AutoDJMode.similarSongs:
-        return _similarSongs(current, exclude);
+        case AutoDJMode.similarSongs:
+          return await _similarSongs(current, exclude);
 
-      case AutoDJMode.sameGenre:
-        return _sameGenre(current, exclude, history);
+        case AutoDJMode.sameGenre:
+          return await _sameGenre(current, exclude, history);
 
-      case AutoDJMode.sameArtist:
-        return _sameArtist(current, exclude, history);
+        case AutoDJMode.sameArtist:
+          return await _sameArtist(current, exclude, history);
 
-      case AutoDJMode.smartDj:
-        return _smartDj(current, exclude, history);
+        case AutoDJMode.smartDj:
+          return await _smartDj(current, exclude, history);
+      }
+    } catch (e, st) {
+      AppLogger.log('[AutoDJEngine] Strategy error: $e', name: _logTag);
+      return null;
     }
   }
 
@@ -728,8 +733,7 @@ class AutoDjRoutingService {
     }
 
     if (pickedId == null) {
-      final fallbackSource =
-          isFiltered ? crate : blockSource;
+      final fallbackSource = blockSource;
       final fallback = fallbackSource.where((t) => !exclude.contains(t.id)).toList();
       if (fallback.isEmpty) {
         AppLogger.log('Shuffle Library: No fallback tracks available.', name: _logTag);
@@ -846,9 +850,15 @@ class AutoDjRoutingService {
             return neighborMatch;
           }
 
-          final track = candidates.first;
-          AppLogger.log('Similar Songs: No genre/neighbor match online, selecting first candidate: ${track.title} (${track.id})', name: _logTag);
-          return track;
+          final artistMatch = candidates.firstWhere(
+            (t) => _artistMatches(t.author, current.author ?? ''),
+            orElse: () => const _SentinelTrack(),
+          );
+          if (artistMatch is! _SentinelTrack) {
+            AppLogger.log('Similar Songs: No genre/neighbor match online, selecting artist match: ${artistMatch.title} (${artistMatch.id})', name: _logTag);
+            return artistMatch;
+          }
+          AppLogger.log('Similar Songs: No genre/neighbor/artist match online. Falling through to local intersection.', name: _logTag);
         }
       } catch (e) {
         AppLogger.warning(
@@ -981,11 +991,11 @@ class AutoDjRoutingService {
     double cumulativeScoreSum = 0.0;
     final countryBonus = _countryBonusService;
     for (final track in rawCandidates) {
-      final wPath = _pathProximity(current.genre, track.genre);
+      final wPath = _pathProximity(seed.genre, track.genre);
       final aPenalty = _artistDecayPenalty(track, history);
       final cBonus = countryBonus == null
           ? 1.0
-          : countryBonus.scoreFor(current.country, track.country);
+          : countryBonus.scoreFor(seed.country, track.country);
       final finalScore = wPath * aPenalty * cBonus;
       if (finalScore > 0.0) {
         cumulativeScoreSum += finalScore;

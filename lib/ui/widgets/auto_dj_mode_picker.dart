@@ -48,15 +48,17 @@ class AutoDJModePicker {
                           if (picked == null) {
                             return;
                           }
+                          final filter = picked.isEmpty ? null : picked;
+                          
                           Navigator.pop(sheetContext);
                           final routing = sheetContext
                               .read<AutoDjRoutingService?>();
                           if (routing != null) {
-                            routing.setShuffleLibraryGenreFilter(picked);
+                            routing.setShuffleLibraryGenreFilter(filter);
                           }
                           final provider = sheetContext.read<PlayerProvider>();
                           await provider.setAutoDJMode(AutoDJMode.shuffleLibrary);
-                          final filterName = picked ?? 'no filter';
+                          final filterName = filter ?? 'no filter';
                           messenger.showSnackBar(
                             SnackBar(
                               content: Text(
@@ -265,7 +267,7 @@ class _ShuffleLibraryFilterContentState
                     title: 'No filter',
                     subtitle:
                         'Your library has no enriched tracks yet — play some songs to see genre filters.',
-                    onPick: () => Navigator.pop(context, null),
+                    onPick: () => Navigator.pop(context, ""),
                   );
                 }
                 final entries = counts.entries.toList()
@@ -279,7 +281,7 @@ class _ShuffleLibraryFilterContentState
                     _FilterTile(
                       title: 'No filter (all songs)',
                       subtitle: null,
-                      onPick: () => Navigator.pop(context, null),
+                      onPick: () => Navigator.pop(context, ""),
                     ),
                     for (final e in entries)
                       _FilterTile(

@@ -1,3 +1,17 @@
+## [1.2.5] - 2026-06-11
+
+### Added
+- **Playlist Swipe-to-Delete:** Added a swipe-to-delete gesture (swipe left) to easily remove songs from playlists (including imported playlists).
+- **Queue Highlighting:** The Up Next queue now highlights the currently playing track with the primary theme color.
+
+### Changed
+- **Search Box Design:** Replaced the rectangular search text field with a pill-shaped container to match the app's modern design language.
+- **Search Pagination:** Implemented recursive pagination in the YouTube data source to bypass the 20-result limit and fetch more comprehensive search results.
+
+### Fixed
+- **AutoDJ Same Genre Logic:** Refactored the 'Same Genre' mode to anchor its proximity scoring on the original seed track's properties rather than the current track, preventing the engine from drifting and losing the genre context.
+- **AutoDJ Infinite Loops:** Explicitly added the current playing track to the AutoDJ exclusion set for all modes. This guarantees the engine will never recommend the currently playing song as the next song, resolving the 2-song infinite rotation loops (especially in Shuffle Library and Same Genre modes).
+
 # Changelog
 
 All notable changes to the `zyp_music` project are documented in this file.

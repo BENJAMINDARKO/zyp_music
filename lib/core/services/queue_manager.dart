@@ -317,7 +317,7 @@ class QueueManager extends ChangeNotifier {
           recentIds: Set<String>.from(_recentSessionIds),
           history: List<Track>.unmodifiable(_sessionHistory),
         );
-        if (pick != null) return pick;
+        return pick;
       } catch (e) {
         AppLogger.log(
           'Router failed (${_currentMode.name}); falling back to legacy path: $e',
