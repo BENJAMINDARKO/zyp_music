@@ -14,7 +14,9 @@ import 'album_screen.dart';
 import 'playlist_screen.dart';
 import 'artist_screen.dart';
 import '../widgets/track_download_icon.dart';
+import '../widgets/track_export_icon.dart';
 import '../widgets/album_download_icon.dart';
+import '../widgets/album_export_icon.dart';
 import '../../presentation/providers/download_provider.dart';
 import '../widgets/bottom_player.dart';
 import "../../core/utils/thumbnail_url.dart";
@@ -249,7 +251,13 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
               const SizedBox(width: 8),
               Padding(
                 padding: const EdgeInsets.only(right: 8.0),
-                child: TrackDownloadIcon(track: track, size: 20),
+                child: Row(
+                  children: [
+                    TrackExportIcon(track: track, size: 20),
+                    const SizedBox(width: 8),
+                    TrackDownloadIcon(track: track, size: 20),
+                  ],
+                ),
               ),
               Text(formatDuration(track.duration), style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
             ],
@@ -314,6 +322,8 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
                   );
                 },
               ),
+              const SizedBox(width: 8),
+              AlbumExportIcon(album: album, size: 20),
               const SizedBox(width: 8),
               AlbumDownloadIcon(album: album, size: 20),
             ],

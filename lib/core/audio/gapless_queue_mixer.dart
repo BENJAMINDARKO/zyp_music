@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:just_audio/just_audio.dart';
 
@@ -39,12 +40,12 @@ class GaplessQueueMixer {
 
   /// Default lookahead window from the spec: "Exactly 15 seconds
   /// before the active audio file hits its termination limit".
-  static const Duration kLookahead = Duration(seconds: 15);
+  static const Duration kLookahead = Duration(seconds: 35);
 
   /// Spec fallback for the crossfade trigger: "If the value
   /// returns null, fall back to a baseline threshold of
   /// duration - 5000ms".
-  static const Duration kCrossfadeFallback = Duration(seconds: 5);
+  static const Duration kCrossfadeFallback = Duration(seconds: 10);
 
   AudioPlayer _player;
 
@@ -93,8 +94,18 @@ class GaplessQueueMixer {
   final Set<String> _lookaheadFiredFor = <String>{};
 
   /// Per-track flag: true iff the crossfadeReady event has
-  /// already fired for this source.
-  final Set<String> _crossfadeFiredFor = <String>{};
+  /// Track IDs where the crossfade threshold has already fired.
+  final Set<String> _crossfadeFiredFor = {};
+
+  final _random = Random();
+  final Map<String, int> _dynamicCrossfadeDurations = {};
+
+  int _getDynamicCrossfadeMs(String trackId) {
+    return _dynamicCrossfadeDurations.putIfAbsent(
+      trackId,
+      () => 15000 + _random.nextInt(15001), // 15,000 to 30,000 ms
+    );
+  }
 
   /// Set once by [attach]. When true, [playTrack] will rewire
   /// the player's audio source to the new concatenation; when
@@ -249,19 +260,33 @@ class GaplessQueueMixer {
     if (duration == null) return;
     if (_crossfadeFiredFor.contains(currentTrackId)) return;
     final silenceMs = await _silenceResolver(currentTrackId);
-    final thresholdMs = silenceMs ??
-        (duration.inMilliseconds - kCrossfadeFallback.inMilliseconds);
+    
+    final dynamicCrossfadeMs = _getDynamicCrossfadeMs(currentTrackId);
+    final fallbackThresholdMs = duration.inMilliseconds - dynamicCrossfadeMs;
+    
+    final thresholdMs = silenceMs ?? fallbackThresholdMs;
     if (position.inMilliseconds < thresholdMs) return;
+
+    // Race-shield: if the 15-second lookahead resolver (e.g. Vibe Match /
+    // Smart DJ) is taking a long time to fetch metadata, the position stream
+    // might cross the crossfade threshold before the next track is actually
+    // appended. Wait until the next track arrives before consuming the flag.
+    if (queuedTracks.length < 2) return;
+
     _crossfadeFiredFor.add(currentTrackId);
     AppLogger.log(
       'crossfadeReady: $currentTrackId at ${position.inMilliseconds}ms '
-      '(threshold=${thresholdMs}ms, silenceMs=$silenceMs)',
+      '(threshold=${thresholdMs}ms, silenceMs=$silenceMs, dynamicDurationMs=$dynamicCrossfadeMs)',
       name: _logTag,
     );
+    
+    final actualCrossfadeDurationMs = silenceMs == null ? dynamicCrossfadeMs : (duration.inMilliseconds - silenceMs);
+    
     _crossfadeController.add(CrossfadeReadyEvent(
       trackId: currentTrackId,
       positionMs: position.inMilliseconds,
       thresholdMs: thresholdMs,
+      crossfadeDurationMs: actualCrossfadeDurationMs,
       source: silenceMs == null
           ? CrossfadeSource.durationFallback
           : CrossfadeSource.silenceScan,
@@ -560,12 +585,14 @@ class CrossfadeReadyEvent {
   final String trackId;
   final int positionMs;
   final int thresholdMs;
+  final int crossfadeDurationMs;
   final CrossfadeSource source;
 
   const CrossfadeReadyEvent({
     required this.trackId,
     required this.positionMs,
     required this.thresholdMs,
+    required this.crossfadeDurationMs,
     required this.source,
   });
 }

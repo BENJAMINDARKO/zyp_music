@@ -28,6 +28,7 @@ import '../../core/services/playlist_scraper_service.dart';
 import 'playlist_import_preview_screen.dart';
 import '../../presentation/providers/download_provider.dart';
 import '../widgets/track_download_icon.dart';
+import '../widgets/track_export_icon.dart';
 import '../../core/utils/thumbnail_url.dart';
 import '../widgets/playing_track_mask.dart';
 import '../widgets/explicit_icon.dart';
@@ -170,6 +171,7 @@ class LibraryScreen extends StatelessWidget {
                       provider.toggleFavorite(track, downloadProvider: dl);
                     },
                   ),
+                  TrackExportIcon(track: track, size: 20),
                   TrackDownloadIcon(track: track, size: 20),
                   IconButton(
                     icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),

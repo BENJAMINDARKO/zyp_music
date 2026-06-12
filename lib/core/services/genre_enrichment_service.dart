@@ -8,8 +8,11 @@ import '../utils/app_logger.dart';
 import '../utils/normalise.dart';
 import 'genre_normalization_service.dart';
 
+import 'spotify_metadata_service.dart';
+
 class GenreEnrichmentService {
   final MusicBrainzDataSource _mb;
+  final SpotifyMetadataService _spotify;
   final PlaylistDatabase _db;
   final GenreNormalizationService _normalization;
 
@@ -20,9 +23,11 @@ class GenreEnrichmentService {
 
   GenreEnrichmentService({
     required MusicBrainzDataSource mb,
+    required SpotifyMetadataService spotify,
     required PlaylistDatabase db,
     required GenreNormalizationService normalization,
   })  : _mb = mb,
+        _spotify = spotify,
         _db = db,
         _normalization = normalization;
 
@@ -116,6 +121,24 @@ class GenreEnrichmentService {
     if (cached != null && cached.rawGenres.isNotEmpty) return;
     final display = _displayForKey(normalizedKey);
     if (display == null) return;
+
+    // 1. Try Spotify Metadata Service first
+    final spotifyGenres = await _spotify.getArtistGenres(display);
+    if (spotifyGenres.isNotEmpty) {
+      final normalizedGenres = _normalization.normalizeAll(spotifyGenres);
+      await _db.cacheArtistGenres(
+        normalizedArtist: normalizedKey,
+        displayName: display,
+        mbid: 'spotify', // Placeholder to indicate source
+        genres: spotifyGenres,
+        normalizedGenres: normalizedGenres,
+        confidence: 100, // Spotify matches are generally highly confident via exact search string
+        countryCode: 'US', // Placeholder
+      );
+      return;
+    }
+
+    // 2. Fallback to MusicBrainz
     final match = await _mb.searchArtist(display);
     if (match == null) return;
     final entries = await _mb.getArtistGenres(match.mbid);

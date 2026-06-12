@@ -21,6 +21,7 @@ import 'core/services/dj_history_ledger.dart';
 import 'core/services/genre_enrichment_service.dart';
 import 'core/services/country_bonus_service.dart';
 import 'core/services/genre_normalization_service.dart';
+import 'core/services/spotify_metadata_service.dart';
 import 'core/services/genre_proximity_graph.dart';
 import 'core/services/genre_similarity_engine.dart';
 import 'core/services/hybrid_cache_service.dart';
@@ -97,8 +98,12 @@ Future<void> main() async {
   // the service is purely additive on the hot path.
   final countryBonus = CountryBonusService();
   await countryBonus.initialize();
+  
+  final spotifyMetadata = SpotifyMetadataService(db: localDatabase);
+  
   final genreEnrichment = GenreEnrichmentService(
     mb: musicBrainz,
+    spotify: spotifyMetadata,
     db: localDatabase,
     normalization: genreNormalization,
   );
@@ -329,7 +334,7 @@ Future<void> main() async {
     );
     dspEngine.start();
 
-    runApp(MonochromeApp(
+    runApp(ZYPMusic(
       mixer: mixer,
       dspEngine: dspEngine,
       playlistRepository: playlistRepository,
@@ -346,6 +351,7 @@ Future<void> main() async {
       playlistDatabase: localDatabase,
       homeFeedProvider: homeFeedProvider,
       routingService: routingService,
+      spotifyMetadata: spotifyMetadata,
     ));
   } catch (e) {
     runApp(

@@ -69,7 +69,7 @@ class _MockPlaylistRepo implements PlaylistRepository {
   @override Future<void> savePlaylist(Playlist p) async {}
   @override Future<void> deletePlaylist(String id) async {}
   @override Future<void> renamePlaylist(String id, String newName) async {}
-  @override Future<void> updateTrackInPlaylist(String playlistId, Track track) async {}
+  @override Future<void> updateTrackInPlaylist(String playlistId, String trackId, Track track) async {}
   @override
   Future<void> saveTrack(String playlistId, Track track) async {}
   @override

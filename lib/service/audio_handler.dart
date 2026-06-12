@@ -377,10 +377,8 @@ class MusicAudioHandler extends BaseAudioHandler {
       // Pass headers down to AudioSource config to keep
       // connections alive on YouTube paths.
       if (uri.isScheme('HTTP') || uri.isScheme('HTTPS')) {
-        final finalHeaders =
-            uri.host.contains('googlevideo.com') ? null : headers;
         await _player.setAudioSource(
-          AudioSource.uri(uri, headers: finalHeaders, tag: item),
+          AudioSource.uri(uri, headers: headers, tag: item),
         );
       } else {
         await _player.setAudioSource(AudioSource.uri(uri, tag: item));

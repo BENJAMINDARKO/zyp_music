@@ -251,7 +251,7 @@ class PlaylistDatabase {
     }
     final db = await openDatabase(
       path,
-      version: 16,
+      version: 17,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -390,6 +390,7 @@ class PlaylistDatabase {
       'track_id          TEXT PRIMARY KEY, '
       'silence_start_ms  INTEGER DEFAULT NULL, '
       'bpm               REAL    DEFAULT NULL, '
+      'energy_level      REAL    DEFAULT NULL, '
       'genre             TEXT    DEFAULT NULL, '
       'scanned_at        INTEGER NOT NULL'
       ')'
@@ -672,6 +673,14 @@ class PlaylistDatabase {
       await db.execute(
         'ALTER TABLE downloaded_tracks ADD COLUMN '
         'year INTEGER DEFAULT NULL',
+      );
+    }
+    if (oldVersion < 17) {
+      // Phase 4: Energy match mode (Vibe Match). Adds the `energy_level`
+      // column to `track_metadata` for fast tempo and intensity matching.
+      await db.execute(
+        'ALTER TABLE track_metadata ADD COLUMN '
+        'energy_level REAL DEFAULT NULL',
       );
     }
   }
@@ -1381,15 +1390,81 @@ class PlaylistDatabase {
   /// cheap and overwrite-only.
   Future<void> setTrackBpm(String trackId, double? bpm) async {
     final db = await database;
-    await db.insert(
-      'track_metadata',
-      {
-        'track_id': trackId,
-        'bpm': bpm,
-        'scanned_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    await db.execute(
+      'INSERT INTO track_metadata (track_id, bpm, scanned_at) '
+      'VALUES (?, ?, ?) '
+      'ON CONFLICT(track_id) DO UPDATE SET '
+      'bpm=excluded.bpm, scanned_at=excluded.scanned_at',
+      [trackId, bpm, DateTime.now().millisecondsSinceEpoch],
     );
+  }
+
+  /// Sets the per-track Energy marker (Phase 4). Pass `null` to
+  /// clear it.
+  Future<void> setTrackEnergy(String trackId, double? energy) async {
+    final db = await database;
+    await db.execute(
+      'INSERT INTO track_metadata (track_id, energy_level, scanned_at) '
+      'VALUES (?, ?, ?) '
+      'ON CONFLICT(track_id) DO UPDATE SET '
+      'energy_level=excluded.energy_level, scanned_at=excluded.scanned_at',
+      [trackId, energy, DateTime.now().millisecondsSinceEpoch],
+    );
+  }
+
+  /// Gets the per-track Energy marker (Phase 4).
+  Future<double?> getTrackEnergy(String trackId) async {
+    final db = await database;
+    final metaRows = await db.query(
+      'track_metadata',
+      columns: ['energy_level'],
+      where: 'track_id = ? AND energy_level IS NOT NULL',
+      whereArgs: [trackId],
+      limit: 1,
+    );
+    if (metaRows.isNotEmpty) {
+      final v = metaRows.first['energy_level'];
+      if (v is num && v > 0) return v.toDouble();
+    }
+    return null;
+  }
+
+  /// Batch fetches Audio Features (BPM and Energy) for multiple tracks.
+  /// Used by AutoDjRoutingService for fast scoring.
+  Future<Map<String, ({double? bpm, double? energy})>> getAudioFeaturesBatch(
+    Iterable<String> trackIds,
+  ) async {
+    final out = <String, ({double? bpm, double? energy})>{};
+    if (trackIds.isEmpty) return out;
+
+    final db = await database;
+    // Chunking to avoid SQLite query variable limit (999)
+    final ids = trackIds.toList();
+    const chunkSize = 900;
+    
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(i, i + chunkSize > ids.length ? ids.length : i + chunkSize);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      
+      final rows = await db.query(
+        'track_metadata',
+        columns: ['track_id', 'bpm', 'energy_level'],
+        where: 'track_id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      
+      for (final row in rows) {
+        final id = row['track_id'] as String;
+        final bpm = row['bpm'] as num?;
+        final energy = row['energy_level'] as num?;
+        out[id] = (
+          bpm: bpm?.toDouble(),
+          energy: energy?.toDouble(),
+        );
+      }
+    }
+    
+    return out;
   }
 
   // -------------------------------------------------------------------------

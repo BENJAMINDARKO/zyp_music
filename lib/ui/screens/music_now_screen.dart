@@ -9,6 +9,7 @@ import '../../presentation/providers/player_provider.dart';
 import '../../data/datasources/local/playlist_database.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/entities/artist.dart';
+import '../../domain/entities/auto_dj_mode.dart';
 import '../widgets/shared_cards.dart';
 import "../screens/artist_screen.dart";
 import "../screens/album_screen.dart";
@@ -62,9 +63,9 @@ class _MusicNowScreenState extends State<MusicNowScreen> {
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.bold,
-        ),
+        style: Theme.of(
+          context,
+        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -205,7 +206,9 @@ class _MusicNowScreenState extends State<MusicNowScreen> {
       children: [
         CircleAvatar(
           radius: 36,
-          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+          backgroundColor: Theme.of(
+            context,
+          ).colorScheme.primary.withOpacity(0.2),
           backgroundImage: artist.thumbnailUrl != null
               ? CachedNetworkImageProvider(
                   rewriteThumbnailSize(artist.thumbnailUrl),
@@ -213,9 +216,7 @@ class _MusicNowScreenState extends State<MusicNowScreen> {
               : null,
           child: artist.thumbnailUrl == null
               ? Text(
-                  artist.name.isNotEmpty
-                      ? artist.name[0].toUpperCase()
-                      : '?',
+                  artist.name.isNotEmpty ? artist.name[0].toUpperCase() : '?',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.bold,
@@ -277,9 +278,7 @@ class _MusicNowScreenState extends State<MusicNowScreen> {
     if (artistId != null) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => ArtistScreen(artistId: artistId),
-        ),
+        MaterialPageRoute(builder: (_) => ArtistScreen(artistId: artistId)),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -304,7 +303,9 @@ class _HistoryArtistCard extends StatelessWidget {
           radius: 40,
           backgroundColor: theme.colorScheme.primary.withOpacity(0.2),
           backgroundImage: entry.thumbnailUrl != null
-              ? CachedNetworkImageProvider(rewriteThumbnailSize(entry.thumbnailUrl!))
+              ? CachedNetworkImageProvider(
+                  rewriteThumbnailSize(entry.thumbnailUrl!),
+                )
               : null,
           child: entry.thumbnailUrl == null
               ? Text(
@@ -353,102 +354,114 @@ class _TopGenreTrackCard extends StatelessWidget {
     return PlayingTrackMask(
       track: t,
       child: Material(
-        color: Colors.transparent,
-      child: InkWell(
+        color: const Color(0xFF141414),
         borderRadius: BorderRadius.circular(8),
-        onTap: () {
-          final player = context.read<PlayerProvider>();
-          player.setQueue([t]);
-          player.playFromQueue(0);
-        },
-        child: Container(
-          decoration: BoxDecoration(
-          color: const Color(0xFF141414),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1F1F1F),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-                ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                      child: track.thumbnailUrl != null
-                          ? CachedNetworkImage(
-                              imageUrl: rewriteThumbnailSize(track.thumbnailUrl!),
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => const Icon(
-                                PhosphorIconsRegular.musicNote,
-                                color: Colors.white24,
-                                size: 48,
-                              ),
-                            )
-                          : const Center(
-                              child: Icon(
-                                PhosphorIconsRegular.musicNote,
-                                color: Colors.white24,
-                                size: 48,
-                              ),
-                            ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            final player = context.read<PlayerProvider>();
+            player.setAutoDJMode(AutoDJMode.sameGenre);
+            player.setQueue([t]);
+            player.playFromQueue(0);
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1F1F1F),
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(8),
                     ),
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withOpacity(0.85),
-                          borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(8),
                         ),
-                        child: Text(
-                          track.primaryGenre,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                        child: track.thumbnailUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: rewriteThumbnailSize(
+                                  track.thumbnailUrl!,
+                                ),
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => const Icon(
+                                  PhosphorIconsRegular.musicNote,
+                                  color: Colors.white24,
+                                  size: 48,
+                                ),
+                              )
+                            : const Center(
+                                child: Icon(
+                                  PhosphorIconsRegular.musicNote,
+                                  color: Colors.white24,
+                                  size: 48,
+                                ),
+                              ),
+                      ),
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            track.primaryGenre,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      track.title ?? 'Unknown Track',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      track.artistName ?? 'Unknown Artist',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    track.title ?? 'Unknown Track',
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    track.artistName ?? 'Unknown Artist',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 
@@ -461,12 +474,28 @@ class _PopularItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Material(
-      color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF141414),
-          borderRadius: BorderRadius.circular(8),
-        ),
+      color: const Color(0xFF141414),
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          if (item.isAlbum) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => AlbumScreen(albumId: item.id)),
+            );
+          } else {
+            final track = Track(
+              id: item.id,
+              title: item.title ?? 'Unknown Track',
+              author: item.artistName,
+              thumbnailUrl: item.thumbnailUrl,
+            );
+            final player = context.read<PlayerProvider>();
+            player.setQueue([track]);
+            player.playFromQueue(0);
+          }
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -481,10 +510,14 @@ class _PopularItemCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(8),
+                      ),
                       child: item.thumbnailUrl != null
                           ? CachedNetworkImage(
-                              imageUrl: rewriteThumbnailSize(item.thumbnailUrl!),
+                              imageUrl: rewriteThumbnailSize(
+                                item.thumbnailUrl!,
+                              ),
                               fit: BoxFit.cover,
                               errorWidget: (_, __, ___) => const Icon(
                                 PhosphorIconsRegular.musicNote,
@@ -506,7 +539,10 @@ class _PopularItemCard extends StatelessWidget {
                       top: 6,
                       left: 6,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: item.isAlbum
                               ? Colors.blue.withOpacity(0.85)
@@ -534,7 +570,11 @@ class _PopularItemCard extends StatelessWidget {
                 children: [
                   Text(
                     item.title ?? 'Unknown',
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

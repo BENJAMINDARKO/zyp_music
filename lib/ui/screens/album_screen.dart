@@ -9,6 +9,8 @@ import '../../core/utils/format_duration.dart';
 import '../widgets/track_context_menu.dart';
 import '../widgets/track_download_icon.dart';
 import '../widgets/album_download_icon.dart';
+import '../widgets/track_export_icon.dart';
+import '../widgets/album_export_icon.dart';
 import '../widgets/bottom_player.dart';
 import '../../presentation/providers/download_provider.dart';
 import "../../core/utils/thumbnail_url.dart";
@@ -202,6 +204,9 @@ class _AlbumScreenState extends State<AlbumScreen> {
                                 );
                               },
                             ),
+                            // Export album button
+                            AlbumExportIcon(album: _album!, size: 28),
+                            const SizedBox(width: 8),
                             // Download album button
                             AlbumDownloadIcon(album: _album!, size: 28),
                           ],
@@ -276,6 +281,8 @@ class _AlbumScreenState extends State<AlbumScreen> {
                             );
                           },
                         ),
+                        const SizedBox(width: 8),
+                        TrackExportIcon(track: track, size: 20),
                         const SizedBox(width: 8),
                         TrackDownloadIcon(track: track, size: 20),
                         const SizedBox(width: 8),

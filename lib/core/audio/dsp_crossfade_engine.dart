@@ -178,6 +178,7 @@ class DspCrossfadeEngine {
         outgoing: outgoing,
         incoming: incoming,
         startPositionMs: event.positionMs,
+        crossfadeDurationMs: event.crossfadeDurationMs,
       );
     } catch (e, st) {
       AppLogger.log('crossfade failed: $e\n$st', name: _logTag);
@@ -193,6 +194,7 @@ class DspCrossfadeEngine {
     required Track outgoing,
     required Track incoming,
     required int startPositionMs,
+    required int crossfadeDurationMs,
   }) async {
     // 4.1.1 Look up the two BPMs.
     final bpmA = await _db.getTrackBpm(outgoing.id);
@@ -240,26 +242,28 @@ class DspCrossfadeEngine {
       // 4.2 Begin the crossfade. Start playerB at volume 0,
       // then drive both volumes through the equal-power
       // gain curve.
-      await playerB.play();
+      playerB.play(); // DO NOT await this; just_audio's play() completes when the song ends!
       if (runId != _runId) return;
       final playerA = _mixer.player;
 
       var elapsedMs = 0;
-      while (elapsedMs < kCrossfadeDuration.inMilliseconds) {
+      final stopwatch = Stopwatch()..start();
+      while (elapsedMs < crossfadeDurationMs) {
         if (runId != _runId) {
           AppLogger.log('superseded mid-crossfade; abort', name: _logTag);
           return;
         }
-        final t = elapsedMs / kCrossfadeDuration.inMilliseconds;
+        final t = elapsedMs / crossfadeDurationMs;
         final gainA = _equalPowerFadeOut(t);
         final gainB = _equalPowerFadeIn(t);
-        // Volume setters are platform-method-channel calls;
-        // the await is microsecond-scale, so the 16ms tick
-        // stays on schedule.
-        await playerA.setVolume(gainA);
-        await playerB.setVolume(gainB);
-        await Future<void>.delayed(kCrossfadeTick);
-        elapsedMs += kCrossfadeTick.inMilliseconds;
+        
+        // Unawaited volume updates. Awaiting platform channel calls inside
+        // a 16ms loop adds massive overhead, stretching the 10s loop to 16s+.
+        unawaited(playerA.setVolume(gainA));
+        unawaited(playerB.setVolume(gainB));
+        
+        await Future.delayed(kCrossfadeTick);
+        elapsedMs = stopwatch.elapsedMilliseconds;
       }
 
       // 4.2 End-of-crossfade: stop + dispose playerA, swap

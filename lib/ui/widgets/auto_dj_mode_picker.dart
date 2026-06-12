@@ -107,6 +107,8 @@ String _snackbarFor(AutoDJMode mode, ColdStartResult result) {
           'Same Artist armed — artist filter on',
         AutoDJMode.smartDj =>
           'Smart DJ armed — crossfade engine + Markov chain',
+        AutoDJMode.vibeMatch =>
+          'Vibe Match armed — seamless tempo & energy matching',
       };
     case ColdStartResult.noLibraryOffline:
       return switch (mode) {
@@ -133,6 +135,8 @@ String _snackbarFor(AutoDJMode mode, ColdStartResult result) {
           'Same Artist armed — artist filter on',
         AutoDJMode.smartDj =>
           'Smart DJ armed — crossfade engine + Markov chain',
+        AutoDJMode.vibeMatch =>
+          'Vibe Match armed — seamless tempo & energy matching',
       };
   }
 }

@@ -16,6 +16,11 @@ class SettingsProvider extends ChangeNotifier {
   static const _keyShowJumpBackIn = 'showJumpBackIn';
   static const _keyShowEditorsPicks = 'showEditorsPicks';
   static const _keyShuffleEditorsPicks = 'shuffleEditorsPicks';
+  static const _keyShowTrendingNow = 'showTrendingNow';
+  static const _keyShowSuggestedArtists = 'showSuggestedArtists';
+  static const _keyShowStartListening = 'showStartListening';
+  static const _keyShowTopArtists = 'showTopArtists';
+  static const _keyShowPopularAlbums = 'showPopularAlbums';
   static const _keyDynamicAccentColor = 'dynamicAccentColor';
   static const _keyVisualizerStyle = 'visualizerStyle';
   static const _keyInvertSeekbarColor = 'invertSeekbarColor';
@@ -38,6 +43,10 @@ class SettingsProvider extends ChangeNotifier {
   static const _keyBulkDownloadMethod = 'bulkDownloadMethod';
   static const _keyForceZipAsBlob = 'forceZipAsBlob';
 
+  // Spotify API Integration
+  static const _keySpotifyClientId = 'spotifyClientId';
+  static const _keySpotifyClientSecret = 'spotifyClientSecret';
+
   int _prebufferCount = 3;
   AudioQuality _audioQuality = AudioQuality.adaptive;
 
@@ -54,6 +63,13 @@ class SettingsProvider extends ChangeNotifier {
   bool _showJumpBackIn = true;
   bool _showEditorsPicks = true;
   bool _shuffleEditorsPicks = false;
+
+  // Music Now Tab
+  bool _showTrendingNow = true;
+  bool _showSuggestedArtists = true;
+  bool _showStartListening = true;
+  bool _showTopArtists = true;
+  bool _showPopularAlbums = true;
   bool _dynamicAccentColor = true;
   String _visualizerStyle = 'Bars';
   bool _invertSeekbarColor = false;
@@ -64,7 +80,7 @@ class SettingsProvider extends ChangeNotifier {
   String _youtubeMusicQuality = 'adaptive';
 
   String _downloadQuality = 'AAC 320kbps';
-  String _androidDownloadFolder = '/storage/emulated/0/Music/Monochrome';
+  String _androidDownloadFolder = '/storage/emulated/0/Music/ZYPMusic';
   String _bulkDownloadMethod = 'ZIP Archive';
   bool _forceZipAsBlob = false;
 
@@ -72,8 +88,14 @@ class SettingsProvider extends ChangeNotifier {
   bool _searchSourceYTMusic = true;
   String _explicitFilter = 'both';
 
+  String _spotifyClientId = '';
+  String _spotifyClientSecret = '';
+
   int get prebufferCount => _prebufferCount;
   AudioQuality get audioQuality => _audioQuality;
+
+  String get spotifyClientId => _spotifyClientId;
+  String get spotifyClientSecret => _spotifyClientSecret;
 
   /// Returns the prebuffer count clamped to the supported 1..5 range.
   int get prebufferCountClamped =>
@@ -87,6 +109,12 @@ class SettingsProvider extends ChangeNotifier {
   bool get showJumpBackIn => _showJumpBackIn;
   bool get showEditorsPicks => _showEditorsPicks;
   bool get shuffleEditorsPicks => _shuffleEditorsPicks;
+  bool get showTrendingNow => _showTrendingNow;
+  bool get showSuggestedArtists => _showSuggestedArtists;
+  bool get showStartListening => _showStartListening;
+  bool get showTopArtists => _showTopArtists;
+  bool get showPopularAlbums => _showPopularAlbums;
+
   bool get dynamicAccentColor => _dynamicAccentColor;
   String get visualizerStyle => _visualizerStyle;
   bool get invertSeekbarColor => _invertSeekbarColor;
@@ -129,6 +157,13 @@ class SettingsProvider extends ChangeNotifier {
     _showJumpBackIn = prefs.getBool(_keyShowJumpBackIn) ?? true;
     _showEditorsPicks = prefs.getBool(_keyShowEditorsPicks) ?? true;
     _shuffleEditorsPicks = prefs.getBool(_keyShuffleEditorsPicks) ?? false;
+
+    _showTrendingNow = prefs.getBool(_keyShowTrendingNow) ?? true;
+    _showSuggestedArtists = prefs.getBool(_keyShowSuggestedArtists) ?? true;
+    _showStartListening = prefs.getBool(_keyShowStartListening) ?? true;
+    _showTopArtists = prefs.getBool(_keyShowTopArtists) ?? true;
+    _showPopularAlbums = prefs.getBool(_keyShowPopularAlbums) ?? true;
+
     _dynamicAccentColor = prefs.getBool(_keyDynamicAccentColor) ?? true;
     _visualizerStyle = prefs.getString(_keyVisualizerStyle) ?? 'Bars';
     _invertSeekbarColor = prefs.getBool(_keyInvertSeekbarColor) ?? false;
@@ -143,10 +178,27 @@ class SettingsProvider extends ChangeNotifier {
     _youtubeMusicQuality = prefs.getString(_keyYoutubeMusicQuality) ?? 'adaptive';
 
     _downloadQuality = prefs.getString(_keyDownloadQuality) ?? 'AAC 320kbps';
-    _androidDownloadFolder = prefs.getString(_keyAndroidDownloadFolder) ?? '/storage/emulated/0/Music/Monochrome';
+    _androidDownloadFolder = prefs.getString(_keyAndroidDownloadFolder) ?? '/storage/emulated/0/Music/ZYPMusic';
     _bulkDownloadMethod = prefs.getString(_keyBulkDownloadMethod) ?? 'ZIP Archive';
     _forceZipAsBlob = prefs.getBool(_keyForceZipAsBlob) ?? false;
         
+    _spotifyClientId = prefs.getString(_keySpotifyClientId) ?? '';
+    _spotifyClientSecret = prefs.getString(_keySpotifyClientSecret) ?? '';
+
+    notifyListeners();
+  }
+
+  Future<void> setSpotifyClientId(String id) async {
+    _spotifyClientId = id.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keySpotifyClientId, _spotifyClientId);
+    notifyListeners();
+  }
+
+  Future<void> setSpotifyClientSecret(String secret) async {
+    _spotifyClientSecret = secret.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keySpotifyClientSecret, _spotifyClientSecret);
     notifyListeners();
   }
 
@@ -181,6 +233,11 @@ class SettingsProvider extends ChangeNotifier {
       case _keyShowJumpBackIn: _showJumpBackIn = value; break;
       case _keyShowEditorsPicks: _showEditorsPicks = value; break;
       case _keyShuffleEditorsPicks: _shuffleEditorsPicks = value; break;
+      case _keyShowTrendingNow: _showTrendingNow = value; break;
+      case _keyShowSuggestedArtists: _showSuggestedArtists = value; break;
+      case _keyShowStartListening: _showStartListening = value; break;
+      case _keyShowTopArtists: _showTopArtists = value; break;
+      case _keyShowPopularAlbums: _showPopularAlbums = value; break;
       case _keyDynamicAccentColor: _dynamicAccentColor = value; break;
       case _keyForceZipAsBlob: _forceZipAsBlob = value; break;
       case _keySearchSourceYoutube: _searchSourceYoutube = value; break;

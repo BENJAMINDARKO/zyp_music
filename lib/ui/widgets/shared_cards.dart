@@ -11,17 +11,21 @@ import '../../domain/entities/album.dart';
 import '../../domain/entities/artist.dart';
 import 'track_context_menu.dart';
 import 'album_context_menu.dart';
-import 'track_download_icon.dart';
-import 'album_download_icon.dart';
-import "../screens/album_screen.dart";
+import '../screens/album_screen.dart';
+import '../../ui/widgets/track_download_icon.dart';
+import '../../ui/widgets/album_download_icon.dart';
+import '../../ui/widgets/track_export_icon.dart';
+import '../../ui/widgets/album_export_icon.dart';
+import '../../ui/screens/playlist_screen.dart';
 import "../screens/artist_screen.dart";
 import "../../core/utils/thumbnail_url.dart";
 import 'playing_track_mask.dart';
 
 class TrackCard extends StatelessWidget {
   final Track track;
+  final VoidCallback? onTap;
 
-  const TrackCard({required this.track});
+  const TrackCard({required this.track, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +34,7 @@ class TrackCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
       child: InkWell(
-        onTap: () {
+        onTap: onTap ?? () {
           final player = context.read<PlayerProvider>();
           player.setQueue([track]);
           player.playFromQueue(0);
@@ -109,7 +113,13 @@ class TrackCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white12, width: 0.5),
                           ),
-                          child: TrackDownloadIcon(track: track, size: 14),
+                          child: Row(
+                            children: [
+                              TrackExportIcon(track: track, size: 14),
+                              const SizedBox(width: 4),
+                              TrackDownloadIcon(track: track, size: 14),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -245,7 +255,13 @@ class AlbumCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white12, width: 0.5),
                           ),
-                          child: AlbumDownloadIcon(album: album, size: 14),
+                          child: Row(
+                            children: [
+                              AlbumExportIcon(album: album, size: 14),
+                              const SizedBox(width: 4),
+                              AlbumDownloadIcon(album: album, size: 14),
+                            ],
+                          ),
                         ),
                       ),
                     ],

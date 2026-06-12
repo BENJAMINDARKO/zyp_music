@@ -5,12 +5,15 @@ import 'package:provider/provider.dart';
 import '../../presentation/providers/download_provider.dart';
 import '../widgets/track_download_icon.dart';
 import '../widgets/album_download_icon.dart';
+import '../widgets/track_export_icon.dart';
+import '../widgets/album_export_icon.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/charts_provider.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
 import '../../domain/entities/artist.dart';
+import '../../presentation/providers/settings_provider.dart';
 import '../../data/models/video_model.dart';
 import '../widgets/track_context_menu.dart';
 import '../widgets/album_context_menu.dart';
@@ -35,11 +38,20 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSuggestedSongs(context),
-          _buildLikedSongs(context),
-          _buildFeaturedAlbums(context),
-            _buildFavouriteArtists(context),
-            _buildGlobalHot(context),
+            Consumer<SettingsProvider>(
+              builder: (context, settings, _) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (settings.showRecommendedSongs) _buildSuggestedSongs(context),
+                    if (settings.showJumpBackIn) _buildLikedSongs(context),
+                    if (settings.showRecommendedAlbums) _buildFeaturedAlbums(context),
+                    if (settings.showRecommendedArtists) _buildFavouriteArtists(context),
+                    if (settings.showEditorsPicks) _buildGlobalHot(context),
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -390,7 +402,22 @@ class _CompactTrackTile extends StatelessWidget {
                 },
               ),
               const SizedBox(width: 8),
-              TrackDownloadIcon(track: track, size: 20),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TrackExportIcon(track: track, size: 20),
+                  const SizedBox(width: 8),
+                  TrackDownloadIcon(track: track, size: 20),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(PhosphorIconsRegular.dotsThreeVertical, size: 20),
+                    onPressed: () => TrackContextMenu.show(context, track),
+                    color: Colors.white54,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
             ],
           ),
           ),
@@ -498,7 +525,13 @@ class _TrackCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white12, width: 0.5),
                           ),
-                          child: TrackDownloadIcon(track: track, size: 14),
+                          child: Row(
+                            children: [
+                              TrackExportIcon(track: track, size: 14),
+                              const SizedBox(width: 4),
+                              TrackDownloadIcon(track: track, size: 14),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -633,7 +666,13 @@ class _AlbumCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white12, width: 0.5),
                           ),
-                          child: AlbumDownloadIcon(album: album, size: 14),
+                          child: Row(
+                            children: [
+                              AlbumExportIcon(album: album, size: 14),
+                              const SizedBox(width: 4),
+                              AlbumDownloadIcon(album: album, size: 14),
+                            ],
+                          ),
                         ),
                       ),
                     ],

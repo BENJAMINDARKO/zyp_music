@@ -25,6 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:zyp_music/core/services/genre_enrichment_service.dart';
 import 'package:zyp_music/core/services/genre_normalization_service.dart';
+import 'package:zyp_music/core/services/spotify_metadata_service.dart';
 import 'package:zyp_music/data/datasources/local/playlist_database.dart';
 import 'package:zyp_music/data/datasources/remote/musicbrainz_datasource.dart';
 import 'package:zyp_music/domain/entities/video.dart';
@@ -100,6 +101,7 @@ void main() {
 
       svc = GenreEnrichmentService(
         mb: _StubMusicBrainzDataSource(),
+        spotify: SpotifyMetadataService(db: db),
         db: db,
         normalization: normalization,
       );

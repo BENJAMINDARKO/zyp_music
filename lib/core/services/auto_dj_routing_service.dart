@@ -604,6 +604,9 @@ class AutoDjRoutingService {
 
         case AutoDJMode.smartDj:
           return await _smartDj(current, exclude, history);
+
+        case AutoDJMode.vibeMatch:
+          return await _vibeMatch(current, exclude, history);
       }
     } catch (e, st) {
       AppLogger.log('[AutoDJEngine] Strategy error: $e', name: _logTag);
@@ -1734,6 +1737,105 @@ class AutoDjRoutingService {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /// Vibe Match (Phase 4): Scans the local crate for tracks with
+  /// tempo (BPM) and intensity (Energy) closest to the currently
+  /// playing track. Falls back to Smart DJ if no data is available.
+  Future<Track?> _vibeMatch(
+      Track current, Set<String> exclude, List<Track> history) async {
+    final db = _crateMiner.libraryDatabase;
+    if (db == null) {
+      AppLogger.log(
+        'Vibe Match: libraryDatabase is null. Falling back to Smart DJ.',
+        name: _logTag,
+      );
+      return _smartDj(current, exclude, history);
+    }
+
+    final currentBpm = await db.getTrackBpm(current.id);
+    final currentEnergy = await db.getTrackEnergy(current.id);
+
+    if (currentBpm == null || currentEnergy == null) {
+      AppLogger.log(
+        'Vibe Match: Missing BPM/Energy for current track (${current.id}). Falling back to Smart DJ.',
+        name: _logTag,
+      );
+      return _smartDj(current, exclude, history);
+    }
+
+    final crate = await _crateMiner.mine(excludeIds: exclude);
+    if (crate.isEmpty) return null;
+
+    final features = await db.getAudioFeaturesBatch(crate.map((t) => t.id));
+    final scored = <_ScoredTrack>[];
+
+    for (final track in crate) {
+      final f = features[track.id];
+      if (f == null || f.bpm == null || f.energy == null) continue;
+
+      final bpmDelta = (f.bpm! - currentBpm).abs();
+      final energyDelta = (f.energy! - currentEnergy).abs();
+
+      // Heuristic:
+      // BPM within ±8% is ideal (crossfade limits).
+      // Energy within ±0.2 is ideal.
+      // Score = 1.0 - normalized distances.
+      final maxBpmDelta = 20.0;
+      final maxEnergyDelta = 0.4;
+
+      if (bpmDelta > maxBpmDelta || energyDelta > maxEnergyDelta) continue;
+
+      final bpmPenalty = (bpmDelta / maxBpmDelta) * (bpmDelta / maxBpmDelta);
+      final energyPenalty = (energyDelta / maxEnergyDelta) * (energyDelta / maxEnergyDelta);
+      var score = 1.0 - bpmPenalty - energyPenalty;
+
+      if (score > 0) {
+        // Tie-breaker: affinity
+        score += _likedAffinityFor(track) * 0.1;
+        scored.add(_ScoredTrack(track, score));
+      }
+    }
+
+    if (scored.isEmpty) {
+      AppLogger.log(
+        'Vibe Match: No matching candidates found. Falling back to Smart DJ.',
+        name: _logTag,
+      );
+      return _smartDj(current, exclude, history);
+    }
+
+    // Apply recent artist penalty
+    final lastTwoArtists = <String>{};
+    for (final track in history.take(2)) {
+      final artist = track.author?.toLowerCase();
+      if (artist != null && artist.isNotEmpty) {
+        lastTwoArtists.add(artist);
+      }
+    }
+
+    for (var i = 0; i < scored.length; i++) {
+      final t = scored[i].track;
+      final artist = t.author?.toLowerCase();
+      if (artist != null && lastTwoArtists.contains(artist)) {
+        scored[i] = _ScoredTrack(t, scored[i].score * 0.3);
+      }
+    }
+
+    scored.sort((a, b) => b.score.compareTo(a.score));
+
+    final pick = scored.first.track;
+    AppLogger.log(
+      'Vibe Match: Selected ${pick.title} '
+      '(BPM: ${features[pick.id]?.bpm?.toStringAsFixed(1)}, '
+      'Energy: ${features[pick.id]?.energy?.toStringAsFixed(2)}) '
+      'to match current '
+      '(BPM: ${currentBpm.toStringAsFixed(1)}, '
+      'Energy: ${currentEnergy.toStringAsFixed(2)})',
+      name: _logTag,
+    );
+
+    return pick;
+  }
 
   Future<Track?> _attributeIntersection(
       Track current, Set<String> exclude) async {

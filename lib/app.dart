@@ -23,10 +23,11 @@ import 'core/services/connectivity_service.dart';
 import 'core/services/dj_history_ledger.dart';
 import 'core/services/queue_manager.dart';
 import 'core/services/genre_enrichment_service.dart';
+import 'core/services/spotify_metadata_service.dart';
 import 'data/datasources/local/playlist_database.dart';
 import 'core/audio/gapless_queue_mixer.dart';
 
-class MonochromeApp extends StatelessWidget {
+class ZYPMusic extends StatelessWidget {
   final PlaylistRepository playlistRepository;
   final AudioRepository audioRepository;
   final dynamic chartsRepository;
@@ -44,7 +45,7 @@ class MonochromeApp extends StatelessWidget {
   /// is built in `main.dart` and handed down here so the
   /// [PlayerProvider] can chain `setRoutingService(...)`
   /// after construction. Nullable so unit tests that
-  /// exercise [MonochromeApp] in isolation can run without
+  /// exercise [ZYPMusic] in isolation can run without
   /// the AI DJ engine.
   final AutoDjRoutingService? routingService;
 
@@ -53,6 +54,7 @@ class MonochromeApp extends StatelessWidget {
   /// `setGenreEnrichmentService` setter so every successful
   /// track transition fires background enrichment.
   final GenreEnrichmentService genreEnrichmentService;
+  final SpotifyMetadataService spotifyMetadata;
 
   /// Spec 2H: the [PlaylistDatabase] singleton is exposed
   /// to the widget tree so the Shuffle Library filter
@@ -60,7 +62,7 @@ class MonochromeApp extends StatelessWidget {
   final PlaylistDatabase playlistDatabase;
   final HomeFeedProvider homeFeedProvider;
 
-  const MonochromeApp({
+  const ZYPMusic({
     super.key,
     required this.playlistRepository,
     required this.audioRepository,
@@ -75,6 +77,7 @@ class MonochromeApp extends StatelessWidget {
     required this.mixer,
     required this.dspEngine,
     required this.genreEnrichmentService,
+    required this.spotifyMetadata,
     required this.playlistDatabase,
     required this.homeFeedProvider,
     this.routingService,
@@ -119,7 +122,8 @@ class MonochromeApp extends StatelessWidget {
               ..setDspEngine(dspEngine)
               ..setChartsRepository(chartsRepository)
               ..setConnectivityService(connectivityService)
-              ..setGenreEnrichmentService(genreEnrichmentService);
+              ..setGenreEnrichmentService(genreEnrichmentService)
+              ..setSpotifyMetadataService(spotifyMetadata);
             // Smart-DJ bootstrap-fusion: bind the routing
             // service and the playlist repository AFTER the
             // base wiring so the bootstrap method's
@@ -127,7 +131,7 @@ class MonochromeApp extends StatelessWidget {
             // dependencies are in place. The chain-call
             // pattern is split out here because we need
             // explicit null handling on the routing service
-            // (it's optional in [MonochromeApp]).
+            // (it's optional in [ZYPMusic]).
             if (routingService != null) {
               provider.setRoutingService(routingService!);
             }
@@ -146,7 +150,7 @@ class MonochromeApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'Monochrome',
+        title: 'ZYPMusic',
         theme: AppTheme.darkTheme,
         debugShowCheckedModeBanner: false,
         navigatorKey: navigatorKey,

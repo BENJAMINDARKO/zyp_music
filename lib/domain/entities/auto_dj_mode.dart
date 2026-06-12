@@ -55,6 +55,14 @@ enum AutoDJMode {
   smartDj(
     label: 'Smart DJ',
     description: 'Auto mixes tracks from across your library',
+  ),
+  
+  /// Vibe Match (Phase 4): prioritizes queuing tracks that have similar
+  /// BPM and Energy to the currently playing track to create a seamless
+  /// beat-matched mix.
+  vibeMatch(
+    label: 'Vibe Match',
+    description: 'Picks tracks with similar tempo and intensity',
   );
 
   const AutoDJMode({
@@ -109,4 +117,6 @@ Map<AutoDJMode, _IconBuilder> _builders = {
       Icon(PhosphorIcons.user, size: size, color: color),
   AutoDJMode.smartDj: ({double size = 24, Color? color}) =>
       Icon(PhosphorIcons.sparkle, size: size, color: color),
+  AutoDJMode.vibeMatch: ({double size = 24, Color? color}) =>
+      Icon(PhosphorIcons.activity, size: size, color: color),
 };

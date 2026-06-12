@@ -779,10 +779,9 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
       },
     );
 
-    final finalHeaders = uri.host.contains('googlevideo.com') ? null : headers;
     return AudioSource.uri(
       uri,
-      headers: finalHeaders,
+      headers: headers,
       tag: item,
     );
   }

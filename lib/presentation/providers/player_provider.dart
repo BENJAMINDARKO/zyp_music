@@ -14,6 +14,7 @@ import '../../core/constants/repeat_mode.dart' as repeat;
   import '../../core/services/auto_dj_routing_service.dart';
   import '../../core/services/dj_history_ledger.dart';
   import '../../core/services/genre_enrichment_service.dart';
+  import '../../core/services/spotify_metadata_service.dart';
 import '../../core/services/hybrid_cache_service.dart';
 import '../../core/services/queue_manager.dart';
 import '../../core/services/connectivity_service.dart';
@@ -87,6 +88,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// the chain. Nullable so unit tests that build a
   /// `PlayerProvider` directly can run without one.
   GenreEnrichmentService? _genreEnrichment;
+  SpotifyMetadataService? _spotifyMetadata;
 
   /// Phase 6: playback speed (0.5x – 2.0x). Reset to 1.0 on
   /// every track change via [_resetPlaybackSpeed].
@@ -512,7 +514,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     // (e.g. restoring the engine after a background isolate
     // restart) honours whatever mode the user already has
     // armed.
-    engine.setActive(_autoDJMode == AutoDJMode.smartDj);
+    engine.setActive(_autoDJMode == AutoDJMode.smartDj || _autoDJMode == AutoDJMode.vibeMatch);
   }
 
   /// Phase 5: late-binding setter for the charts
@@ -537,6 +539,10 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// before the next Auto-DJ routing call.
   void setGenreEnrichmentService(GenreEnrichmentService svc) {
     _genreEnrichment = svc;
+  }
+
+  void setSpotifyMetadataService(SpotifyMetadataService svc) {
+    _spotifyMetadata = svc;
   }
 
   Box? _mediaStateBox;
@@ -1044,6 +1050,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
       manager.updateActiveSeedProfile(seed);
+      unawaited(_warmUpNewMode(_autoDJMode, currentTrack: seed));
     }
     notifyListeners();
   }
@@ -1170,7 +1177,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     // Library, Similar Songs, Same Genre, Same Artist) use
     // the mixer's plain gapless handoff with no second
     // decoder.
-    _dspEngine?.setActive(mode == AutoDJMode.smartDj);
+    _dspEngine?.setActive(mode == AutoDJMode.smartDj || mode == AutoDJMode.vibeMatch);
     notifyListeners();
     // Armed Standby: when the player is idle (no current track,
     // no queued items) and the user selects a non-off mode, the
@@ -1225,47 +1232,51 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     final manager = _queueManager;
     if (manager == null) return;
-    try {
-      final candidate = await manager.generateNextAutoDJTrack(currentTrack);
-      if (candidate == null) {
-        AppLogger.log(
-          'setAutoDJMode warm-up: new mode=${mode.label} returned '
-          'no candidate; existing preloaded timeline remains as buffer.',
-          name: 'PlayerProvider',
-        );
-        return;
+    
+    // Determine how many tracks to generate to reach 20 upcoming
+    int tracksAhead = _queue.length - _currentIndex - 1;
+    int target = 20;
+    if (tracksAhead >= target) return;
+    
+    int toGenerate = target - tracksAhead;
+    Track seed = _queue.isNotEmpty ? _queue.last : currentTrack;
+    int fetched = 0;
+    
+    for (int i = 0; i < toGenerate; i++) {
+      if (_autoDJMode != mode || !manager.isActive) break;
+      try {
+        final candidate = await manager.generateNextAutoDJTrack(seed);
+        if (candidate == null) break;
+        
+        // Only verify the URI token for the very first generated track to ensure
+        // the immediate next handoff works. Delaying URI fetching for the rest
+        // allows the queue to populate instantly.
+        if (fetched == 0) {
+          final uri = await _audioRepository.getAudioUrl(candidate);
+          if (uri.isEmpty) continue;
+        }
+        
+        _queue.add(candidate);
+        seed = candidate;
+        fetched++;
+        
+        if (fetched == 1) {
+          AppLogger.log(
+            'setAutoDJMode warm-up: verified next-track URI token for '
+            'new mode=${mode.label}. Added to queue.',
+            name: 'PlayerProvider',
+          );
+          _mixer?.clearLookaheadFor(_currentTrack?.id);
+          notifyListeners();
+        }
+      } catch (e) {
+        AppLogger.log('setAutoDJMode warm-up loop failed: $e', name: 'PlayerProvider');
+        break;
       }
-      final uri = await _audioRepository.getAudioUrl(candidate);
-      if (uri.isEmpty) {
-        AppLogger.log(
-          'setAutoDJMode warm-up: new mode=${mode.label} candidate '
-          '${candidate.id} ("${candidate.title}") has empty URI; '
-          'existing preloaded timeline remains as buffer.',
-          name: 'PlayerProvider',
-        );
-        return;
-      }
-      AppLogger.log(
-        'setAutoDJMode warm-up: verified next-track URI token for '
-        'new mode=${mode.label}: '
-        '${candidate.id} ("${candidate.title}"). '
-        'Re-arming mixer lookahead so next T-15s tick appends '
-        'the new-mode candidate to the concatenation.',
-        name: 'PlayerProvider',
-      );
-      // [ModeSwitchFix] Clear the per-track lookahead fired flag so the
-      // next position tick re-triggers the resolver under the new mode.
-      // Without this, if the mode switch happens within the last 15s of
-      // a track, the warm-up verifies a candidate but the mixer never
-      // appends it because the flag was already set by the previous mode.
-      _mixer?.clearLookaheadFor(_currentTrack?.id);
-    } catch (e) {
-      AppLogger.log(
-        'setAutoDJMode warm-up: new mode=${mode.label} failed to '
-        'resolve a verified URI token: $e. Existing preloaded '
-        'timeline remains as buffer.',
-        name: 'PlayerProvider',
-      );
+    }
+    
+    if (fetched > 1) {
+      notifyListeners();
     }
   }
 
@@ -1376,6 +1387,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       '${next.title}',
       name: 'PlayerProvider',
     );
+    // Prepopulate 20 tracks after cold start
+    unawaited(_warmUpNewMode(mode, currentTrack: next));
     return ColdStartResult.startedWithTrack;
   }
 
@@ -1526,6 +1539,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _position = effectiveStartAt ?? Duration.zero;
       _bufferedPosition = Duration.zero;
       _addToRecentlyPlayed(actualTrack);
+
+      // Phase 4: Fetch BPM/Energy from Spotify if missing (runs in background)
+      _spotifyMetadata?.fetchAudioFeaturesAndGenres(actualTrack);
 
       // Push the new track's MediaItem immediately, before any await
       // suspension points. This sets _pendingMediaItemId in the handler

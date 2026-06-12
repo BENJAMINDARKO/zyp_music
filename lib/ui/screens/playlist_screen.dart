@@ -9,6 +9,7 @@ import '../../core/utils/format_duration.dart';
 import '../widgets/track_context_menu.dart';
 import '../widgets/bottom_player.dart';
 import '../widgets/track_download_icon.dart';
+import '../widgets/track_export_icon.dart';
 import '../../presentation/providers/download_provider.dart';
 import "../../core/utils/thumbnail_url.dart";
 import '../widgets/playing_track_mask.dart';
@@ -296,6 +297,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 );
                               },
                             ),
+                            const SizedBox(width: 8),
+                            TrackExportIcon(track: track, size: 20),
                             const SizedBox(width: 8),
                             TrackDownloadIcon(track: track, size: 20),
                             const SizedBox(width: 8),
