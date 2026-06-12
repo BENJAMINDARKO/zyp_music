@@ -347,32 +347,7 @@ class YoutubeRemoteDataSource {
       ));
     }
 
-    // Append fallback tracks from YoutubeExplode to ensure > 20 results
-    try {
-      final searchList = await _yt.search.search(query);
-      final fallbackTracks = searchList.toList();
-      final nextPage = await searchList.nextPage();
-      if (nextPage != null) {
-        fallbackTracks.addAll(nextPage);
-        final nextNextPage = await nextPage.nextPage();
-        if (nextNextPage != null) {
-          fallbackTracks.addAll(nextNextPage);
-        }
-      }
-      
-      for (final track in fallbackTracks) {
-        if (!tracks.any((t) => t.id == track.id.value)) {
-          tracks.add(TrackModel(
-            id: track.id.value,
-            title: track.title,
-            author: cleanArtistName(track.author),
-            durationSeconds: track.duration?.inSeconds,
-            thumbnailUrl: rewriteThumbnailSize(track.thumbnails.mediumResUrl),
-            index: tracks.length,
-          ));
-        }
-      }
-    } catch (_) {}
+    // Removed YoutubeExplode generic search fallback to keep tracks pure YT Music.
 
     return tracks;
   }

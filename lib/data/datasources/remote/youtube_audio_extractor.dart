@@ -178,7 +178,10 @@ class YoutubeAudioExtractor {
       _log('InnerTube clients failed, falling back to youtube_explode_dart...');
       final yt = yt_explode.YoutubeExplode();
       final manifest = await yt.videos.streamsClient.getManifest(videoId);
-      final audioInfo = manifest.audioOnly.withHighestBitrate();
+      final mp4Streams = manifest.audioOnly.where((s) => s.container.name == 'mp4');
+      final audioInfo = mp4Streams.isNotEmpty 
+          ? mp4Streams.withHighestBitrate() 
+          : manifest.audioOnly.withHighestBitrate();
       yt.close();
       
       _streamCache[videoId] = _CachedStream(audioInfo.url.toString(), null);
@@ -317,7 +320,11 @@ class YoutubeAudioExtractor {
       if (url == null || url.isEmpty) continue;
       final bitrate =
           (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0).toDouble();
-      final cand = _AudioCandidate(url, bitrate, _expiresAt(url));
+          
+      // Prefer MP4 audio to allow ID3/MP4 tag writing during export
+      final adjustedBitrate = mime.contains('mp4') ? bitrate * 2.0 : bitrate;
+      
+      final cand = _AudioCandidate(url, adjustedBitrate, _expiresAt(url));
       if (best == null || cand.bitrate > best.bitrate) best = cand;
     }
     if (best != null) return best;

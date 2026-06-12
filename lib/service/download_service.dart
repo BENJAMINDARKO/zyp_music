@@ -118,10 +118,18 @@ class DownloadService {
   Future<bool> isExported(Track track) async {
     final dir = await _exportDir;
     final safeTitle = _sanitizeFilename(track.title ?? track.id);
-    final safeArtist = _sanitizeFilename(track.author ?? 'Unknown');
-    if (File(p.join(dir, '$safeArtist - $safeTitle.m4a')).existsSync()) return true;
-    if (File(p.join(dir, '$safeArtist - $safeTitle.flac')).existsSync()) return true;
+    if (File(p.join(dir, '$safeTitle.m4a')).existsSync()) return true;
+    if (File(p.join(dir, '$safeTitle.flac')).existsSync()) return true;
     return false;
+  }
+
+  Future<void> removeExportedTrack(Track track) async {
+    final dir = await _exportDir;
+    final safeTitle = _sanitizeFilename(track.title ?? track.id);
+    final m4aFile = File(p.join(dir, '$safeTitle.m4a'));
+    final flacFile = File(p.join(dir, '$safeTitle.flac'));
+    if (m4aFile.existsSync()) m4aFile.deleteSync();
+    if (flacFile.existsSync()) flacFile.deleteSync();
   }
 
   Future<void> exportTrack(Track track, {String quality = 'medium'}) async {
@@ -129,9 +137,8 @@ class DownloadService {
     if (await isExported(track)) return;
     
     final safeTitle = _sanitizeFilename(track.title ?? track.id);
-    final safeArtist = _sanitizeFilename(track.author ?? 'Unknown');
     final ext = quality.toLowerCase().contains('flac') ? '.flac' : '.m4a';
-    final fileName = '$safeArtist - $safeTitle$ext';
+    final fileName = '$safeTitle$ext';
 
     try {
       final dir = await _exportDir;
@@ -423,11 +430,21 @@ class DownloadService {
   Future<void> _writeTags(String filePath, Track track) async {
     try {
       List<int>? imageBytes;
+      MimeType? mimeType;
+      
       if (track.thumbnailUrl != null) {
         try {
           final res = await _client.get(Uri.parse(track.thumbnailUrl!));
           if (res.statusCode == 200) {
             imageBytes = res.bodyBytes;
+            final contentType = res.headers['content-type']?.toLowerCase() ?? '';
+            if (contentType.contains('png')) {
+              mimeType = MimeType.png;
+            } else if (contentType.contains('gif')) {
+              mimeType = MimeType.gif;
+            } else {
+              mimeType = MimeType.jpeg; // Default fallback
+            }
           }
         } catch (_) {}
       }
@@ -436,10 +453,10 @@ class DownloadService {
         title: track.title,
         trackArtist: track.author,
         album: track.album ?? track.title,
-        pictures: imageBytes != null ? [
+        pictures: imageBytes != null && mimeType != null ? [
           Picture(
             bytes: Uint8List.fromList(imageBytes),
-            mimeType: null,
+            mimeType: mimeType,
             pictureType: PictureType.coverFront,
           )
         ] : [],

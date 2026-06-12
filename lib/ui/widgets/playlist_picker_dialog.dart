@@ -13,6 +13,15 @@ class PlaylistPickerDialog extends StatefulWidget {
 
   @override
   State<PlaylistPickerDialog> createState() => _PlaylistPickerDialogState();
+  static Future<void> show(BuildContext context, Track track) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      builder: (_) => PlaylistPickerDialog(track: track),
+    );
+  }
 }
 
 class _PlaylistPickerDialogState extends State<PlaylistPickerDialog> {
@@ -133,16 +142,6 @@ class _PlaylistPickerDialogState extends State<PlaylistPickerDialog> {
           ),
         ),
       ),
-    );
-  }
-
-  static Future<void> show(BuildContext context, Track track) {
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
-      builder: (_) => PlaylistPickerDialog(track: track),
     );
   }
 }

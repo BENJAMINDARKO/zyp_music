@@ -7,7 +7,7 @@ import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/download_provider.dart';
 import 'auto_dj_mode_picker.dart';
-import 'playlist_picker_dialog.dart';
+import 'add_to_playlist_modal.dart';
 import 'apple_music_sheet.dart';
 import "../../core/utils/thumbnail_url.dart";
 
@@ -96,102 +96,105 @@ class TrackContextMenu {
                     },
                   ),
                   Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24)),
-                  ListTile(
-                    leading: Icon(PhosphorIconsRegular.playlist, color: Theme.of(context).colorScheme.onSurface),
-                    title: Text('Add to Playlist'),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      showDialog(
-                        context: sheetContext,
-                        builder: (_) => PlaylistPickerDialog(track: track),
-                      );
-                    },
-                  ),
-                  Consumer<PlaylistProvider>(
-                    builder: (context, provider, _) {
-                      final isFav = provider.isFavorite(track.id);
-                      return ListTile(
-                        leading: Icon(
-                          isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                          color: isFav ? Colors.red : Theme.of(context).colorScheme.onSurface,
-                        ),
-                        title: Text('Favorite'),
-                        onTap: () {
-                          provider.toggleFavorite(track);
-                          Navigator.pop(sheetContext);
-                          ScaffoldMessenger.of(sheetContext).showSnackBar(
-                            SnackBar(content: Text(isFav ? 'Removed from Favorites' : 'Added to Favorites')),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  Consumer<DownloadProvider>(
-                    builder: (context, provider, _) {
-                      final isDownloaded = provider.downloadedTrackIds.contains(track.id);
-                      return ListTile(
-                        leading: Icon(
-                          isDownloaded ? PhosphorIconsFill.checkCircle : PhosphorIconsRegular.downloadSimple,
-                          color: isDownloaded ? Colors.green : Theme.of(context).colorScheme.onSurface,
-                        ),
-                        title: Text('Download'),
-                        onTap: () {
-                          if (!isDownloaded) {
-                            provider.downloadTrack(track, 'downloads');
+                    ListTile(
+                      leading: Icon(PhosphorIconsRegular.playlist, color: Theme.of(context).colorScheme.onSurface),
+                      title: Text('Add to Playlist'),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        AddToPlaylistModal.show(context, track);
+                      },
+                    ),
+                    Consumer<PlaylistProvider>(
+                      builder: (context, provider, _) {
+                        final isFav = provider.isFavorite(track.id);
+                        return ListTile(
+                          leading: Icon(
+                            isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                            color: isFav ? Colors.red : Theme.of(context).colorScheme.onSurface,
+                          ),
+                          title: Text('Favorite'),
+                          onTap: () {
+                            provider.toggleFavorite(track);
                             Navigator.pop(sheetContext);
                             ScaffoldMessenger.of(sheetContext).showSnackBar(
-                              const SnackBar(content: Text('Download started')),
+                              SnackBar(content: Text(isFav ? 'Removed from Favorites' : 'Added to Favorites')),
                             );
-                          } else {
-                            Navigator.pop(sheetContext);
-                            ScaffoldMessenger.of(sheetContext).showSnackBar(
-                              const SnackBar(content: Text('Already downloaded')),
-                            );
-                          }
-                        },
-                      );
-                    },
-                  ),
-                  Consumer<DownloadProvider>(
-                    builder: (context, provider, _) {
-                      final isExported = provider.exportedTrackIds.contains(track.id);
-                      final isExporting = provider.activeExports.containsKey(track.id);
-                      
-                      Widget iconWidget;
-                      if (isExported) {
-                        iconWidget = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
-                      } else if (isExporting) {
-                        iconWidget = const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
+                          },
                         );
-                      } else {
-                        iconWidget = Icon(PhosphorIconsRegular.thumbsUp, color: Theme.of(context).colorScheme.onSurface);
-                      }
+                      },
+                    ),
+                    Consumer<DownloadProvider>(
+                      builder: (context, provider, _) {
+                        final isDownloaded = provider.downloadedTrackIds.contains(track.id);
+                        return ListTile(
+                          leading: Icon(
+                            isDownloaded ? PhosphorIconsFill.checkCircle : PhosphorIconsRegular.downloadSimple,
+                            color: isDownloaded ? Colors.green : Theme.of(context).colorScheme.onSurface,
+                          ),
+                          title: Text('Download'),
+                          onTap: () {
+                            if (!isDownloaded) {
+                              provider.downloadTrack(track, 'downloads');
+                              Navigator.pop(sheetContext);
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(content: Text('Download started')),
+                              );
+                            } else {
+                              Navigator.pop(sheetContext);
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(content: Text('Already downloaded')),
+                              );
+                            }
+                          },
+                        );
+                      },
+                    ),
+                    Consumer<DownloadProvider>(
+                      builder: (context, provider, _) {
+                        final isExported = provider.exportedTrackIds.contains(track.id);
+                        final isExporting = provider.activeExports.containsKey(track.id);
+                        
+                        Widget iconWidget;
+                        if (isExported) {
+                          iconWidget = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
+                        } else if (isExporting) {
+                          iconWidget = const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
+                          );
+                        } else {
+                          iconWidget = Icon(PhosphorIconsRegular.thumbsUp, color: Theme.of(context).colorScheme.onSurface);
+                        }
 
-                      return ListTile(
-                        leading: iconWidget,
-                        title: const Text('Export to Folder'),
-                        subtitle: Text(
-                          'Save as .m4a with album art to external folder',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                        ),
-                        onTap: () {
-                          if (!isExported && !isExporting) {
-                            provider.exportTrack(track);
-                            Navigator.pop(sheetContext);
-                            ScaffoldMessenger.of(sheetContext).showSnackBar(
-                              const SnackBar(content: Text('Exporting to folder...')),
-                            );
-                          } else {
-                            Navigator.pop(sheetContext);
-                            ScaffoldMessenger.of(sheetContext).showSnackBar(
-                              const SnackBar(content: Text('Already exported or exporting')),
-                            );
-                          }
-                        },
-                      );
+                        return ListTile(
+                          leading: iconWidget,
+                          title: const Text('Export to Folder'),
+                          subtitle: Text(
+                            'Save as .m4a with album art to external folder',
+                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
+                          ),
+                          onTap: () {
+                            if (isExported) {
+                              provider.unexportTrack(track);
+                              Navigator.pop(sheetContext);
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(content: Text('Removed from exports')),
+                              );
+                            } else if (!isExporting) {
+                              provider.exportTrack(track);
+                              Navigator.pop(sheetContext);
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(content: Text('Exporting to folder...')),
+                              );
+                            } else {
+                              Navigator.pop(sheetContext);
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(content: Text('Currently exporting')),
+                              );
+                            }
+                          },
+                        );
                     },
                   ),
                   Consumer2<DownloadProvider, HybridCacheService>(

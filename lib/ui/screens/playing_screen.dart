@@ -12,7 +12,7 @@ import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../domain/entities/video.dart';
 import '../widgets/auto_dj_mode_picker.dart';
 import '../widgets/playing_track_mask.dart';
-import '../widgets/playlist_picker_dialog.dart';
+import '../widgets/add_to_playlist_modal.dart';
 import '../widgets/synced_lyrics_widget.dart';
 import '../widgets/single_line_lyrics_widget.dart';
 import '../widgets/lyrics_timing_slider.dart';
@@ -800,10 +800,7 @@ class _PlayingScreenState extends State<PlayingScreen>
                     size: 22,
                   ),
                   onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => PlaylistPickerDialog(track: track),
-                    );
+                    AddToPlaylistModal.show(context, track);
                   },
                 ),
                 IconButton(

@@ -1,3 +1,15 @@
+## [1.2.7] - 2026-06-12
+
+### Changed
+- **Search Logic Separation:** Separated search results so that YouTube Music results appear exclusively in Tracks, Albums, Artists, and Playlists tabs, while generic YouTube results are kept to the "Other" tab.
+- **Export Filenames:** Updated export filename format to strictly use the track title (e.g., "Track Name.m4a") to prevent media players from displaying the artist name twice.
+- **Settings Theme Consistency:** Updated Settings screen toggles and tab indicators to match the Home menu's primary color theme instead of hardcoded yellow.
+
+### Fixed
+- **Metadata Container Mismatch:** Fixed a critical bug where exported files were fetching WebM streams instead of MP4, causing metadata/artwork injection (ID3 tags) to silently fail. 
+- **Playlist Picker UI:** Replaced the legacy playlist picker dialog with the modern, drag-to-close bottom sheet for adding tracks to playlists.
+- **Export Toggle Logic:** Pressing an active (green) thumbs-up export icon now correctly deletes the exported file from your device and resets the button state, allowing clean re-exports.
+
 ## [1.2.6] - 2026-06-11
 
 ### Added

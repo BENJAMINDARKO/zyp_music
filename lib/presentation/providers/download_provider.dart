@@ -259,6 +259,22 @@ class DownloadProvider extends ChangeNotifier {
     return false;
   }
 
+  Future<void> unexportTrack(Track track) async {
+    if (track.id.startsWith('local_')) return;
+    await _downloadService.removeExportedTrack(track);
+    _exportedTrackIds.remove(track.id);
+    notifyListeners();
+  }
+
+  Future<void> unexportAlbum(Album album) async {
+    for (final track in album.tracks) {
+      if (track.id.startsWith('local_')) continue;
+      await _downloadService.removeExportedTrack(track);
+      _exportedTrackIds.remove(track.id);
+    }
+    notifyListeners();
+  }
+
   Future<void> downloadAlbum(Album album, PlaylistProvider playlistProvider) async {
     if (_downloadingPlaylists.contains(album.id)) return;
     _downloadingPlaylists.add(album.id);

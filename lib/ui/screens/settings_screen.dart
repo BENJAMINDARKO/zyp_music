@@ -46,7 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            indicatorColor: Color(0xFFEAB308),
+            indicatorColor: Theme.of(context).colorScheme.primary,
             labelColor: Theme.of(context).colorScheme.onSurface,
             unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
             dividerColor: Color(0xFF2A2A2A),
@@ -464,7 +464,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: Text(title),
       value: value,
       onChanged: onChanged,
-      activeColor: const Color(0xFFEAB308),
+      activeColor: Theme.of(context).colorScheme.primary,
       inactiveTrackColor: Colors.white24,
     );
   }
@@ -474,8 +474,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
       child: Text(
         title.toUpperCase(),
-        style: const TextStyle(
-          color: Color(0xFFEAB308),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.primary,
           fontSize: 12,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.2,
@@ -533,10 +533,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trailing: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         ),
         SliderTheme(
-          data: const SliderThemeData(
-            activeTrackColor: Color(0xFFEAB308),
+          data: SliderThemeData(
+            activeTrackColor: Theme.of(context).colorScheme.primary,
             inactiveTrackColor: Colors.white24,
-            thumbColor: Color(0xFFEAB308),
+            thumbColor: Theme.of(context).colorScheme.primary,
             valueIndicatorTextStyle: TextStyle(color: Colors.black),
           ),
           child: Slider(

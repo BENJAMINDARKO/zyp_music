@@ -43,8 +43,11 @@ class _TrackExportIconState extends State<TrackExportIcon> {
 
   void _onTap() {
     final downloadProvider = context.read<DownloadProvider>();
-    if (downloadProvider.exportedTrackIds.contains(widget.track.id)) return;
-    downloadProvider.exportTrack(widget.track);
+    if (downloadProvider.exportedTrackIds.contains(widget.track.id)) {
+      downloadProvider.unexportTrack(widget.track);
+    } else {
+      downloadProvider.exportTrack(widget.track);
+    }
   }
 
   @override
@@ -55,10 +58,14 @@ class _TrackExportIconState extends State<TrackExportIcon> {
         final isExporting = downloadProvider.activeExports.containsKey(widget.track.id);
 
         if (isExported) {
-          return Icon(
-            PhosphorIconsFill.thumbsUp,
-            color: Colors.green,
-            size: widget.size,
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _onTap,
+            child: Icon(
+              PhosphorIconsFill.thumbsUp,
+              color: Colors.green,
+              size: widget.size,
+            ),
           );
         }
 

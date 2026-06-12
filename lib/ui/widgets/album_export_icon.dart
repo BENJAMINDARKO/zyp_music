@@ -42,8 +42,11 @@ class _AlbumExportIconState extends State<AlbumExportIcon> {
 
   void _onTap(BuildContext context) {
     final downloadProvider = context.read<DownloadProvider>();
-    if (downloadProvider.isAlbumExported(widget.album)) return;
-    downloadProvider.exportAlbum(widget.album);
+    if (downloadProvider.isAlbumExported(widget.album)) {
+      downloadProvider.unexportAlbum(widget.album);
+    } else {
+      downloadProvider.exportAlbum(widget.album);
+    }
   }
 
   @override

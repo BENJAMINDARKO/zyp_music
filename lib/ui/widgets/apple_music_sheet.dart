@@ -19,9 +19,9 @@ class AppleMusicSheet extends StatelessWidget {
     final maxHeight = MediaQuery.of(context).size.height * maxHeightFraction;
 
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+      filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
       child: Material(
-        color: theme.colorScheme.surface.withOpacity(0.95),
+        color: Colors.black.withOpacity(0.75),
         borderRadius: const BorderRadius.vertical(
           top: Radius.circular(16),
         ),
