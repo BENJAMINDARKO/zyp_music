@@ -58,3 +58,8 @@
 - Move heavy operations off main isolate
 - Use `ChangeNotifierProvider(create:)` instead of `.value`
 - Throttle position stream updates
+
+[2026-06-11] Bugs to fix later:
+- Search is broken
+- Fix the popup add to playlist
+- Streamline popup design across the UI

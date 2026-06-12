@@ -129,6 +129,48 @@ class AlbumContextMenu {
                 ),
                 Consumer<DownloadProvider>(
                   builder: (context, downloadProvider, _) {
+                    final isExported = downloadProvider.isAlbumExported(album);
+                    final isExporting = downloadProvider.isAlbumExporting(album);
+
+                    Widget iconWidget;
+                    if (isExported) {
+                      iconWidget = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
+                    } else if (isExporting) {
+                      iconWidget = const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
+                      );
+                    } else {
+                      iconWidget = Icon(PhosphorIconsRegular.thumbsUp, color: Theme.of(context).colorScheme.onSurface);
+                    }
+
+                    return ListTile(
+                      leading: iconWidget,
+                      title: const Text('Export Album to Folder'),
+                      subtitle: Text(
+                        'Save all tracks as .m4a with album art to external folder',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
+                      ),
+                      onTap: () {
+                        if (!isExported && !isExporting) {
+                          downloadProvider.exportAlbum(album);
+                          Navigator.pop(sheetContext);
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            SnackBar(content: Text('Exporting album to folder...')),
+                          );
+                        } else {
+                          Navigator.pop(sheetContext);
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            const SnackBar(content: Text('Already exported or exporting')),
+                          );
+                        }
+                      },
+                    );
+                  },
+                ),
+                Consumer<DownloadProvider>(
+                  builder: (context, downloadProvider, _) {
                     if (!downloadProvider.isAlbumCached(album)) {
                       return const SizedBox.shrink();
                     }

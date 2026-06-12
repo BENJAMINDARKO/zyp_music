@@ -20,14 +20,22 @@ class DownloadProvider extends ChangeNotifier {
   final Set<String> _downloadedPlaylists = {};
   final Map<String, double> _playlistDownloadProgress = {};
 
+  final Map<String, DownloadProgress> _activeExports = {};
+  final Set<String> _exportedTrackIds = {};
+
   Set<String> get downloadedTrackIds => _downloadedTrackIds;
   Map<String, DownloadProgress> get activeDownloads => _activeDownloads;
   Set<String> get downloadingPlaylists => _downloadingPlaylists;
   Set<String> get downloadedPlaylists => _downloadedPlaylists;
   Map<String, double> get playlistDownloadProgress => _playlistDownloadProgress;
 
+  Map<String, DownloadProgress> get activeExports => _activeExports;
+  Set<String> get exportedTrackIds => _exportedTrackIds;
+
   StreamSubscription? _progressSub;
   StreamSubscription? _completedSub;
+  StreamSubscription? _exportProgressSub;
+  StreamSubscription? _exportCompletedSub;
 
   bool isDownloadingPlaylist(String playlistId) =>
       _downloadingPlaylists.contains(playlistId);
@@ -81,6 +89,25 @@ class DownloadProvider extends ChangeNotifier {
       for (final id in _activeDownloads.keys.toList()) {
         _hybridCache.markNotCaching(id);
       }
+    });
+
+    _exportProgressSub = _downloadService.exportProgressStream.listen((progress) {
+      _activeExports[progress.trackId] = progress;
+      notifyListeners();
+    });
+
+    _exportCompletedSub = _downloadService.exportCompletedStream.listen((trackId) {
+      _exportedTrackIds.add(trackId);
+      _activeExports.remove(trackId);
+      notifyListeners();
+    });
+
+    _downloadService.exportErrorStream.listen((errorMsg) {
+      print('\n\n--- EXPORT ERROR ---');
+      print(errorMsg);
+      print('--------------------\n\n');
+      _activeExports.clear();
+      notifyListeners();
     });
 
     notifyListeners();
@@ -152,6 +179,84 @@ class DownloadProvider extends ChangeNotifier {
       _hybridCache.markNotCaching(track.id);
       notifyListeners();
     }
+  }
+
+  Future<void> exportTrack(Track track, {String quality = 'medium'}) async {
+    if (track.id.startsWith('local_')) return;
+    if (await _downloadService.isExported(track)) {
+      _exportedTrackIds.add(track.id);
+      notifyListeners();
+      return;
+    }
+    if (_activeExports.containsKey(track.id)) return;
+
+    _activeExports[track.id] = DownloadProgress(
+      trackId: track.id,
+      trackTitle: track.title,
+      currentBytes: 0,
+      totalBytes: 0,
+      tracksCompleted: 0,
+      totalTracks: 1,
+    );
+    notifyListeners();
+
+    try {
+      await _downloadService.exportTrack(track, quality: quality);
+    } catch (e) {
+      _activeExports.remove(track.id);
+      notifyListeners();
+    }
+  }
+
+  Future<bool> isExported(Track track) async {
+    if (_exportedTrackIds.contains(track.id)) return true;
+    final exported = await _downloadService.isExported(track);
+    if (exported) {
+      _exportedTrackIds.add(track.id);
+      notifyListeners();
+    }
+    return exported;
+  }
+
+  Future<void> exportAlbum(Album album) async {
+    for (final track in album.tracks) {
+      if (track.id.startsWith('local_')) continue;
+      if (_exportedTrackIds.contains(track.id)) continue;
+      if (_activeExports.containsKey(track.id)) continue;
+      
+      _activeExports[track.id] = DownloadProgress(
+        trackId: track.id,
+        trackTitle: track.title,
+        currentBytes: 0,
+        totalBytes: 0,
+        tracksCompleted: 0,
+        totalTracks: 1,
+      );
+      notifyListeners();
+      
+      try {
+        // Run sequentially to avoid rate limits
+        await _downloadService.exportTrack(track);
+      } catch (e) {
+        _activeExports.remove(track.id);
+        notifyListeners();
+      }
+    }
+  }
+
+  bool isAlbumExported(Album album) {
+    if (album.tracks.isEmpty) return false;
+    for (final track in album.tracks) {
+      if (!_exportedTrackIds.contains(track.id)) return false;
+    }
+    return true;
+  }
+
+  bool isAlbumExporting(Album album) {
+    for (final track in album.tracks) {
+      if (_activeExports.containsKey(track.id)) return true;
+    }
+    return false;
   }
 
   Future<void> downloadAlbum(Album album, PlaylistProvider playlistProvider) async {
@@ -299,7 +404,10 @@ class DownloadProvider extends ChangeNotifier {
   void dispose() {
     _progressSub?.cancel();
     _completedSub?.cancel();
+    _exportProgressSub?.cancel();
+    _exportCompletedSub?.cancel();
     _activeDownloads.clear();
+    _activeExports.clear();
     _downloadingPlaylists.clear();
     _playlistDownloadProgress.clear();
     _downloadService.dispose();

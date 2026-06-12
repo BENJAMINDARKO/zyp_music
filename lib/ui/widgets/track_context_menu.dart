@@ -152,6 +152,48 @@ class TrackContextMenu {
                       );
                     },
                   ),
+                  Consumer<DownloadProvider>(
+                    builder: (context, provider, _) {
+                      final isExported = provider.exportedTrackIds.contains(track.id);
+                      final isExporting = provider.activeExports.containsKey(track.id);
+                      
+                      Widget iconWidget;
+                      if (isExported) {
+                        iconWidget = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
+                      } else if (isExporting) {
+                        iconWidget = const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
+                        );
+                      } else {
+                        iconWidget = Icon(PhosphorIconsRegular.thumbsUp, color: Theme.of(context).colorScheme.onSurface);
+                      }
+
+                      return ListTile(
+                        leading: iconWidget,
+                        title: const Text('Export to Folder'),
+                        subtitle: Text(
+                          'Save as .m4a with album art to external folder',
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
+                        ),
+                        onTap: () {
+                          if (!isExported && !isExporting) {
+                            provider.exportTrack(track);
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Exporting to folder...')),
+                            );
+                          } else {
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Already exported or exporting')),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
                   Consumer2<DownloadProvider, HybridCacheService>(
                     builder: (context, downloadProvider, hybridCache, _) {
                       final isCached = hybridCache.isCached(track.id) ||

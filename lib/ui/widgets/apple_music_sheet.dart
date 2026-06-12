@@ -21,27 +21,25 @@ class AppleMusicSheet extends StatelessWidget {
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
       child: Material(
-        color: Colors.transparent,
+        color: theme.colorScheme.surface.withOpacity(0.95),
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(16),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Container(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface.withOpacity(0.95),
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(16),
-            ),
-          ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildGrabber(context),
-            if (title != null) ...[
-              _buildTitle(context, title!),
-              _buildDivider(context),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildGrabber(context),
+              if (title != null) ...[
+                _buildTitle(context, title!),
+                _buildDivider(context),
+              ],
+              Flexible(child: child),
             ],
-            Flexible(child: child),
-          ],
+          ),
         ),
-      ),
       ),
     );
   }

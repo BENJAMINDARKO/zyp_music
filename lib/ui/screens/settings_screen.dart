@@ -7,6 +7,8 @@ import 'package:share_plus/share_plus.dart';
 import '../../presentation/providers/miniplayer_visibility_provider.dart';
 import '../../core/utils/app_logger.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:filesystem_picker/filesystem_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../presentation/providers/settings_provider.dart';
@@ -77,28 +79,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildAppearanceTab(SettingsProvider provider) {
-    final themes = ['System', 'Black', 'White', 'Dark', 'Ocean', 'Purple', 'Forest', 'Mocha', 'Machiatto', 'Frappé'];
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildSectionHeader('Theme'),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: themes.map((t) {
-            final isSelected = provider.theme == t;
-            return ChoiceChip(
-              label: Text(t, style: TextStyle(color: isSelected ? Colors.black : Colors.white)),
-              selected: isSelected,
-              selectedColor: const Color(0xFFEAB308),
-              backgroundColor: const Color(0xFF1F1F1F),
-              onSelected: (selected) {
-                if (selected) provider.setTheme(t);
-              },
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 24),
         _buildSectionHeader('Colors'),
         _buildSwitchTile(
           'Dynamic Accent Color',
@@ -135,84 +118,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         _buildSectionHeader('Home Screen Elements'),
-        _buildSwitchTile('Show Recommended Songs', provider.showRecommendedSongs, (v) => provider.setBoolSetting('showRecommendedSongs', v)),
-        _buildSwitchTile('Show Recommended Albums', provider.showRecommendedAlbums, (v) => provider.setBoolSetting('showRecommendedAlbums', v)),
-        _buildSwitchTile('Show Recommended Artists', provider.showRecommendedArtists, (v) => provider.setBoolSetting('showRecommendedArtists', v)),
-        _buildSwitchTile('Show Jump Back In', provider.showJumpBackIn, (v) => provider.setBoolSetting('showJumpBackIn', v)),
-        _buildSwitchTile('Show Editor\'s Picks', provider.showEditorsPicks, (v) => provider.setBoolSetting('showEditorsPicks', v)),
-        _buildSwitchTile('Shuffle Editor\'s Picks', provider.shuffleEditorsPicks, (v) => provider.setBoolSetting('shuffleEditorsPicks', v)),
+        _buildSwitchTile('Show Suggested Songs', provider.showRecommendedSongs, (v) => provider.setBoolSetting('showRecommendedSongs', v)),
+        _buildSwitchTile('Show Featured Albums', provider.showRecommendedAlbums, (v) => provider.setBoolSetting('showRecommendedAlbums', v)),
+        _buildSwitchTile('Show Favourite Artists', provider.showRecommendedArtists, (v) => provider.setBoolSetting('showRecommendedArtists', v)),
+        _buildSwitchTile('Show Liked Songs', provider.showJumpBackIn, (v) => provider.setBoolSetting('showJumpBackIn', v)),
+        _buildSwitchTile('Show Global Hot', provider.showEditorsPicks, (v) => provider.setBoolSetting('showEditorsPicks', v)),
+        _buildSwitchTile('Shuffle Global Hot', provider.shuffleEditorsPicks, (v) => provider.setBoolSetting('shuffleEditorsPicks', v)),
+        const SizedBox(height: 24),
+        _buildSectionHeader('Music Now Elements'),
+        _buildSwitchTile('Show Trending Now', provider.showTrendingNow, (v) => provider.setBoolSetting('showTrendingNow', v)),
+        _buildSwitchTile('Show Suggested Artists', provider.showSuggestedArtists, (v) => provider.setBoolSetting('showSuggestedArtists', v)),
+        _buildSwitchTile('Show Start Listening', provider.showStartListening, (v) => provider.setBoolSetting('showStartListening', v)),
+        _buildSwitchTile('Show Top Artists', provider.showTopArtists, (v) => provider.setBoolSetting('showTopArtists', v)),
+        _buildSwitchTile('Show Popular Albums & Singles', provider.showPopularAlbums, (v) => provider.setBoolSetting('showPopularAlbums', v)),
         const SizedBox(height: 24),
         _buildSectionHeader('Search Sources'),
         _buildSwitchTile('YouTube', provider.searchSourceYoutube, (v) => provider.setBoolSetting('searchSourceYoutube', v)),
         _buildSwitchTile('YouTube Music', provider.searchSourceYTMusic, (v) => provider.setBoolSetting('searchSourceYTMusic', v)),
-        const SizedBox(height: 24),
-        _buildSectionHeader('System & Storage'),
-        ListTile(
-          title: const Text('Disable Battery Optimization'),
-          subtitle: Text('Prevent Android from killing the app in the background to ensure uninterrupted playback.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
-          trailing: Icon(PhosphorIconsRegular.batteryWarning, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
-          onTap: () async {
-            if (await Permission.ignoreBatteryOptimizations.isDenied) {
-              await Permission.ignoreBatteryOptimizations.request();
-            }
-          },
-        ),
-        ListTile(
-          title: const Text('Clear Cache & Reset Data', style: TextStyle(color: Colors.red)),
-          subtitle: Text('Removes all downloaded audio cache and resets user settings to default.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
-          trailing: const Icon(PhosphorIconsRegular.trash, color: Colors.red),
-          onTap: () async {
-            final confirm = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: const Color(0xFF1F1F1F),
-                title: const Text('Clear Cache?', style: TextStyle(color: Colors.white)),
-                content: const Text('This will delete all cached audio and reset settings. This action cannot be undone.', style: TextStyle(color: Colors.white70)),
-                actions: [
-                  TextButton(
-                    child: const Text('CANCEL', style: TextStyle(color: Colors.white54)),
-                    onPressed: () => Navigator.pop(ctx, false),
-                  ),
-                  TextButton(
-                    child: const Text('CLEAR', style: TextStyle(color: Colors.red)),
-                    onPressed: () => Navigator.pop(ctx, true),
-                  ),
-                ],
-              ),
-            );
-            if (confirm == true) {
-              if (Platform.isAndroid) {
-                try {
-                  const channel = MethodChannel('com.benjamindarko.monochrome/system');
-                  await channel.invokeMethod('clearAppData');
-                } catch (e) {
-                  // Fallback if channel invocation fails
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.clear();
-                  await AudioCacheService().clearCache();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Cache cleared. Please restart the app.')),
-                    );
-                  }
-                }
-              } else {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.clear();
-                await AudioCacheService().clearCache();
-                
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Cache cleared. Please restart the app to apply default settings.')),
-                  );
-                }
-              }
-            }
-          },
-        ),
       ],
     );
   }
+
 
   Widget _buildScrobblingTab(SettingsProvider provider, BuildContext context) {
     return ListView(
@@ -357,11 +283,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(icon: Icon(PhosphorIconsRegular.x, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)), onPressed: () {}),
+              IconButton(
+                icon: Icon(PhosphorIconsRegular.x, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+                onPressed: () {
+                  provider.setStringSetting('androidDownloadFolder', '');
+                },
+              ),
               IconButton(
                 icon: Icon(PhosphorIconsRegular.folderSimple, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
                 onPressed: () async {
-                  String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+                  if (await Permission.manageExternalStorage.isDenied) {
+                    await Permission.manageExternalStorage.request();
+                  }
+                  if (await Permission.storage.isDenied) {
+                    await Permission.storage.request();
+                  }
+                  
+                  final Directory rootDir = Platform.isAndroid 
+                      ? Directory('/storage/emulated/0') 
+                      : await getApplicationDocumentsDirectory();
+
+                  String? selectedDirectory = await FilesystemPicker.open(
+                    title: 'Save to folder',
+                    context: context,
+                    rootDirectory: rootDir,
+                    fsType: FilesystemType.folder,
+                    pickText: 'Save here',
+                    folderIconColor: Theme.of(context).colorScheme.primary,
+                  );
+
                   if (selectedDirectory != null) {
                     provider.setStringSetting('androidDownloadFolder', selectedDirectory);
                   }
@@ -391,6 +341,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _buildSectionHeader('Spotify API Integration'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Text(
+            'Add your Spotify Client ID and Secret to enable accurate BPM, Energy, and Genre tracking for the Smart DJ engine.',
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 13),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: TextFormField(
+            initialValue: provider.spotifyClientId,
+            decoration: const InputDecoration(
+              labelText: 'Spotify Client ID',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (val) => provider.setSpotifyClientId(val),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: TextFormField(
+            initialValue: provider.spotifyClientSecret,
+            decoration: const InputDecoration(
+              labelText: 'Spotify Client Secret',
+              border: OutlineInputBorder(),
+            ),
+            obscureText: true,
+            onChanged: (val) => provider.setSpotifyClientSecret(val),
+          ),
+        ),
+        const Divider(height: 32),
+        const Divider(height: 32),
+        _buildSectionHeader('System & Storage'),
+        ListTile(
+          title: const Text('Disable Battery Optimization'),
+          subtitle: Text('Prevent Android from killing the app in the background to ensure uninterrupted playback.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+          trailing: Icon(PhosphorIconsRegular.batteryWarning, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+          onTap: () async {
+            if (await Permission.ignoreBatteryOptimizations.isDenied) {
+              await Permission.ignoreBatteryOptimizations.request();
+            }
+          },
+        ),
+        ListTile(
+          title: const Text('Clear Cache & Reset Data', style: TextStyle(color: Colors.red)),
+          subtitle: Text('Removes all downloaded audio cache and resets user settings to default.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+          trailing: const Icon(PhosphorIconsRegular.trash, color: Colors.red),
+          onTap: () async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: const Color(0xFF1F1F1F),
+                title: const Text('Clear Cache?', style: TextStyle(color: Colors.white)),
+                content: const Text('This will delete all cached audio and reset settings. This action cannot be undone.', style: TextStyle(color: Colors.white70)),
+                actions: [
+                  TextButton(
+                    child: const Text('CANCEL', style: TextStyle(color: Colors.white54)),
+                    onPressed: () => Navigator.pop(ctx, false),
+                  ),
+                  TextButton(
+                    child: const Text('CLEAR', style: TextStyle(color: Colors.red)),
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
+                ],
+              ),
+            );
+            if (confirm == true) {
+              if (Platform.isAndroid) {
+                try {
+                  const channel = MethodChannel('com.benjamindarko.monochrome/system');
+                  await channel.invokeMethod('clearAppData');
+                } catch (e) {
+                  // Fallback if channel invocation fails
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.clear();
+                  await AudioCacheService().clearCache();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cache cleared. Please restart the app.')),
+                    );
+                  }
+                }
+              } else {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+                await AudioCacheService().clearCache();
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cache cleared. Please restart the app to apply default settings.')),
+                  );
+                }
+              }
+            }
+          },
+        ),
+        const Divider(height: 32),
         _buildSectionHeader('Diagnostics'),
         ListTile(
           title: const Text('Export Application Logs'),
@@ -399,7 +447,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () async {
             final file = AppLogger.logFile;
             if (file != null && await file.exists()) {
-              await Share.shareXFiles([XFile(file.path)], text: 'Monochrome App Logs');
+              await Share.shareXFiles([XFile(file.path)], text: 'ZYPMusic App Logs');
             } else {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Log file not found or empty.')));
