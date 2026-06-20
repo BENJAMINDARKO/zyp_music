@@ -4,8 +4,8 @@ void main() async {
   final ytMusic = YTMusic();
   await ytMusic.initialize();
   try {
-    final p = await ytMusic.getPlaylist('VLOLAK5uy_I13RAEFxk5KvJs_E8JIqcyXaQ9FDIHiwY');
-    print('YTMusic playlist: ${p.name}, videos: ${p.videoCount}');
+    final a = await ytMusic.getPlaylist('VLPL4fGSI1pccIYy1C-G0Z3oE5J7qXJqf9Qy');
+    print('YTMusic playlist tracks: ${a.songs.length}');
   } catch (e) {
     print('YTMusic getPlaylist error: $e');
   }
