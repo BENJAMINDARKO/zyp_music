@@ -25,5 +25,22 @@ class MainActivity : AudioServiceFragmentActivity() {
                 result.notImplemented()
             }
         }
+        
+        val vocalChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.benjamindarko.monochrome/vocal_control")
+        vocalChannel.setMethodCallHandler { call, result ->
+            if (call.method == "setVocalReduction") {
+                val factor = call.argument<Double>("factor")?.toFloat() ?: 0.0f
+                com.ryanheise.just_audio.AdvancedVocalRemoverProcessor.instance.setVocalReduction(factor)
+                result.success(null)
+            } else {
+                result.notImplemented()
+            }
+        }
+        
+        com.ryanheise.just_audio.AdvancedVocalRemoverProcessor.instance.onMonoTrackEncountered = {
+            runOnUiThread {
+                vocalChannel.invokeMethod("onMonoTrack", null)
+            }
+        }
     }
 }

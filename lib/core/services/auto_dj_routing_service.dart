@@ -560,13 +560,14 @@ class AutoDjRoutingService {
   /// routing service does not mutate it).
   Future<Track?> resolveNext({
     required Track current,
-    required AutoDJMode mode,
+    required AutoDJMode baseMode,
+    required AutoDJMode smartMode,
     required Set<String> recentIds,
     List<Track> history = const <Track>[],
   }) async {
     final exclude = <String>{...recentIds, current.id};
     AppLogger.log(
-      'resolveNext mode=${mode.name} current=${current.id} '
+      'resolveNext baseMode=${baseMode.name} smartMode=${smartMode.name} current=${current.id} '
       'exclude.size=${exclude.length} history.size=${history.length}',
       name: _logTag,
     );
@@ -586,7 +587,11 @@ class AutoDjRoutingService {
     }
 
     try {
-      switch (mode) {
+      // If smartMode is active, we route to smart logic, but tell it to filter its
+      // candidate pool based on the baseMode.
+      final activeMode = smartMode != AutoDJMode.off ? smartMode : baseMode;
+
+      switch (activeMode) {
         case AutoDJMode.off:
           return null;
 
@@ -603,14 +608,76 @@ class AutoDjRoutingService {
           return await _sameArtist(current, exclude, history);
 
         case AutoDJMode.smartDj:
-          return await _smartDj(current, exclude, history);
+          return await _smartDj(current, exclude, history, baseMode);
 
         case AutoDJMode.vibeMatch:
-          return await _vibeMatch(current, exclude, history);
+          return await _vibeMatch(current, exclude, history, baseMode);
       }
     } catch (e, st) {
       AppLogger.log('[AutoDJEngine] Strategy error: $e', name: _logTag);
       return null;
+    }
+  }
+
+  /// Filters the local crate candidate pool to respect the user's `baseMode`
+  /// when a `smartMode` (Smart DJ / Vibe Match) is running.
+  Future<List<Track>> _getPairedCandidatePool(
+    AutoDJMode baseMode,
+    Track current,
+    Set<String> exclude,
+    List<Track> history,
+  ) async {
+    final crate = await _crateMiner.mine(excludeIds: exclude);
+    if (baseMode == AutoDJMode.off) return crate;
+
+    switch (baseMode) {
+      case AutoDJMode.sameGenre:
+        final seedGenre = _genreNormalization?.normalize(current.genre ?? '') ?? current.genre;
+        if (seedGenre == null || seedGenre.isEmpty) return crate;
+        final neighborhood = _graph.searchBreadth(seedGenre).toSet();
+        return crate.where((t) {
+          final tg = _genreNormalization?.normalize(t.genre ?? '') ?? t.genre;
+          if (tg == null || tg.isEmpty) return false;
+          // Only include tracks in the same genre neighborhood
+          return neighborhood.contains(tg);
+        }).toList();
+
+      case AutoDJMode.sameArtist:
+        final artist = current.author;
+        if (artist == null || artist.isEmpty) return crate;
+        return crate.where((t) => _artistMatches(t.author, artist)).toList();
+
+      case AutoDJMode.shuffleLibrary:
+        final filtered = _applyShuffleLibraryGenreFilter(crate);
+        return filtered;
+
+      case AutoDJMode.similarSongs:
+        // Add online similarity candidates into the crate pool
+        final fetcher = _onlineFetcher;
+        final isOnline = fetcher != null && _connectivityProbe() == NetworkAvailability.online;
+        if (isOnline) {
+          try {
+            final online = await fetcher(current);
+            if (online != null && online.isNotEmpty) {
+              final seenIds = <String>{};
+              final combined = <Track>[];
+              for (final t in online) {
+                if (exclude.contains(t.id)) continue;
+                if (seenIds.add(t.id)) combined.add(t);
+              }
+              for (final t in crate) {
+                if (seenIds.add(t.id)) combined.add(t);
+              }
+              return combined;
+            }
+          } catch (e) {
+            AppLogger.log('Paired Online fetch failed: $e', name: _logTag);
+          }
+        }
+        return crate;
+
+      default:
+        return crate;
     }
   }
 
@@ -1380,6 +1447,7 @@ class AutoDjRoutingService {
     Track current,
     Set<String> exclude,
     List<Track> history,
+    AutoDJMode baseMode,
   ) async {
     final ledger = _historyLedger;
     if (ledger == null) {
@@ -1398,6 +1466,15 @@ class AutoDjRoutingService {
     // empty state correctly: `useColdStart = _cachedHistoryCount
     // < 3` switches to 50/50 diversity + genre_similarity
     // weights, dropping the temporal term. Let execution
+    // continue to the isolate block.
+    
+    // Use the paired candidate pool, not just the raw crate
+    final crate = await _getPairedCandidatePool(baseMode, current, exclude, history);
+    
+    if (crate.isEmpty) {
+      AppLogger.log('Smart DJ: Paired crate is empty.', name: _logTag);
+      return null;
+    }
     // continue into the candidate harvest + scoring loop
     // below — the cold-start path runs the new formula.
     if (fullHistory.isEmpty) {
@@ -1415,26 +1492,7 @@ class AutoDjRoutingService {
     final state = _extractMarkovState(fullHistory);
     AppLogger.log('Smart DJ: Extracted Markov state containing ${state.length} entries. Seed: ${current.title} (${current.id})', name: _logTag);
 
-    List<Track> candidates = [];
-    final fetcher = _onlineFetcher;
-    final isOnline = fetcher != null && _connectivityProbe() == NetworkAvailability.online;
-    if (isOnline) {
-      try {
-        final online = await fetcher(current);
-        if (online != null && online.isNotEmpty) {
-          candidates = online.where((t) => !exclude.contains(t.id)).toList();
-          AppLogger.log('Smart DJ: Fetched ${online.length} online tracks, ${candidates.length} unique candidates', name: _logTag);
-        }
-      } catch (e) {
-        AppLogger.log('Online Smart DJ fetch failed: $e', name: _logTag);
-      }
-    }
-
-    if (candidates.isEmpty) {
-      candidates = await _crateMiner.mine(excludeIds: exclude);
-      AppLogger.log('Smart DJ: Local crate mined: ${candidates.length} candidates', name: _logTag);
-    }
-
+    List<Track> candidates = crate;
     if (candidates.isEmpty) {
       AppLogger.log('Smart DJ: Candidate pool is empty.', name: _logTag);
       return null;
@@ -1742,14 +1800,18 @@ class AutoDjRoutingService {
   /// tempo (BPM) and intensity (Energy) closest to the currently
   /// playing track. Falls back to Smart DJ if no data is available.
   Future<Track?> _vibeMatch(
-      Track current, Set<String> exclude, List<Track> history) async {
+    Track current,
+    Set<String> exclude,
+    List<Track> history,
+    AutoDJMode baseMode,
+  ) async {
     final db = _crateMiner.libraryDatabase;
     if (db == null) {
       AppLogger.log(
         'Vibe Match: libraryDatabase is null. Falling back to Smart DJ.',
         name: _logTag,
       );
-      return _smartDj(current, exclude, history);
+      return _smartDj(current, exclude, history, baseMode);
     }
 
     final currentBpm = await db.getTrackBpm(current.id);
@@ -1760,7 +1822,7 @@ class AutoDjRoutingService {
         'Vibe Match: Missing BPM/Energy for current track (${current.id}). Falling back to Smart DJ.',
         name: _logTag,
       );
-      return _smartDj(current, exclude, history);
+      return _smartDj(current, exclude, history, baseMode);
     }
 
     final crate = await _crateMiner.mine(excludeIds: exclude);
@@ -1801,7 +1863,7 @@ class AutoDjRoutingService {
         'Vibe Match: No matching candidates found. Falling back to Smart DJ.',
         name: _logTag,
       );
-      return _smartDj(current, exclude, history);
+      return _smartDj(current, exclude, history, baseMode);
     }
 
     // Apply recent artist penalty

@@ -8,6 +8,9 @@ class SyncedLyricsWidget extends StatefulWidget {
   final bool karaokeMode;
   final bool autoScroll;
   final bool isLoading;
+  final double bottomPadding;
+  final double topPadding;
+  final ValueChanged<Duration>? onSeek;
 
   const SyncedLyricsWidget({
     super.key,
@@ -16,6 +19,9 @@ class SyncedLyricsWidget extends StatefulWidget {
     this.karaokeMode = false,
     this.autoScroll = true,
     this.isLoading = false,
+    this.bottomPadding = 350.0,
+    this.topPadding = 8.0,
+    this.onSeek,
   });
 
   @override
@@ -369,7 +375,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
       itemScrollController: _scrollController,
       scrollOffsetController: _scrollOffsetController,
       itemPositionsListener: _itemPositionsListener,
-      padding: const EdgeInsets.only(bottom: 350, top: 8),
+      padding: EdgeInsets.only(bottom: widget.bottomPadding, top: widget.topPadding),
       itemBuilder: (context, index) {
         final line = _lyrics[index];
         final isActive = index == _currentIndex;
@@ -379,23 +385,27 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
           return const SizedBox(height: 24);
         }
 
-        // Color and weight styling rules:
-        final double opacity = isActive ? 1.0 : (isPassed ? 0.25 : 0.4);
-        final FontWeight weight = isActive ? FontWeight.bold : FontWeight.normal;
-        final double fontSize = isActive ? 22.0 : 18.0;
+        final double alpha = isActive ? 1.0 : (isPassed ? 0.3 : 0.4);
 
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Text(
-            line.words,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(opacity),
-              fontSize: fontSize,
-              fontWeight: weight,
-              height: 1.4,
+        return GestureDetector(
+          onTap: () => widget.onSeek?.call(line.time),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: alpha),
+                fontSize: 32.0,
+                fontWeight: FontWeight.w800,
+                height: 1.3,
+                letterSpacing: -1.0,
+              ),
+              child: Text(
+                line.words,
+                textAlign: TextAlign.start,
+              ),
             ),
-            textAlign: TextAlign.start,
           ),
         );
       },

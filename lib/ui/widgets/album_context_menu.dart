@@ -32,181 +32,202 @@ class AlbumContextMenu {
               ];
         return AppleMusicSheet(
           child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      if (album.thumbnailUrl != null)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            rewriteThumbnailSize(album.thumbnailUrl),
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Icon(PhosphorIconsRegular.discoBall, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 48),
-                          ),
-                        )
-                      else
-                        Icon(PhosphorIconsRegular.discoBall, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 48),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              album.title,
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Album Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    child: Row(
+                      children: [
+                        if (album.thumbnailUrl != null)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              rewriteThumbnailSize(album.thumbnailUrl),
+                              width: 56,
+                              height: 56,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(PhosphorIconsRegular.discoBall, color: Colors.white54, size: 56),
                             ),
-                            if (album.artistName != null)
+                          )
+                        else
+                          Icon(PhosphorIconsRegular.discoBall, color: Colors.white54, size: 56),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
                               Text(
-                                album.artistName!,
-                                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70), fontSize: 12),
+                                album.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.white,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24)),
-                ListTile(
-                  leading: const Icon(PhosphorIconsRegular.sparkle, color: Color(0xFFEAB308)),
-                  title: Text('Start Auto DJ'),
-                  subtitle: Text(
-                    'Pick a mode — Off, Shuffle Library, Similar Songs, Same Genre, Same Artist, Smart DJ',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                  ),
-                  onTap: () {
-                    debugPrint('AlbumContextMenu: Start Auto DJ tapped for album "${album.title}"');
-                    AutoDJModePicker.show(sheetContext);
-                  },
-                ),
-                ListTile(
-                  leading: Icon(PhosphorIconsRegular.playlist, color: Theme.of(context).colorScheme.onSurface),
-                  title: Text('Add to Queue'),
-                  subtitle: Text(
-                    'Append every track to the current playback list',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                  ),
-                  onTap: () {
-                    final player = sheetContext.read<PlayerProvider>();
-                    player.appendToQueue(tracks);
-                    Navigator.pop(sheetContext);
-                    ScaffoldMessenger.of(sheetContext).showSnackBar(
-                      SnackBar(content: Text('Added ${tracks.length} track(s) to queue')),
-                    );
-                  },
-                ),
-                Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24)),
-                Consumer<PlaylistProvider>(
-                  builder: (context, provider, _) {
-                    final isFav = provider.isAlbumFavorite(album.id);
-                    return ListTile(
-                      leading: Icon(
-                        isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                        color: isFav ? Colors.red : Theme.of(context).colorScheme.onSurface,
-                      ),
-                      title: Text('Favorite Album'),
-                      onTap: () {
-                        provider.toggleFavoriteAlbum(album);
-                        Navigator.pop(sheetContext);
-                        ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          SnackBar(
-                            content: Text(isFav ? 'Removed ${album.title} from favorites' : 'Added ${album.title} to favorites'),
+                              const SizedBox(height: 4),
+                              if (album.artistName != null)
+                                Text(
+                                  album.artistName!,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 14,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
                           ),
-                        );
-                      },
-                    );
-                  },
-                ),
-                Consumer<DownloadProvider>(
-                  builder: (context, downloadProvider, _) {
-                    final isExported = downloadProvider.isAlbumExported(album);
-                    final isExporting = downloadProvider.isAlbumExporting(album);
+                        ),
+                      ],
+                    ),
+                  ),
 
-                    Widget iconWidget;
-                    if (isExported) {
-                      iconWidget = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
-                    } else if (isExporting) {
-                      iconWidget = const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
-                      );
-                    } else {
-                      iconWidget = Icon(PhosphorIconsRegular.thumbsUp, color: Theme.of(context).colorScheme.onSurface);
-                    }
+                  const SizedBox(height: 8),
 
-                    return ListTile(
-                      leading: iconWidget,
-                      title: const Text('Export Album to Folder'),
-                      subtitle: Text(
-                        'Save all tracks as .m4a with album art to external folder',
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                      ),
+                  // Section 1: Playback Actions
+                  AppleMusicSheet.buildSection(context, [
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Start Auto DJ',
+                      icon: PhosphorIconsRegular.sparkle,
+                      subtitle: 'Pick a mode — Off, Shuffle Library, Similar Songs...',
                       onTap: () {
-                        if (!isExported && !isExporting) {
-                          downloadProvider.exportAlbum(album);
-                          Navigator.pop(sheetContext);
-                          ScaffoldMessenger.of(sheetContext).showSnackBar(
-                            SnackBar(content: Text('Exporting album to folder...')),
-                          );
-                        } else {
-                          Navigator.pop(sheetContext);
-                          ScaffoldMessenger.of(sheetContext).showSnackBar(
-                            const SnackBar(content: Text('Already exported or exporting')),
-                          );
-                        }
+                        AutoDJModePicker.show(sheetContext);
                       },
-                    );
-                  },
-                ),
-                Consumer<DownloadProvider>(
-                  builder: (context, downloadProvider, _) {
-                    if (!downloadProvider.isAlbumCached(album)) {
-                      return const SizedBox.shrink();
-                    }
-                    return ListTile(
-                      leading: const Icon(PhosphorIconsRegular.trash, color: Color(0xFFEF4444)),
-                      title: const Text(
-                        'Remove from Cache',
-                        style: TextStyle(color: Color(0xFFEF4444)),
-                      ),
-                      subtitle: Text(
-                        'Frees local storage for every cached track in this album',
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                      ),
-                      onTap: () async {
+                    ),
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Add to Queue',
+                      icon: PhosphorIconsRegular.playlist,
+                      subtitle: 'Append every track to current queue',
+                      onTap: () {
+                        final player = sheetContext.read<PlayerProvider>();
+                        player.appendToQueue(tracks);
                         Navigator.pop(sheetContext);
                         ScaffoldMessenger.of(sheetContext).showSnackBar(
-                          SnackBar(content: Text('Clearing cache for "${album.title}"…')),
+                          SnackBar(content: Text('Added ${tracks.length} track(s) to queue')),
                         );
-                        final removed = await downloadProvider.removeAlbumFromCache(album);
-                        if (sheetContext.mounted) {
+                      },
+                    ),
+                  ]),
+
+                  // Section 2: Favourites and Downloads
+                  Consumer2<PlaylistProvider, DownloadProvider>(
+                    builder: (context, playlistProvider, downloadProvider, _) {
+                      final isFav = playlistProvider.isAlbumFavorite(album.id);
+                      final isExported = downloadProvider.isAlbumExported(album);
+                      final isExporting = downloadProvider.isAlbumExporting(album);
+
+                      final list = <Widget>[];
+
+                      // Favorite Album
+                      list.add(AppleMusicSheet.buildMenuItem(
+                        context,
+                        title: 'Favorite Album',
+                        icon: isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                        iconColor: isFav ? Colors.red : Colors.white,
+                        onTap: () {
+                          playlistProvider.toggleFavoriteAlbum(album);
+                          Navigator.pop(sheetContext);
                           ScaffoldMessenger.of(sheetContext).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                removed == 0
-                                    ? 'No cached tracks to remove'
-                                    : 'Removed $removed track(s) from cache',
-                              ),
+                              content: Text(isFav ? 'Removed ${album.title} from favorites' : 'Added ${album.title} to favorites'),
                             ),
                           );
-                        }
-                      },
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
+                        },
+                      ));
+
+                      // Export Album
+                      Widget trailingIcon;
+                      if (isExported) {
+                        trailingIcon = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
+                      } else if (isExporting) {
+                        trailingIcon = const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
+                        );
+                      } else {
+                        trailingIcon = Icon(PhosphorIconsRegular.thumbsUp, color: Colors.white.withOpacity(0.7));
+                      }
+
+                      list.add(ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                        title: const Text(
+                          'Export Album to Folder',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          'Save all tracks as .m4a with album art to external folder',
+                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                        ),
+                        trailing: trailingIcon,
+                        onTap: () {
+                          if (!isExported && !isExporting) {
+                            downloadProvider.exportAlbum(album);
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              SnackBar(content: Text('Exporting album to folder...')),
+                            );
+                          } else {
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Already exported or exporting')),
+                            );
+                          }
+                        },
+                      ));
+
+                      return AppleMusicSheet.buildSection(context, list);
+                    },
+                  ),
+
+                  // Section 3: Cache Management
+                  Consumer<DownloadProvider>(
+                    builder: (context, downloadProvider, _) {
+                      if (!downloadProvider.isAlbumCached(album)) {
+                        return const SizedBox.shrink();
+                      }
+                      return AppleMusicSheet.buildSection(context, [
+                        AppleMusicSheet.buildMenuItem(
+                          context,
+                          title: 'Remove from Cache',
+                          icon: PhosphorIconsRegular.trash,
+                          textColor: const Color(0xFFEF4444),
+                          iconColor: const Color(0xFFEF4444),
+                          subtitle: 'Frees local storage for every cached track in this album',
+                          onTap: () async {
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              SnackBar(content: Text('Clearing cache for "${album.title}"…')),
+                            );
+                            final removed = await downloadProvider.removeAlbumFromCache(album);
+                            if (sheetContext.mounted) {
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    removed == 0
+                                        ? 'No cached tracks to remove'
+                                        : 'Removed $removed track(s) from cache',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ]);
+                    },
+                  ),
+
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
         );

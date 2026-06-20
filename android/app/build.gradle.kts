@@ -44,3 +44,7 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("androidx.media3:media3-common:1.4.1")
+}

@@ -14,7 +14,7 @@ class AppTheme {
     return ThemeData(
       brightness: Brightness.dark,
       primaryColor: _primaryColor,
-      scaffoldBackgroundColor: Colors.black38,
+      scaffoldBackgroundColor: Colors.transparent,
       colorScheme: const ColorScheme.dark(
         primary: _primaryColor,
         secondary: _primaryColor,

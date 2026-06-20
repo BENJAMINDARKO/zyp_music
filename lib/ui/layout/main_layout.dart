@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +26,7 @@ class _MainLayoutState extends State<MainLayout> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final ValueNotifier<String> _searchNotifier = ValueNotifier<String>('');
+  Timer? _debounce;
 
   final List<GlobalKey<NavigatorState>> _navigatorKeys = [
     GlobalKey<NavigatorState>(),
@@ -50,9 +52,10 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   void dispose() {
-    _searchNotifier.dispose();
+    _debounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _searchNotifier.dispose();
     super.dispose();
   }
 
@@ -134,9 +137,15 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                   onChanged: (value) {
                     setState(() {
-                      _submittedQuery = value;
+                      _searchQuery = value;
                     });
-                    _searchNotifier.value = value;
+                    if (_debounce?.isActive ?? false) _debounce!.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 1200), () {
+                      setState(() {
+                        _submittedQuery = value;
+                      });
+                      _searchNotifier.value = value;
+                    });
                   },
                   onSubmitted: (value) {
                     setState(() {

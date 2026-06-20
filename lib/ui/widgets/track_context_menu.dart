@@ -1,17 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../core/services/hybrid_cache_service.dart';
 import '../../domain/entities/video.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/download_provider.dart';
+import '../screens/album_screen.dart';
+import '../screens/artist_screen.dart';
 import 'auto_dj_mode_picker.dart';
 import 'add_to_playlist_modal.dart';
 import 'apple_music_sheet.dart';
 import "../../core/utils/thumbnail_url.dart";
 
 class TrackContextMenu {
+  static Widget _buildQuickAction(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    Color? iconColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.symmetric(vertical: 10.0),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: iconColor ?? Colors.white,
+              size: 22,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withOpacity(0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   static void show(BuildContext context, Track track) {
     showModalBottomSheet(
       context: context,
@@ -25,38 +68,48 @@ class TrackContextMenu {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Track Header
                   Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
                     child: Row(
                       children: [
                         if (track.thumbnailUrl != null)
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(10),
                             child: Image.network(
                               rewriteThumbnailSize(track.thumbnailUrl),
-                              width: 48,
-                              height: 48,
+                              width: 56,
+                              height: 56,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 48),
+                              errorBuilder: (_, __, ___) => Icon(PhosphorIconsRegular.musicNote, color: Colors.white54, size: 56),
                             ),
                           )
                         else
-                          Icon(PhosphorIconsRegular.musicNote, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 48),
-                        const SizedBox(width: 12),
+                          Icon(PhosphorIconsRegular.musicNote, color: Colors.white54, size: 56),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
                                 track.title,
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: Colors.white,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
+                              const SizedBox(height: 4),
                               if (track.author != null)
                                 Text(
                                   track.author!,
-                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70), fontSize: 12),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 14,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -66,168 +119,343 @@ class TrackContextMenu {
                       ],
                     ),
                   ),
-                  Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24)),
-                  ListTile(
-                    leading: const Icon(PhosphorIconsRegular.sparkle, color: Color(0xFFEAB308)),
-                    title: Text('Start Auto DJ', style: TextStyle(fontWeight: FontWeight.normal)),
-                    subtitle: Text(
-                      'Pick a mode — Off, Shuffle Library, Similar Songs, Same Genre, Same Artist, Smart DJ',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
+
+                  // Quick Actions Row
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        // Quick Add: + Add
+                        _buildQuickAction(
+                          context,
+                          icon: PhosphorIconsRegular.plus,
+                          label: 'Add',
+                          onTap: () {
+                            final player = sheetContext.read<PlayerProvider>();
+                            player.appendToQueue([track]);
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Added to queue')),
+                            );
+                          },
+                        ),
+                        // Quick Favourite
+                        Consumer<PlaylistProvider>(
+                          builder: (context, provider, _) {
+                            final isFav = provider.isFavorite(track.id);
+                            return _buildQuickAction(
+                              context,
+                              icon: isFav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
+                              label: 'Favourite',
+                              iconColor: isFav ? Colors.amber : null,
+                              onTap: () {
+                                provider.toggleFavorite(
+                                  track,
+                                  downloadProvider: sheetContext.read<DownloadProvider>(),
+                                );
+                                Navigator.pop(sheetContext);
+                                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                  SnackBar(content: Text(isFav ? 'Removed from Favorites' : 'Added to Favorites')),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                        // Quick Share
+                        _buildQuickAction(
+                          context,
+                          icon: PhosphorIconsRegular.share,
+                          label: 'Share',
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            Share.share('Check out ${track.title} by ${track.author ?? "Unknown Artist"} on ZYPMusic!\nhttps://youtube.com/watch?v=${track.id}');
+                          },
+                        ),
+                      ],
                     ),
-                    onTap: () {
-                      debugPrint('TrackContextMenu: Start Auto DJ tapped for ${track.title}');
-                      AutoDJModePicker.show(sheetContext);
-                    },
                   ),
-                  ListTile(
-                    leading: Icon(PhosphorIconsRegular.playlist, color: Theme.of(context).colorScheme.onSurface),
-                    title: Text('Add to Queue'),
-                    subtitle: Text(
-                      'Append to the current playback list',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                    ),
-                    onTap: () {
-                      final player = sheetContext.read<PlayerProvider>();
-                      player.appendToQueue([track]);
-                      Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(sheetContext).showSnackBar(
-                        const SnackBar(content: Text('Added to queue')),
-                      );
-                    },
-                  ),
-                  Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24)),
-                    ListTile(
-                      leading: Icon(PhosphorIconsRegular.playlist, color: Theme.of(context).colorScheme.onSurface),
-                      title: Text('Add to Playlist'),
+
+                  const SizedBox(height: 8),
+
+                  // Section 1: Playlist & Queue
+                  AppleMusicSheet.buildSection(context, [
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Add to Playlist',
+                      icon: PhosphorIconsRegular.playlist,
                       onTap: () {
                         Navigator.pop(sheetContext);
                         AddToPlaylistModal.show(context, track);
                       },
                     ),
-                    Consumer<PlaylistProvider>(
-                      builder: (context, provider, _) {
-                        final isFav = provider.isFavorite(track.id);
-                        return ListTile(
-                          leading: Icon(
-                            isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                            color: isFav ? Colors.red : Theme.of(context).colorScheme.onSurface,
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Create Station',
+                      icon: PhosphorIconsRegular.broadcast,
+                      subtitle: 'Start Auto DJ recommended station',
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        AutoDJModePicker.show(context);
+                      },
+                    ),
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Add to Queue',
+                      icon: PhosphorIconsRegular.listPlus,
+                      onTap: () {
+                        final player = sheetContext.read<PlayerProvider>();
+                        player.appendToQueue([track]);
+                        Navigator.pop(sheetContext);
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          const SnackBar(content: Text('Added to queue')),
+                        );
+                      },
+                    ),
+                  ]),
+
+                  // Section 2: Navigation & Metadata
+                  AppleMusicSheet.buildSection(context, [
+                    if (track.album != null && track.album!.isNotEmpty)
+                      AppleMusicSheet.buildMenuItem(
+                        context,
+                        title: 'Go to Album',
+                        icon: PhosphorIconsRegular.disc,
+                        subtitle: track.album,
+                        onTap: () async {
+                          Navigator.pop(sheetContext);
+                          final provider = context.read<PlaylistProvider>();
+                          final res = await provider.searchAlbums(track.album!);
+                          if (res.isNotEmpty && context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AlbumScreen(albumId: res.first.id),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Album details not found')),
+                            );
+                          }
+                        },
+                      ),
+                    if (track.author != null && track.author!.isNotEmpty)
+                      AppleMusicSheet.buildMenuItem(
+                        context,
+                        title: 'Go to Artist',
+                        icon: PhosphorIconsRegular.microphone,
+                        subtitle: track.author,
+                        onTap: () async {
+                          Navigator.pop(sheetContext);
+                          final provider = context.read<PlaylistProvider>();
+                          final artist = await provider.findCorrectArtist(
+                            track.author!,
+                            track.album,
+                          );
+                          if (artist != null && context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ArtistScreen(artistId: artist.id),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Artist details not found')),
+                            );
+                          }
+                        },
+                      ),
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'View Credits',
+                      icon: PhosphorIconsRegular.info,
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: const Color(0xFF1E1E1E),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            title: Text(track.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Artist: ${track.author ?? 'Unknown'}', style: const TextStyle(color: Colors.white70)),
+                                const SizedBox(height: 6),
+                                if (track.album != null) ...[
+                                  Text('Album: ${track.album}', style: const TextStyle(color: Colors.white70)),
+                                  const SizedBox(height: 6),
+                                ],
+                                if (track.year != null) ...[
+                                  Text('Year: ${track.year}', style: const TextStyle(color: Colors.white70)),
+                                  const SizedBox(height: 6),
+                                ],
+                                Text('Source: ${track.source.name.toUpperCase()}', style: const TextStyle(color: Colors.white70)),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Close', style: TextStyle(color: Color(0xFFEAB308))),
+                              ),
+                            ],
                           ),
-                          title: Text('Favorite'),
-                          onTap: () {
-                            provider.toggleFavorite(track);
+                        );
+                      },
+                    ),
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Share Lyrics',
+                      icon: PhosphorIconsRegular.quotes,
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        final player = context.read<PlayerProvider>();
+                        final lyrics = track.id == player.currentTrack?.id ? player.lyrics : null;
+                        if (lyrics != null && lyrics.isNotEmpty) {
+                          Share.share('Lyrics for "${track.title}" by ${track.author}:\n\n$lyrics');
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Lyrics not available for this track')),
+                          );
+                        }
+                      },
+                    ),
+                  ]),
+
+                  // Section 3: Downloads and Storage
+                  Consumer2<DownloadProvider, HybridCacheService>(
+                    builder: (context, downloadProvider, hybridCache, _) {
+                      final isDownloaded = downloadProvider.downloadedTrackIds.contains(track.id);
+                      final isExported = downloadProvider.exportedTrackIds.contains(track.id);
+                      final isExporting = downloadProvider.activeExports.containsKey(track.id);
+
+                      final list = <Widget>[];
+
+                      // Download Tile
+                      list.add(AppleMusicSheet.buildMenuItem(
+                        context,
+                        title: 'Download',
+                        icon: isDownloaded ? PhosphorIconsFill.checkCircle : PhosphorIconsRegular.downloadSimple,
+                        iconColor: isDownloaded ? Colors.green : Colors.white,
+                        onTap: () {
+                          if (!isDownloaded) {
+                            downloadProvider.downloadTrack(track, 'downloads');
                             Navigator.pop(sheetContext);
                             ScaffoldMessenger.of(sheetContext).showSnackBar(
-                              SnackBar(content: Text(isFav ? 'Removed from Favorites' : 'Added to Favorites')),
+                              const SnackBar(content: Text('Download started')),
                             );
-                          },
-                        );
-                      },
-                    ),
-                    Consumer<DownloadProvider>(
-                      builder: (context, provider, _) {
-                        final isDownloaded = provider.downloadedTrackIds.contains(track.id);
-                        return ListTile(
-                          leading: Icon(
-                            isDownloaded ? PhosphorIconsFill.checkCircle : PhosphorIconsRegular.downloadSimple,
-                            color: isDownloaded ? Colors.green : Theme.of(context).colorScheme.onSurface,
-                          ),
-                          title: Text('Download'),
-                          onTap: () {
-                            if (!isDownloaded) {
-                              provider.downloadTrack(track, 'downloads');
-                              Navigator.pop(sheetContext);
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(content: Text('Download started')),
-                              );
-                            } else {
-                              Navigator.pop(sheetContext);
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(content: Text('Already downloaded')),
-                              );
-                            }
-                          },
-                        );
-                      },
-                    ),
-                    Consumer<DownloadProvider>(
-                      builder: (context, provider, _) {
-                        final isExported = provider.exportedTrackIds.contains(track.id);
-                        final isExporting = provider.activeExports.containsKey(track.id);
-                        
-                        Widget iconWidget;
-                        if (isExported) {
-                          iconWidget = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
-                        } else if (isExporting) {
-                          iconWidget = const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
-                          );
-                        } else {
-                          iconWidget = Icon(PhosphorIconsRegular.thumbsUp, color: Theme.of(context).colorScheme.onSurface);
-                        }
+                          } else {
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Already downloaded')),
+                            );
+                          }
+                        },
+                      ));
 
-                        return ListTile(
-                          leading: iconWidget,
-                          title: const Text('Export to Folder'),
-                          subtitle: Text(
-                            'Save as .m4a with album art to external folder',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                          ),
-                          onTap: () {
-                            if (isExported) {
-                              provider.unexportTrack(track);
-                              Navigator.pop(sheetContext);
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(content: Text('Removed from exports')),
-                              );
-                            } else if (!isExporting) {
-                              provider.exportTrack(track);
-                              Navigator.pop(sheetContext);
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(content: Text('Exporting to folder...')),
-                              );
-                            } else {
-                              Navigator.pop(sheetContext);
-                              ScaffoldMessenger.of(sheetContext).showSnackBar(
-                                const SnackBar(content: Text('Currently exporting')),
-                              );
-                            }
-                          },
+                      // Export Tile
+                      Widget trailingIcon;
+                      if (isExported) {
+                        trailingIcon = const Icon(PhosphorIconsFill.thumbsUp, color: Colors.green);
+                      } else if (isExporting) {
+                        trailingIcon = const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.green)),
                         );
+                      } else {
+                        trailingIcon = Icon(PhosphorIconsRegular.thumbsUp, color: Colors.white.withOpacity(0.7));
+                      }
+
+                      list.add(ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                        title: const Text(
+                          'Export to Folder',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: Colors.white),
+                        ),
+                        subtitle: Text(
+                          'Save as .m4a with album art to external folder',
+                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                        ),
+                        trailing: trailingIcon,
+                        onTap: () {
+                          if (isExported) {
+                            downloadProvider.unexportTrack(track);
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Removed from exports')),
+                            );
+                          } else if (!isExporting) {
+                            downloadProvider.exportTrack(track);
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Exporting to folder...')),
+                            );
+                          } else {
+                            Navigator.pop(sheetContext);
+                            ScaffoldMessenger.of(sheetContext).showSnackBar(
+                              const SnackBar(content: Text('Currently exporting')),
+                            );
+                          }
+                        },
+                      ));
+
+                      return AppleMusicSheet.buildSection(context, list);
                     },
                   ),
+
+                  // Section 4: Cache Management
                   Consumer2<DownloadProvider, HybridCacheService>(
                     builder: (context, downloadProvider, hybridCache, _) {
                       final isCached = hybridCache.isCached(track.id) ||
                           hybridCache.isDownloadedInSqlite(track.id) ||
                           downloadProvider.downloadedTrackIds.contains(track.id);
                       if (!isCached) return const SizedBox.shrink();
-                      return ListTile(
-                        leading: const Icon(PhosphorIconsRegular.trash, color: Color(0xFFEF4444)),
-                        title: const Text(
-                          'Remove from Cache',
-                          style: TextStyle(color: Color(0xFFEF4444)),
-                        ),
-                        subtitle: Text(
-                          'Frees local storage; track will re-download next time',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), fontSize: 12),
-                        ),
-                        onTap: () async {
-                          Navigator.pop(sheetContext);
-                          ScaffoldMessenger.of(sheetContext).showSnackBar(
-                            SnackBar(content: Text('Removing "${track.title}" from cache…')),
-                          );
-                          await downloadProvider.removeTrackFromCache(track);
-                          if (sheetContext.mounted) {
+                      return AppleMusicSheet.buildSection(context, [
+                        AppleMusicSheet.buildMenuItem(
+                          context,
+                          title: 'Remove from Cache',
+                          icon: PhosphorIconsRegular.trash,
+                          textColor: const Color(0xFFEF4444),
+                          iconColor: const Color(0xFFEF4444),
+                          subtitle: 'Frees local storage; track will re-download next time',
+                          onTap: () async {
+                            Navigator.pop(sheetContext);
                             ScaffoldMessenger.of(sheetContext).showSnackBar(
-                              SnackBar(content: Text('Removed "${track.title}" from cache')),
+                              SnackBar(content: Text('Removing "${track.title}" from cache…')),
                             );
-                          }
-                        },
-                      );
+                            await downloadProvider.removeTrackFromCache(track);
+                            if (sheetContext.mounted) {
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                SnackBar(content: Text('Removed "${track.title}" from cache')),
+                              );
+                            }
+                          },
+                        ),
+                      ]);
                     },
                   ),
+
+                  // Section 5: Thumbs Down
+                  AppleMusicSheet.buildSection(context, [
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Suggest Less',
+                      icon: PhosphorIconsRegular.thumbsDown,
+                      textColor: const Color(0xFFEF4444),
+                      iconColor: const Color(0xFFEF4444),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(
+                          SnackBar(content: Text('We will recommend less of "${track.title}"')),
+                        );
+                      },
+                    ),
+                  ]),
+
                   const SizedBox(height: 8),
                 ],
               ),

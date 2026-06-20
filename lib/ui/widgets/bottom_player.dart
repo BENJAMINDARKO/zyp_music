@@ -453,7 +453,7 @@ class BottomPlayer extends StatelessWidget {
       child: Container(
         height: 80,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: Colors.transparent,
           border: Border(
             top: BorderSide(
               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1),

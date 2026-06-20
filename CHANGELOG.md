@@ -1,3 +1,12 @@
+## [1.2.8] - 2026-06-19
+
+### Added
+- **Restored CD & Karaoke UI:** Reinstated the spinning album CD and Karaoke mode button row at the top of the fullscreen lyrics view, ensuring persistent visibility when other player controls fade out.
+- **Translucent Glassmorphic Sheets:** Implemented unified static builders inside `AppleMusicSheet` to group action tiles into structured, highly rounded, and translucent card sections with right-aligned icons.
+
+### Changed
+- **Dynamic Lyric & Queue Layout Bounds:** Constrained the lyrics view (`SyncedLyricsWidget`) and the playlist queue (`_buildInlineQueueView`) with custom bottom paddings to completely prevent scrollable items from leaking/rendering behind active player controls.
+
 ## [1.2.7] - 2026-06-12
 
 ### Changed

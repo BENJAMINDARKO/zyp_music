@@ -31,8 +31,23 @@ class GlobalBackground extends StatelessWidget {
               errorWidget: (_, __, ___) => Container(color: baseColor),
             ),
             BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-              child: Container(color: Colors.black.withOpacity(0.75)), // PlayingScreen's darkness
+              filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+              child: player.dominantColor != null
+                  ? Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            player.dominantColor!.withOpacity(0.85),
+                            player.dominantColor!.withOpacity(0.4),
+                            Colors.black.withOpacity(0.85),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                    )
+                  : Container(color: Colors.black.withOpacity(0.85)),
             ),
           ],
         );

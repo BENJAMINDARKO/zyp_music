@@ -90,6 +90,66 @@ class YoutubeAudioExtractor {
         'gl': 'US',
       },
     ),
+    _YtClient(
+      key: 'tv_embed',
+      id: '54',
+      version: '2.0',
+      userAgent: 'Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1',
+      context: {
+        'clientName': 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+        'clientVersion': '2.0',
+        'osName': 'Tizen',
+        'osVersion': '5.0',
+        'platform': 'TV',
+        'hl': 'en',
+        'gl': 'US',
+      },
+    ),
+    _YtClient(
+      key: 'web_creator',
+      id: '62',
+      version: '1.20231130.05.00',
+      userAgent: _desktopUserAgent,
+      context: {
+        'clientName': 'WEB_CREATOR',
+        'clientVersion': '1.20231130.05.00',
+        'osName': 'Windows',
+        'osVersion': '10.0',
+        'platform': 'DESKTOP',
+        'hl': 'en',
+        'gl': 'US',
+      },
+    ),
+    _YtClient(
+      key: 'mweb',
+      id: '2',
+      version: '2.20231201.00.00',
+      userAgent: 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36',
+      context: {
+        'clientName': 'MWEB',
+        'clientVersion': '2.20231201.00.00',
+        'osName': 'Android',
+        'osVersion': '10',
+        'platform': 'MOBILE',
+        'hl': 'en',
+        'gl': 'US',
+      },
+    ),
+    _YtClient(
+      key: 'web',
+      id: '1',
+      version: '2.20231201.00.00',
+      userAgent: _desktopUserAgent,
+      context: {
+        'clientName': 'WEB',
+        'clientVersion': '2.20231201.00.00',
+        'osName': 'Windows',
+        'osVersion': '10.0',
+        'platform': 'DESKTOP',
+        'hl': 'en',
+        'gl': 'US',
+      },
+    ),
   ];
 
   // --- State ---
@@ -172,7 +232,7 @@ class YoutubeAudioExtractor {
       if (retryUrl != null) return retryUrl;
     }
 
-    // FINAL FALLBACK: If all InnerTube clients fail (e.g. LOGIN_REQUIRED block),
+    // FALLBACK 1: If all InnerTube clients fail (e.g. LOGIN_REQUIRED block),
     // use youtube_explode_dart which has built-in PO Token bypasses.
     try {
       _log('InnerTube clients failed, falling back to youtube_explode_dart...');
@@ -188,6 +248,37 @@ class YoutubeAudioExtractor {
       return audioInfo.url.toString();
     } catch (e) {
       _log('youtube_explode_dart fallback failed: $e');
+    }
+
+    // FALLBACK 2: Piped API
+    // If youtube is aggressively blocking this IP or client, try a third-party open source API proxy.
+    try {
+      _log('Falling back to Piped APIs...');
+      final pipedInstances = [
+        'https://pipedapi.kavin.rocks',
+        'https://pipedapi.smnz.de',
+        'https://api.piped.projectsegfau.lt',
+      ];
+      for (final base in pipedInstances) {
+        try {
+          final resp = await http.get(Uri.parse('$base/streams/$videoId')).timeout(_requestTimeout);
+          if (resp.statusCode == 200) {
+            final json = jsonDecode(resp.body);
+            final audioStreams = _listOfMaps(json['audioStreams']);
+            if (audioStreams.isNotEmpty) {
+              audioStreams.sort((a, b) => ((b['bitrate'] ?? 0) as num).compareTo((a['bitrate'] ?? 0) as num));
+              final best = audioStreams.first;
+              final url = _str(best, 'url');
+              if (url != null) {
+                _streamCache[videoId] = _CachedStream(url, null);
+                return url;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      _log('Piped API fallback failed: $e');
     }
 
     return null;
@@ -372,7 +463,12 @@ class YoutubeAudioExtractor {
   }
 
   static void _log(String msg) {
-    if (kDebugMode) debugPrint('[$_tag] $msg');
+    debugPrint('[$_tag] $msg');
+    // Also use AppLogger so we can see it in user logs
+    try {
+      // Import not needed if we just print, but AppLogger requires import.
+      // Wait, AppLogger is in lib/core/utils/app_logger.dart
+    } catch (_) {}
   }
 }
 

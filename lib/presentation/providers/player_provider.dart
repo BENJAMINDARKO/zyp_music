@@ -303,7 +303,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// track) is wired in Phase 1 — for now the picker just records the
   /// choice and flips the legacy [QueueManager] flag so the icon's
   /// visual state continues to work.
-  AutoDJMode _autoDJMode = AutoDJMode.off;
+  AutoDJMode _baseAutoDJMode = AutoDJMode.off;
+  AutoDJMode _smartAutoDJMode = AutoDJMode.off;
 
   /// [UI-Sync] Last track id that was successfully pushed through the
   /// MediaItem transition bridge. Used as a dedup guard so a duration-
@@ -472,11 +473,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         return nextTrack;
       }
       // 2. If Auto DJ is enabled, resolve via QueueManager
-      if (_autoDJMode != AutoDJMode.off) {
+      if (_baseAutoDJMode != AutoDJMode.off || _smartAutoDJMode != AutoDJMode.off) {
         final nextTrack = await _queueManager?.generateNextAutoDJTrack(current);
         if (nextTrack != null) {
           AppLogger.log(
-            'nextTrackResolver: resolved via Auto DJ mode=${_autoDJMode.name}: ${nextTrack.id} ("${nextTrack.title}")',
+            'nextTrackResolver: resolved via Auto DJ base=${_baseAutoDJMode.name} smart=${_smartAutoDJMode.name}: ${nextTrack.id} ("${nextTrack.title}")',
             name: 'PlayerProvider',
           );
           return nextTrack;
@@ -514,7 +515,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     // (e.g. restoring the engine after a background isolate
     // restart) honours whatever mode the user already has
     // armed.
-    engine.setActive(_autoDJMode == AutoDJMode.smartDj || _autoDJMode == AutoDJMode.vibeMatch);
+    engine.setActive(_smartAutoDJMode == AutoDJMode.smartDj || _smartAutoDJMode == AutoDJMode.vibeMatch);
   }
 
   /// Phase 5: late-binding setter for the charts
@@ -668,6 +669,13 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         _processingState = ProcessingState.idle;
       }
     } catch (_) {}
+  }
+
+  Future<void> clearRecentlyPlayed() async {
+    _recentlyPlayed.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_recentlyPlayedKey);
+    notifyListeners();
   }
 
   Future<void> _addToRecentlyPlayed(Track track) async {
@@ -1041,7 +1049,6 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
           'Promoting to Active Master Seed and activating lookahead.',
           name: 'PlayerProvider',
         );
-      } else {
         AppLogger.log(
           '[AutoDJAnchor] Manual setQueue with Auto DJ armed - preserving '
           'engine state and shifting active seed parameters to new target '
@@ -1050,7 +1057,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
       manager.updateActiveSeedProfile(seed);
-      unawaited(_warmUpNewMode(_autoDJMode, currentTrack: seed));
+      unawaited(_warmUpNewMode(activeAutoDJMode, currentTrack: seed));
     }
     notifyListeners();
   }
@@ -1120,11 +1127,30 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// (any non-off mode flips the legacy [QueueManager] flag so the
   /// miniplayer / fullscreen icon lights up exactly as it did before
   /// the refactor).
-  AutoDJMode get autoDJMode => _autoDJMode;
+  AutoDJMode get baseAutoDJMode => _baseAutoDJMode;
+  AutoDJMode get smartAutoDJMode => _smartAutoDJMode;
+  AutoDJMode get activeAutoDJMode => _smartAutoDJMode != AutoDJMode.off ? _smartAutoDJMode : _baseAutoDJMode;
+  QueueManager? get queueManager => _queueManager;
+  bool get isAutoDJStandby => _isArmedStandby;
 
-  /// Sets the [AutoDJMode] for the engine. Phase 0 contract:
+  /// Backwards compatibility getters for older UI components
+  AutoDJMode get autoDJMode => activeAutoDJMode;
+
+  Future<ColdStartResult> setAutoDJMode(AutoDJMode mode) async {
+    if (mode == AutoDJMode.off) {
+      await setSmartAutoDJMode(AutoDJMode.off);
+      return setBaseAutoDJMode(AutoDJMode.off);
+    }
+    if (mode == AutoDJMode.smartDj || mode == AutoDJMode.vibeMatch) {
+      return setSmartAutoDJMode(mode);
+    } else {
+      return setBaseAutoDJMode(mode);
+    }
+  }
+
+  /// Sets the base [AutoDJMode] for the engine (off, shuffle, similar, genre, artist).
   ///
-  /// * Updates [_autoDJMode] and notifies listeners.
+  /// * Updates [_baseAutoDJMode] and notifies listeners.
   /// * Mirrors the change into the legacy [QueueManager] flag so the
   ///   miniplayer + fullscreen AUTODJ icon lights up for any non-off
   ///   mode. This preserves the pre-refactor visual behaviour with
@@ -1151,64 +1177,54 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// (the same-mode guard, the off-mode path, and the
   /// not-cold-idle path all return
   /// [ColdStartResult.skipped]).
-  Future<ColdStartResult> setAutoDJMode(AutoDJMode mode) async {
-    if (_autoDJMode == mode) return ColdStartResult.skipped;
-    _autoDJMode = mode;
-    debugPrint('setAutoDJMode: ${mode.label}');
-    // Mirror the change into the legacy visual flag so the icons
-    // light up. The QueueManager owns the actual `_isAutoDJEnabled`
-    // backing field; calling enable/disable is the supported way to
-    // mutate it from outside the class.
-    if (mode.isActive) {
+  Future<ColdStartResult> setBaseAutoDJMode(AutoDJMode mode) async {
+    if (_baseAutoDJMode == mode) return ColdStartResult.skipped;
+    _baseAutoDJMode = mode;
+    return _applyAutoDJModeChanges(mode);
+  }
+
+  Future<ColdStartResult> setSmartAutoDJMode(AutoDJMode mode) async {
+    if (_smartAutoDJMode == mode) return ColdStartResult.skipped;
+    _smartAutoDJMode = mode;
+    return _applyAutoDJModeChanges(mode);
+  }
+
+  Future<ColdStartResult> _applyAutoDJModeChanges(AutoDJMode triggeredMode) async {
+    debugPrint('applyAutoDJModeChanges: base=${_baseAutoDJMode.label} smart=${_smartAutoDJMode.label}');
+    final isActive = _baseAutoDJMode != AutoDJMode.off || _smartAutoDJMode != AutoDJMode.off;
+    
+    if (isActive) {
       _queueManager?.enableAutoDJ();
       _repeatMode = repeat.PlaybackRepeatMode.none;
     } else {
       _queueManager?.disableAutoDJ();
     }
-    // Phase 2: tell the QueueManager which mode was selected BEFORE the
-    // warm-up fires. This is critical: _warmUpNewMode calls
-    // generateNextAutoDJTrack which reads _currentMode from the manager.
-    // Setting it after would mean the warm-up always resolves via the
-    // previous mode's strategy, defeating the purpose of the mode switch.
-    _queueManager?.setCurrentMode(mode);
-    // Phase 5: flip the DSP engine gate. Smart DJ is the
-    // ONLY mode that unlocks the multi-decoder crossfade
-    // pipeline; the other four active modes (Shuffle
-    // Library, Similar Songs, Same Genre, Same Artist) use
-    // the mixer's plain gapless handoff with no second
-    // decoder.
-    _dspEngine?.setActive(mode == AutoDJMode.smartDj || mode == AutoDJMode.vibeMatch);
+    
+    _queueManager?.setCurrentModes(_baseAutoDJMode, _smartAutoDJMode);
+    
+    _dspEngine?.setActive(_smartAutoDJMode == AutoDJMode.smartDj || _smartAutoDJMode == AutoDJMode.vibeMatch);
     notifyListeners();
-    // Armed Standby: when the player is idle (no current track,
-    // no queued items) and the user selects a non-off mode, the
-    // engine enters a passive standby state instead of executing
-    // lookups against a dummy seed. No online fetches, no database
-    // sweeps, no fallback tokens are generated. The mode tile
-    // remains visually highlighted. The engine activates on the
-    // first manual song selection via [setQueue].
-    if (mode != AutoDJMode.off && _isColdIdle) {
+
+    if (isActive && _isColdIdle) {
       _isArmedStandby = true;
       AppLogger.log(
-        '[AutoDJEngine] Entering Armed Standby for mode=${mode.label}. '
+        '[AutoDJEngine] Entering Armed Standby. '
         'Waiting for explicit user track choice before activating lookahead.',
         name: 'PlayerProvider',
       );
       return ColdStartResult.skipped;
     }
-    // Clear standby when the user explicitly switches to off mode
-    // while in the idle state.
-    if (mode == AutoDJMode.off && _isArmedStandby) {
+
+    if (!isActive && _isArmedStandby) {
       _isArmedStandby = false;
     }
-    // Bugfix (atomic queue switching): when the user changes
-    // mode mid-track we do NOT flush the preloaded timeline.
-    // The existing items remain as an emergency buffer; a
-    // background warm-up pre-resolves a candidate via the
-    // newly-selected algorithm and verifies its URI token
-    // before the next 15s-lookahead trigger trusts the new
-    // mode's output.
-    if (mode != AutoDJMode.off && _currentTrack != null) {
-      unawaited(_warmUpNewMode(mode, currentTrack: _currentTrack!));
+
+    if (isActive && _currentTrack != null) {
+      if (_queue.length > _currentIndex + 1) {
+        _queue.removeRange(_currentIndex + 1, _queue.length);
+        notifyListeners();
+      }
+      unawaited(_warmUpNewMode(triggeredMode, currentTrack: _currentTrack!));
     }
     return ColdStartResult.skipped;
   }
@@ -1243,7 +1259,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     int fetched = 0;
     
     for (int i = 0; i < toGenerate; i++) {
-      if (_autoDJMode != mode || !manager.isActive) break;
+      if ((_baseAutoDJMode == AutoDJMode.off && _smartAutoDJMode == AutoDJMode.off) || !manager.isActive) break;
       try {
         final candidate = await manager.generateNextAutoDJTrack(seed);
         if (candidate == null) break;
@@ -1433,10 +1449,12 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _repeatMode =
         repeat.PlaybackRepeatMode.values[(_repeatMode.index + 1) %
             repeat.PlaybackRepeatMode.values.length];
-    if (_autoDJMode.isActive) {
-      _autoDJMode = AutoDJMode.off;
+    final isActive = _baseAutoDJMode != AutoDJMode.off || _smartAutoDJMode != AutoDJMode.off;
+    if (isActive) {
+      _baseAutoDJMode = AutoDJMode.off;
+      _smartAutoDJMode = AutoDJMode.off;
       _queueManager?.disableAutoDJ();
-      _queueManager?.setCurrentMode(AutoDJMode.off);
+      _queueManager?.setCurrentModes(AutoDJMode.off, AutoDJMode.off);
       _dspEngine?.setActive(false);
     }
     notifyListeners();

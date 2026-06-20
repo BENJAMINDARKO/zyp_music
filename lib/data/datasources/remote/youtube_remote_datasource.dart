@@ -129,6 +129,9 @@ class YoutubeRemoteDataSource {
           }();
 
           if (videos.isEmpty) {
+            if (playlistId.startsWith('OLAK')) {
+              throw Exception('This album format is no longer supported by YouTube due to recent changes. Please delete it from your library/history and search for the album again.');
+            }
             throw Exception('No videos found for playlist/mix $playlistId');
           }
 
@@ -192,8 +195,28 @@ class YoutubeRemoteDataSource {
     final stopwatch = Stopwatch()..start();
     while (true) {
       try {
-        final url = await YoutubeAudioExtractor.instance.getAudioUrl(videoId);
+        String? url = await YoutubeAudioExtractor.instance.getAudioUrl(videoId);
         
+        if (url == null) {
+          try {
+            AppLogger.log('Falling back to ytMusic.getSong for $videoId', name: 'YoutubeRemoteDataSource');
+            final song = await _ytMusic.getSong(videoId);
+            final adaptive = song.adaptiveFormats ?? [];
+            for (var f in adaptive) {
+              if (f['mimeType']?.toString().contains('audio/') == true) {
+                final audioUrl = f['url']?.toString();
+                if (audioUrl != null && audioUrl.isNotEmpty) {
+                  url = audioUrl;
+                  AppLogger.log('Successfully extracted URL from ytMusic fallback', name: 'YoutubeRemoteDataSource');
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            AppLogger.log('ytMusic fallback failed: $e', name: 'YoutubeRemoteDataSource');
+          }
+        }
+
         if (url != null && await _verifyUrl(url)) {
           return url;
         }

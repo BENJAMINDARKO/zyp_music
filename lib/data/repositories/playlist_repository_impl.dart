@@ -543,7 +543,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
     try {
       final a = await remoteDataSource.getAlbum(albumId);
       return Album(
-        id: a.playlistId,
+        id: a.albumId,
         title: a.name,
         artistName: a.artist.name,
         year: a.year?.toString(),
@@ -587,7 +587,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       name: a.name,
       thumbnailUrl: a.thumbnails.lastOrNull?.url,
       albums: a.topAlbums.map((al) => Album(
-        id: al.playlistId,
+        id: al.albumId,
         title: al.name,
         artistName: a.name,
         year: al.year?.toString(),

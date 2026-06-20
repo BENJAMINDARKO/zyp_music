@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../core/services/vocal_remover_service.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -16,7 +17,8 @@ import '../widgets/add_to_playlist_modal.dart';
 import '../widgets/synced_lyrics_widget.dart';
 import '../widgets/single_line_lyrics_widget.dart';
 import '../widgets/lyrics_timing_slider.dart';
-import '../widgets/playback_speed_selector.dart';
+import '../widgets/audio_output_selector.dart';
+import 'dart:async';
 import '../../presentation/providers/settings_provider.dart';
 import '../../presentation/providers/download_provider.dart';
 import '../widgets/track_context_menu.dart';
@@ -25,6 +27,7 @@ import '../widgets/seekbar_connector.dart';
 import 'artist_screen.dart';
 import 'album_screen.dart';
 import '../widgets/apple_music_sheet.dart';
+import '../widgets/explicit_icon.dart';
 import "../../core/utils/thumbnail_url.dart";
 
 class PlayingScreen extends StatefulWidget {
@@ -49,6 +52,23 @@ class _PlayingScreenState extends State<PlayingScreen>
   bool _wasPlaying = false;
   _LyricsViewMode _lyricsViewMode = _LyricsViewMode.compact;
   bool _karaokeMode = false;
+  bool _vocalSliderVisible = false;
+  bool _showQueue = false;
+
+  bool _showControls = true;
+  Timer? _hideControlsTimer;
+
+  void _resetHideControlsTimer() {
+    setState(() => _showControls = true);
+    _hideControlsTimer?.cancel();
+    if (_lyricsViewMode == _LyricsViewMode.fullscreen && !_karaokeMode) {
+      _hideControlsTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted && _lyricsViewMode == _LyricsViewMode.fullscreen) {
+          setState(() => _showControls = false);
+        }
+      });
+    }
+  }
   MiniplayerVisibilityProvider? _visibilityProvider;
 
   void _toggleKaraokeMode() {
@@ -59,6 +79,7 @@ class _PlayingScreenState extends State<PlayingScreen>
 
   bool _lyricsScrollPaused = false;
   int? _frozenPositionMs;
+
 
   void _toggleLyricsScroll() {
     setState(() {
@@ -103,6 +124,8 @@ class _PlayingScreenState extends State<PlayingScreen>
 
   @override
   void dispose() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer?.cancel();
     _visibilityProvider?.show();
     _rotationController.dispose();
     super.dispose();
@@ -152,9 +175,13 @@ class _PlayingScreenState extends State<PlayingScreen>
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: Colors.transparent,
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
+          body: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _resetHideControlsTimer,
+            onPanDown: (_) => _resetHideControlsTimer(),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
               // Layer 1: full-bleed album art (blurred backdrop)
               Positioned.fill(
                 child: (track.thumbnailUrl?.isNotEmpty ?? false)
@@ -197,160 +224,190 @@ class _PlayingScreenState extends State<PlayingScreen>
                       )
                     : ColoredBox(color: Colors.black.withOpacity(0.75)),
               ),
-              SafeArea(
-                child: Column(
-                  children: [
-                    // Top bar
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              PhosphorIconsRegular.caretDown,
-                              color: Theme.of(context).colorScheme.onSurface,
-                              size: 30,
+              Column(
+                children: [
+                  // Top bar
+                  if (_lyricsViewMode != _LyricsViewMode.fullscreen)
+                    SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                PhosphorIconsRegular.caretDown,
+                                color: Theme.of(context).colorScheme.onSurface,
+                                size: 30,
+                              ),
+                              onPressed: () => Navigator.pop(context),
                             ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                          const Expanded(
-                            child: Text(
-                              'Now Playing',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                letterSpacing: 0.5,
+                            const Expanded(
+                              child: Text(
+                                'Now Playing',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: player.autoDJMode == AutoDJMode.off
+                                  ? Icon(
+                                      PhosphorIconsBold.sparkle,
+                                      color: player.isAutoDJEnabled
+                                          ? Theme.of(context).colorScheme.onSurface
+                                          : Theme.of(context).colorScheme.onSurface.withOpacity(0.35),
+                                    )
+                                  : player.autoDJMode.iconBuilder(
+                                      color: player.isAutoDJEnabled
+                                          ? Theme.of(context).colorScheme.onSurface
+                                          : Theme.of(context).colorScheme.onSurface.withOpacity(0.35),
+                                    ),
+                              tooltip: player.isAutoDJEnabled
+                                  ? 'Auto DJ: ${player.autoDJMode.label} — tap to change'
+                                  : 'Engage Auto DJ',
+                              onPressed: () {
+                                // Phase 0: opens the mode picker so the
+                                // user can pick / change / disengage the
+                                // engine. The picker writes through to
+                                // PlayerProvider.setAutoDJMode; the
+                                // per-mode engine logic lands in Phase 1.
+                                AutoDJModePicker.show(context);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
+
+                  if (_lyricsViewMode == _LyricsViewMode.fullscreen) ...[
+                    SafeArea(
+                      bottom: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Handle
+                          Center(
+                            child: Container(
+                              width: 36,
+                              height: 5,
+                              margin: const EdgeInsets.only(top: 8, bottom: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(2.5),
                               ),
                             ),
                           ),
-                          IconButton(
-                            icon: player.autoDJMode == AutoDJMode.off
-                                ? Icon(
-                                    PhosphorIconsRegular.sparkle,
-                                    color: player.isAutoDJEnabled
-                                        ? Theme.of(context).colorScheme.onSurface
-                                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.35),
-                                  )
-                                : player.autoDJMode.iconBuilder(
-                                    color: player.isAutoDJEnabled
-                                        ? Theme.of(context).colorScheme.onSurface
-                                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.35),
+                          // Header Row (Spinning CD + Karaoke)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24.0,
+                              vertical: 8.0,
+                            ),
+                            child: Row(
+                              children: [
+                                RotationTransition(
+                                  turns: _rotationController,
+                                  child: Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      image: (track.thumbnailUrl?.isNotEmpty ?? false)
+                                          ? DecorationImage(
+                                              image: CachedNetworkImageProvider(
+                                                rewriteThumbnailSize(track.thumbnailUrl, 200),
+                                              ),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : null,
+                                      color: (track.thumbnailUrl?.isNotEmpty ?? false)
+                                          ? null
+                                          : Colors.grey[800],
+                                    ),
+                                    child: Center(
+                                      child: Container(
+                                        width: 15,
+                                        height: 15,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: const Color(0xFF141414),
+                                          border: Border.all(
+                                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24),
+                                            width: 1,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                            tooltip: player.isAutoDJEnabled
-                                ? 'Auto DJ: ${player.autoDJMode.label} — tap to change'
-                                : 'Engage Auto DJ',
-                            onPressed: () {
-                              // Phase 0: opens the mode picker so the
-                              // user can pick / change / disengage the
-                              // engine. The picker writes through to
-                              // PlayerProvider.setAutoDJMode; the
-                              // per-mode engine logic lands in Phase 1.
-                              AutoDJModePicker.show(context);
-                            },
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        track.title,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        track.author ?? 'Unknown',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.70),
+                                          fontSize: 14,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    _karaokeMode
+                                        ? PhosphorIconsFill.microphoneStage
+                                        : PhosphorIconsRegular.microphoneStage,
+                                    color: _karaokeMode
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context).colorScheme.onSurface,
+                                    size: 24,
+                                  ),
+                                  onPressed: _toggleKaraokeMode,
+                                  tooltip: 'Karaoke',
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
 
-                    const SizedBox(height: 24),
-
-                    if (_lyricsViewMode == _LyricsViewMode.fullscreen) ...[
-                      // Small thumb row (State B)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24.0,
-                          vertical: 8.0,
+                    // Fullscreen lyrics (normal or karaoke)
+                    Expanded(
+                      child: AnimatedPadding(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOut,
+                        padding: EdgeInsets.only(
+                          bottom: _showControls ? 280.0 : 80.0,
                         ),
-                        child: Row(
-                          children: [
-                            RotationTransition(
-                              turns: _rotationController,
-                              child: Container(
-                                width: 60,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  image:
-                                      (track.thumbnailUrl?.isNotEmpty ?? false)
-                                      ? DecorationImage(
-                                          image: NetworkImage(
-                                            rewriteThumbnailSize(track.thumbnailUrl, 1200),
-                                          ),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
-                                  color:
-                                      (track.thumbnailUrl?.isNotEmpty ?? false)
-                                      ? null
-                                      : Colors.grey[800],
-                                ),
-                                child: Center(
-                                  child: Container(
-                                    width: 15,
-                                    height: 15,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: const Color(0xFF141414),
-                                      border: Border.all(
-                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24),
-                                        width: 1,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    track.title,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    track.author ?? 'Unknown',
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
-                                      fontSize: 14,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                _karaokeMode
-                                    ? PhosphorIconsFill.microphoneStage
-                                    : PhosphorIconsRegular.microphoneStage,
-                                color: _karaokeMode
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.onSurface,
-                                size: 24,
-                              ),
-                              onPressed: _toggleKaraokeMode,
-                              tooltip: 'Karaoke',
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Fullscreen lyrics (normal or karaoke)
-                      Expanded(
                         child: _karaokeMode
                             ? _buildKaraokeView(context)
-                                : (player.isLoadingLyrics || player.lyrics != null
+                            : (player.isLoadingLyrics || player.lyrics != null
                                 ? ValueListenableBuilder<Duration>(
                                     valueListenable: player.positionNotifier,
                                     builder: (_, pos, __) {
@@ -360,8 +417,7 @@ class _PlayingScreenState extends State<PlayingScreen>
                                               milliseconds: _frozenPositionMs!)
                                           : pos;
                                       return Opacity(
-                                        opacity:
-                                            _lyricsScrollPaused ? 0.5 : 1.0,
+                                        opacity: _lyricsScrollPaused ? 0.5 : 1.0,
                                         child: SyncedLyricsWidget(
                                           lyricsText: player.lyrics ?? '',
                                           isLoading: player.isLoadingLyrics,
@@ -372,6 +428,13 @@ class _PlayingScreenState extends State<PlayingScreen>
                                           ),
                                           karaokeMode: false,
                                           autoScroll: !_lyricsScrollPaused,
+                                          bottomPadding: 120.0,
+                                          topPadding: 24.0,
+                                          onSeek: (time) {
+                                            _resetHideControlsTimer();
+                                            player.startSeek();
+                                            player.endSeek(time);
+                                          },
                                         ),
                                       );
                                     },
@@ -386,24 +449,14 @@ class _PlayingScreenState extends State<PlayingScreen>
                                     ),
                                   )),
                       ),
-
-                      // Lyrics timing slider + pause/resume (visible only in State B)
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              _lyricsScrollPaused
-                                  ? PhosphorIconsFill.play
-                                  : PhosphorIconsFill.pause,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                            onPressed: _toggleLyricsScroll,
-                            tooltip: _lyricsScrollPaused
-                                ? 'Resume scrolling'
-                                : 'Pause scrolling',
-                          ),
-                          const Expanded(child: LyricsTimingSlider()),
-                        ],
+                    ),
+                  ] else if (_showQueue) ...[
+                      // Queue View
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 280.0),
+                          child: _buildInlineQueueView(context, player, track),
+                        ),
                       ),
                     ] else ...[
                       // State A: boxed album art → lyric → title/artist
@@ -463,125 +516,32 @@ class _PlayingScreenState extends State<PlayingScreen>
                       // Single-line active lyrics
                       SingleLineLyricsWidget(),
 
-                      const Spacer(),
-
-                      // Track info + favorite (inline)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () async {
-                                      if (track.albumId != null) {
-                                        final provider = context
-                                            .read<PlaylistProvider>();
-                                        final res = await provider.searchAlbums(
-                                          track.album!,
-                                        );
-                                        if (res.isNotEmpty && context.mounted) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => AlbumScreen(
-                                                albumId: res.first.id,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                    child: Text(
-                                      track.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(context).colorScheme.onSurface,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  GestureDetector(
-                                    onTap: () async {
-                                      if (track.author != null) {
-                                        final provider = context
-                                            .read<PlaylistProvider>();
-                                        final artist = await provider
-                                            .findCorrectArtist(
-                                              track.author!,
-                                              track.album,
-                                            );
-                                        if (artist != null && context.mounted) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => ArtistScreen(
-                                                artistId: artist.id,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                    child: Text(
-                                      track.author ?? 'Unknown Artist',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.normal,
-                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Consumer<PlaylistProvider>(
-                              builder: (context, pp, _) {
-                                final isFav = pp.isFavorite(track.id);
-                                return IconButton(
-                                  icon: Icon(
-                                    isFav
-                                        ? PhosphorIconsFill.heart
-                                        : PhosphorIconsRegular.heart,
-                                    color: isFav
-                                        ? Theme.of(context).colorScheme.onSurface
-                                        : Theme.of(context).colorScheme.onSurface.withOpacity(0.35),
-                                    size: 26,
-                                  ),
-                                  onPressed: () => pp.toggleFavorite(
-                                    track,
-                                    downloadProvider: context
-                                        .read<DownloadProvider>(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      const Spacer(),                    ],
 
                     const SizedBox(height: 8),
                   ],
                 ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              ignoring: !_showControls,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: _showControls ? 1.0 : 0.0,
+                child: _buildMediaControls(
+                  context,
+                  player,
+                  track,
+                  seekbarColor,
+                  settings,
+                ),
               ),
-            ],
+            ),
           ),
-          bottomNavigationBar: _buildMediaControls(
-            context,
-            player,
-            track,
-            seekbarColor,
-            settings,
+        ],
+        ),
           ),
         );
       },
@@ -646,6 +606,135 @@ class _PlayingScreenState extends State<PlayingScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (_lyricsViewMode == _LyricsViewMode.fullscreen) ...[
+  
+                        // Lyrics timing slider + pause/resume (visible only in State B)
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                _lyricsScrollPaused
+                                    ? PhosphorIconsFill.play
+                                    : PhosphorIconsFill.pause,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                              onPressed: _toggleLyricsScroll,
+                              tooltip: _lyricsScrollPaused
+                                  ? 'Resume scrolling'
+                                  : 'Pause scrolling',
+                            ),
+                            const Expanded(child: LyricsTimingSlider()),
+                          ],
+                        ),
+  
+          ] else ...[
+  
+                        // Track info + favorite (inline)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () async {
+                                        if (track.albumId != null) {
+                                          final provider = context
+                                              .read<PlaylistProvider>();
+                                          final res = await provider.searchAlbums(
+                                            track.album!,
+                                          );
+                                          if (res.isNotEmpty && context.mounted) {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => AlbumScreen(
+                                                  albumId: res.first.id,
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      child: Text(
+                                        track.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(context).colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    GestureDetector(
+                                      onTap: () async {
+                                        if (track.author != null) {
+                                          final provider = context
+                                              .read<PlaylistProvider>();
+                                          final artist = await provider
+                                              .findCorrectArtist(
+                                                track.author!,
+                                                track.album,
+                                              );
+                                          if (artist != null && context.mounted) {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => ArtistScreen(
+                                                  artistId: artist.id,
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      child: Text(
+                                        track.author ?? 'Unknown Artist',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.normal,
+                                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Consumer<PlaylistProvider>(
+                                builder: (context, pp, _) {
+                                  final isFav = pp.isFavorite(track.id);
+                                  return IconButton(
+                                    icon: Icon(
+                                      isFav
+                                          ? PhosphorIconsFill.heart
+                                          : PhosphorIconsRegular.heart,
+                                      color: isFav
+                                          ? Theme.of(context).colorScheme.onSurface
+                                          : Theme.of(context).colorScheme.onSurface.withOpacity(0.35),
+                                      size: 26,
+                                    ),
+                                    onPressed: () => pp.toggleFavorite(
+                                      track,
+                                      downloadProvider: context
+                                          .read<DownloadProvider>(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+  
+          ],
+          const SizedBox(height: 12),
           const SizedBox(height: 12),
           // Seek bar
           Padding(
@@ -723,7 +812,7 @@ class _PlayingScreenState extends State<PlayingScreen>
               children: [
                 IconButton(
                   icon: Icon(
-                    player.shuffleMode ? PhosphorIconsFill.shuffle : PhosphorIconsRegular.shuffle,
+                    player.shuffleMode ? PhosphorIconsFill.shuffle : PhosphorIconsBold.shuffle,
                     size: 28,
                     color: player.shuffleMode
                         ? accentColor
@@ -758,7 +847,7 @@ class _PlayingScreenState extends State<PlayingScreen>
                         ? PhosphorIconsFill.repeatOnce
                         : player.repeatMode != repeat.PlaybackRepeatMode.none
                             ? PhosphorIconsFill.repeat
-                            : PhosphorIconsRegular.repeat,
+                            : PhosphorIconsBold.repeat,
                     size: 28,
                     color: player.repeatMode != repeat.PlaybackRepeatMode.none
                         ? accentColor
@@ -792,10 +881,10 @@ class _PlayingScreenState extends State<PlayingScreen>
                             : _LyricsViewMode.compact;
                       }),
                 ),
-                PlaybackSpeedSelector(iconColor: secondaryIconColor),
+                AudioOutputSelector(iconColor: secondaryIconColor),
                 IconButton(
                   icon: Icon(
-                    PhosphorIconsRegular.playlist,
+                    PhosphorIconsBold.playlist,
                     color: secondaryIconColor,
                     size: 22,
                   ),
@@ -805,11 +894,18 @@ class _PlayingScreenState extends State<PlayingScreen>
                 ),
                 IconButton(
                   icon: Icon(
-                    PhosphorIconsRegular.queue,
-                    color: secondaryIconColor,
+                    _showQueue ? PhosphorIconsFill.queue : PhosphorIconsRegular.queue,
+                    color: _showQueue ? Theme.of(context).colorScheme.primary : secondaryIconColor,
                     size: 22,
                   ),
-                  onPressed: () => _showUpNextModal(context, player),
+                  onPressed: () {
+                    setState(() {
+                      _showQueue = !_showQueue;
+                      if (_showQueue) {
+                        _lyricsViewMode = _LyricsViewMode.compact;
+                      }
+                    });
+                  },
                 ),
               ],
             ),
@@ -864,6 +960,94 @@ class _PlayingScreenState extends State<PlayingScreen>
     }
 
     return result;
+  }
+
+  Widget _buildLyricsHeaderRow(BuildContext context, PlayerProvider player, Track track) {
+    final playlistProvider = context.watch<PlaylistProvider>();
+    final isFav = playlistProvider.isFavorite(track.id);
+
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: (track.thumbnailUrl?.isNotEmpty ?? false)
+              ? CachedNetworkImage(
+                  imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 200),
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => Container(color: Colors.grey[800]),
+                )
+              : Container(
+                  width: 48,
+                  height: 48,
+                  color: Colors.grey[800],
+                  child: const Icon(PhosphorIconsRegular.musicNote, size: 24),
+                ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      track.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (track.isExplicit) ...[
+                    const SizedBox(width: 6),
+                    const ExplicitIcon(),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                track.author ?? 'Unknown',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.70),
+                  fontSize: 13,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          icon: Icon(
+            isFav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
+            color: isFav ? Colors.white : Colors.white.withOpacity(0.7),
+            size: 22,
+          ),
+          onPressed: () {
+            playlistProvider.toggleFavorite(
+              track,
+              downloadProvider: context.read<DownloadProvider>(),
+            );
+          },
+        ),
+        IconButton(
+          icon: Icon(
+            PhosphorIconsRegular.dotsThree,
+            color: Colors.white.withOpacity(0.7),
+            size: 22,
+          ),
+          onPressed: () => TrackContextMenu.show(context, track),
+        ),
+      ],
+    );
   }
 
   Widget _buildKaraokeView(BuildContext context) {
@@ -955,7 +1139,7 @@ class _PlayingScreenState extends State<PlayingScreen>
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const PlaybackSpeedSelector(),
+                  const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -1077,4 +1261,339 @@ class _PlayingScreenState extends State<PlayingScreen>
       elevation: 0,
     );
   }
+
+  Widget _buildInlineQueueView(BuildContext context, PlayerProvider player, Track currentTrack) {
+    final queue = player.queue;
+    final currentIndex = player.currentIndex;
+    final upcoming = (currentIndex >= 0 && currentIndex + 1 < queue.length)
+        ? queue.sublist(currentIndex + 1)
+        : <Track>[];
+    
+    // Filter history: recentlyPlayed tracks, excluding current track
+    final history = player.recentlyPlayed
+        .where((t) => t.id != currentTrack.id)
+        .toList();
+
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          // 1. History Section (if not empty)
+          if (history.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'History',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => player.clearRecentlyPlayed(),
+                  child: Text(
+                    'Clear',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            ...history.map((t) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: (t.thumbnailUrl?.isNotEmpty ?? false)
+                        ? CachedNetworkImage(
+                            imageUrl: rewriteThumbnailSize(t.thumbnailUrl, 100),
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                          )
+                        : Container(
+                            width: 40,
+                            height: 40,
+                            color: Colors.white10,
+                            child: const Icon(PhosphorIconsRegular.musicNote),
+                          ),
+                  ),
+                  title: Text(
+                    t.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    t.author ?? 'Unknown',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13),
+                  ),
+                  onTap: () {
+                    player.playTrack(t);
+                  },
+                )),
+            const SizedBox(height: 16),
+          ],
+
+          // 2. Currently Playing Track Card (Apple Music style)
+          Card(
+            color: Colors.white.withOpacity(0.06),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: (currentTrack.thumbnailUrl?.isNotEmpty ?? false)
+                        ? CachedNetworkImage(
+                            imageUrl: rewriteThumbnailSize(currentTrack.thumbnailUrl, 200),
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                          )
+                        : Container(
+                            width: 60,
+                            height: 60,
+                            color: Colors.white10,
+                            child: const Icon(PhosphorIconsRegular.musicNote, size: 30),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          currentTrack.title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          currentTrack.author ?? 'Unknown Artist',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: onSurface.withOpacity(0.6),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Consumer<PlaylistProvider>(
+                    builder: (context, pp, _) {
+                      final isFav = pp.isFavorite(currentTrack.id);
+                      return IconButton(
+                        icon: Icon(
+                          isFav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
+                          color: isFav ? Colors.white : onSurface.withOpacity(0.5),
+                        ),
+                        onPressed: () => pp.toggleFavorite(
+                          currentTrack,
+                          downloadProvider: context.read<DownloadProvider>(),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(PhosphorIconsRegular.dotsThree),
+                    onPressed: () => TrackContextMenu.show(context, currentTrack),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 3. Action Buttons Row (Shuffle, Repeat, Autoplay [Infinity], CD [Auto DJ mode picker])
+          _buildQueueActionsRow(context, player),
+          const SizedBox(height: 24),
+
+          // 4. Continue Playing Header
+          Text(
+            'Continue Playing',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: onSurface,
+            ),
+          ),
+          if (player.activeAutoDJMode != AutoDJMode.off)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'AutoPlaying similar music',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+
+          // 5. Upcoming Tracks list
+          if (upcoming.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24.0),
+              child: Center(
+                child: Text(
+                  'End of Queue',
+                  style: TextStyle(color: onSurface.withOpacity(0.4)),
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              itemCount: upcoming.length,
+              itemBuilder: (context, index) {
+                final t = upcoming[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: (t.thumbnailUrl?.isNotEmpty ?? false)
+                        ? CachedNetworkImage(
+                            imageUrl: rewriteThumbnailSize(t.thumbnailUrl, 100),
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                          )
+                        : Container(
+                            width: 40,
+                            height: 40,
+                            color: Colors.white10,
+                            child: const Icon(PhosphorIconsRegular.musicNote),
+                          ),
+                  ),
+                  title: Text(
+                    t.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    t.author ?? 'Unknown',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13),
+                  ),
+                  trailing: const Padding(
+                    padding: EdgeInsets.only(right: 8.0),
+                    child: Icon(PhosphorIconsRegular.equals, size: 20),
+                  ),
+                  onTap: () {
+                    player.playFromQueue(currentIndex + 1 + index);
+                  },
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQueueActionsRow(BuildContext context, PlayerProvider player) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        // Shuffle: rounded square
+        _buildQueueIconButton(
+          icon: player.shuffleMode ? PhosphorIconsFill.shuffle : PhosphorIconsRegular.shuffle,
+          isActive: player.shuffleMode,
+          onTap: () => player.toggleShuffle(),
+        ),
+        // Repeat: rounded square
+        _buildQueueIconButton(
+          icon: player.repeatMode == repeat.PlaybackRepeatMode.one
+              ? PhosphorIconsFill.repeatOnce
+              : player.repeatMode != repeat.PlaybackRepeatMode.none
+                  ? PhosphorIconsFill.repeat
+                  : PhosphorIconsRegular.repeat,
+          isActive: player.repeatMode != repeat.PlaybackRepeatMode.none,
+          onTap: () => player.cycleRepeatMode(),
+        ),
+        // Infinity (Autoplay): pill
+        _buildQueuePillButton(
+          icon: PhosphorIconsRegular.infinity,
+          isActive: player.isAutoDJEnabled,
+          onTap: () => player.toggleAutoDJ(),
+        ),
+        // CD (Auto DJ picker): pill
+        _buildQueuePillButton(
+          icon: PhosphorIconsRegular.disc,
+          isActive: false,
+          onTap: () => AutoDJModePicker.show(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQueueIconButton({
+    required IconData icon,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: isActive ? Colors.black : Colors.white,
+          size: 22,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQueuePillButton({
+    required IconData icon,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 80,
+        height: 48,
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Icon(
+          icon,
+          color: isActive ? Colors.black : Colors.white,
+          size: 24,
+        ),
+      ),
+    );
+  }
+
 }

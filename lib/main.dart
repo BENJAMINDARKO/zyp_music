@@ -302,7 +302,8 @@ Future<void> main() async {
       player: audioHandler.player,
       sourceBuilder: (track) => audioRepository.buildAudioSource(track),
       nextTrackResolver: (current) => routingService.resolveNext(
-        mode: queueManager.currentMode,
+        baseMode: queueManager.baseMode,
+        smartMode: queueManager.smartMode,
         current: current,
         recentIds: const <String>{},
         // Spec 2G Fix #5: the gapless mixer's 15-second

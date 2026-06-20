@@ -61,13 +61,13 @@ class QueueManager extends ChangeNotifier {
   /// / offline shuffle path remains the fallback.
   AutoDjRoutingService? _router;
 
-  /// The currently-selected Auto DJ mode, mirrored from
-  /// [PlayerProvider.setAutoDJMode] so [generateNextAutoDJTrack] can
-  /// pass the right mode to the router. Defaults to
-  /// [AutoDJMode.off] so a router call before any mode selection
-  /// is a clean null-return.
-  AutoDJMode _currentMode = AutoDJMode.off;
-  AutoDJMode get currentMode => _currentMode;
+  /// The currently-selected base Auto DJ mode.
+  AutoDJMode _baseMode = AutoDJMode.off;
+  AutoDJMode get baseMode => _baseMode;
+
+  /// The currently-selected smart Auto DJ mode.
+  AutoDJMode _smartMode = AutoDJMode.off;
+  AutoDJMode get smartMode => _smartMode;
 
   /// Session-recently-played track id memory. Backs the spec's
   /// "runtime session memory array tracking recently played song
@@ -111,8 +111,9 @@ class QueueManager extends ChangeNotifier {
     _router = router;
   }
 
-  void setCurrentMode(AutoDJMode mode) {
-    _currentMode = mode;
+  void setCurrentModes(AutoDJMode baseMode, AutoDJMode smartMode) {
+    _baseMode = baseMode;
+    _smartMode = smartMode;
   }
 
   /// Re-anchors the Auto DJ engine's active seed parameters to
@@ -291,7 +292,7 @@ class QueueManager extends ChangeNotifier {
     rememberPlayed(currentTrack.id);
     rememberPlayedTrack(currentTrack);
 
-    if (_currentMode == AutoDJMode.off) return null;
+    if (_baseMode == AutoDJMode.off && _smartMode == AutoDJMode.off) return null;
 
     final router = _router;
     if (router != null) {
@@ -312,7 +313,8 @@ class QueueManager extends ChangeNotifier {
       }
       try {
         final pick = await router.resolveNext(
-          mode: _currentMode,
+          baseMode: _baseMode,
+          smartMode: _smartMode,
           current: currentTrack,
           recentIds: Set<String>.from(_recentSessionIds),
           history: List<Track>.unmodifiable(_sessionHistory),
@@ -320,7 +322,7 @@ class QueueManager extends ChangeNotifier {
         return pick;
       } catch (e) {
         AppLogger.log(
-          'Router failed (${_currentMode.name}); falling back to legacy path: $e',
+          'Router failed (base=${_baseMode.name}, smart=${_smartMode.name}); falling back to legacy path: $e',
           name: _logTag,
         );
       }
