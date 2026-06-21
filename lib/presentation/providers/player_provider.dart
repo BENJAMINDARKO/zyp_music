@@ -472,6 +472,15 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         );
         return nextTrack;
       }
+      // NEW: If repeat mode is ALL, wrap around to the first song!
+      if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
+        final nextTrack = _queue[0];
+        AppLogger.log(
+          'nextTrackResolver: resolved wrap-around for repeat all: ${nextTrack.id} ("${nextTrack.title}")',
+          name: 'PlayerProvider',
+        );
+        return nextTrack;
+      }
       // 2. If Auto DJ is enabled, resolve via QueueManager
       if (_baseAutoDJMode != AutoDJMode.off || _smartAutoDJMode != AutoDJMode.off) {
         final nextTrack = await _queueManager?.generateNextAutoDJTrack(current);
@@ -629,6 +638,24 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         name: 'PlayerProvider',
       );
     }
+  }
+
+  void _updateAudioHandlerRepeatMode() {
+    final handler = _audioHandler;
+    if (handler == null) return;
+    AudioServiceRepeatMode serviceMode;
+    switch (_repeatMode) {
+      case repeat.PlaybackRepeatMode.none:
+        serviceMode = AudioServiceRepeatMode.none;
+        break;
+      case repeat.PlaybackRepeatMode.one:
+        serviceMode = AudioServiceRepeatMode.one;
+        break;
+      case repeat.PlaybackRepeatMode.all:
+        serviceMode = AudioServiceRepeatMode.all;
+        break;
+    }
+    handler.setRepeatMode(serviceMode);
   }
 
   /// Wall-clock timestamp of the last persisted position write. Throttles the
@@ -1457,6 +1484,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _queueManager?.setCurrentModes(AutoDJMode.off, AutoDJMode.off);
       _dspEngine?.setActive(false);
     }
+    _updateAudioHandlerRepeatMode();
     notifyListeners();
   }
 
@@ -1944,6 +1972,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     } else if (_currentIndex > 0) {
       _currentIndex--;
       await playTrack(_queue[_currentIndex]);
+    } else if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
+      _currentIndex = _queue.length - 1;
+      await playTrack(_queue[_currentIndex]);
     } else {
       seekTo(Duration.zero);
     }
@@ -2349,6 +2380,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _mediaItemSub?.cancel();
     _mediaItemSub = null;
     _syncRestoredStateToAudioHandler();
+    _updateAudioHandlerRepeatMode();
     _startPolling();
   }
 

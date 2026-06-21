@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../../core/services/vocal_remover_service.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -52,7 +51,6 @@ class _PlayingScreenState extends State<PlayingScreen>
   bool _wasPlaying = false;
   _LyricsViewMode _lyricsViewMode = _LyricsViewMode.compact;
   bool _karaokeMode = false;
-  bool _vocalSliderVisible = false;
   bool _showQueue = false;
 
   bool _showControls = true;

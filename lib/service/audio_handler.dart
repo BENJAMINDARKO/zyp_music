@@ -48,6 +48,7 @@ class MusicAudioHandler extends BaseAudioHandler {
     // the old-player snapshot wins and forces playing=false.
     final wasPosition = newPlayer.position;
     final wasPlaying = newPlayer.playing;
+    final wasLoopMode = _player.loopMode;
 
     // Cancel all subscriptions BEFORE replacing _player so the
     // _listenToPlayerStreams() call below starts clean.
@@ -60,6 +61,7 @@ class MusicAudioHandler extends BaseAudioHandler {
 
     final oldPlayer = _player;
     _player = newPlayer;
+    await _player.setLoopMode(wasLoopMode);
 
     // BUG FIX (bug 10): replacePlayer() previously called
     // _listenToPlayerStreams() AND also re-wired every stream
@@ -256,7 +258,12 @@ class MusicAudioHandler extends BaseAudioHandler {
             if (mediaItem.valueOrNull?.id != item.id) {
               updateMediaItem(item);
             }
-            _currentIndex = index;
+            final queueIndex = _queue.indexWhere((e) => e.id == item.id);
+            if (queueIndex != -1) {
+              _currentIndex = queueIndex;
+            } else {
+              _currentIndex = index;
+            }
           }
         }
       }
@@ -458,6 +465,25 @@ class MusicAudioHandler extends BaseAudioHandler {
   @override
   Future<void> onTaskRemoved() async {
     await stop();
+  }
+
+  @override
+  Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
+    final loopMode = _convertAudioServiceRepeatMode(repeatMode);
+    await _player.setLoopMode(loopMode);
+    playbackState.add(playbackState.value.copyWith(repeatMode: repeatMode));
+  }
+
+  LoopMode _convertAudioServiceRepeatMode(AudioServiceRepeatMode mode) {
+    switch (mode) {
+      case AudioServiceRepeatMode.none:
+        return LoopMode.off;
+      case AudioServiceRepeatMode.one:
+        return LoopMode.one;
+      case AudioServiceRepeatMode.all:
+      case AudioServiceRepeatMode.group:
+        return LoopMode.all;
+    }
   }
 
   Future<Map<String, String>> _getHeaders() async {

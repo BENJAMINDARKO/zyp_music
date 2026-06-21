@@ -778,9 +778,7 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
                             androidx.media3.exoplayer.audio.AudioRendererEventListener eventListener,
                             java.util.ArrayList<androidx.media3.exoplayer.Renderer> out) {
                         androidx.media3.exoplayer.audio.AudioSink customAudioSink = new androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
-                                .setAudioProcessors(new androidx.media3.common.audio.AudioProcessor[]{
-                                        com.ryanheise.just_audio.AdvancedVocalRemoverProcessor.Companion.getInstance()
-                                })
+                                .setAudioProcessors(new androidx.media3.common.audio.AudioProcessor[0])
                                 .build();
                         super.buildAudioRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, customAudioSink, eventHandler, eventListener, out);
                     }
