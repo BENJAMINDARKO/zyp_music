@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
-import 'package:provider/provider.dart';
-import '../../presentation/providers/player_provider.dart';
+import '../../core/services/update_service.dart';
 import '../widgets/glass_sidebar.dart';
 import '../screens/home_screen.dart';
 import '../screens/music_now_screen.dart';
@@ -46,6 +45,11 @@ class _MainLayoutState extends State<MainLayout> {
     _searchFocusNode.addListener(() {
       if (_searchFocusNode.hasFocus) {
         setState(() => _isSearching = true);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        UpdateService.checkForUpdates(context);
       }
     });
   }

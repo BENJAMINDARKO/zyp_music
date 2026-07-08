@@ -1,3 +1,14 @@
+## [1.2.9] - 2026-07-08
+
+### Added
+- **Android Auto-Update Feature:** Implemented startup version checking and automatic APK updating. When the app starts, it checks for updates on GitHub Releases, prompts the user via an AlertDialog if a new version is found, downloads the update with a visual progress bar, and automatically launches the Android package installer.
+
+### Fixed
+- **Repeat Button Functionality:** Overrode repeat/loop modes natively in `MusicAudioHandler` using `LoopMode.one` and `LoopMode.off`, preserved repeat settings across player replacement/swaps, and added queue wrap-around to correctly repeat the entire playlist (Repeat All).
+
+### Removed
+- **Low-Latency Vocal Subtraction Feature:** Removed the experimental vocal remover processor, deleted associated services and native processors, cleaned up unused MethodChannels in `MainActivity.kt`, and removed UI slider components.
+
 ## [1.2.8] - 2026-06-19
 
 ### Added

@@ -1,0 +1,46 @@
+name: Build Release APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Java environment (required for Android Gradle builds)
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # Step 3: Set up Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # Step 4: Fetch Dart/Flutter dependencies
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Step 5: Build the release APK (signed with debug keys as configured in Gradle)
+      - name: Build APK
+        run: flutter build apk --release
+
+      # Step 6: Upload the generated APK as an artifact of the build run
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: zyp-music-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk

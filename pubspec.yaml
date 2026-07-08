@@ -1,7 +1,7 @@
 name: zyp_music
 description: ZYPMusic - Native Audio Streamer
 publish_to: 'none'
-version: 1.2.8+16
+version: 1.2.9+17
 
 environment:
   sdk: ^3.12.0
@@ -44,6 +44,7 @@ dependencies:
   filesystem_picker: ^4.1.0
   html: ^0.15.6
   android_intent_plus: ^6.0.0
+  ota_update: ^4.0.3
 dev_dependencies:
   flutter_test:
     sdk: flutter
