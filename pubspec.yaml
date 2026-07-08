@@ -44,7 +44,7 @@ dependencies:
   filesystem_picker: ^4.1.0
   html: ^0.15.6
   android_intent_plus: ^6.0.0
-  ota_update: ^4.0.3
+  ota_update: ^7.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

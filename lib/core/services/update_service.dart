@@ -223,6 +223,18 @@ class UpdateService {
                 } catch (_) {}
               });
               break;
+            case OtaStatus.INSTALLATION_DONE:
+              statusNotifier.value = 'Installation complete.';
+              _closeProgressWithDelay(navigator);
+              break;
+            case OtaStatus.INSTALLATION_ERROR:
+              statusNotifier.value = 'Installation failed.';
+              _closeProgressWithDelay(navigator);
+              break;
+            case OtaStatus.CANCELED:
+              statusNotifier.value = 'Update canceled.';
+              _closeProgressWithDelay(navigator);
+              break;
             case OtaStatus.ALREADY_RUNNING_ERROR:
               statusNotifier.value = 'An update is already running.';
               _closeProgressWithDelay(navigator);
