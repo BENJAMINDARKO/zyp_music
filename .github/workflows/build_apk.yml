@@ -1,11 +1,15 @@
-name: Build Release APK
+name: Build & Release APK
 
 on:
   push:
     branches:
       - main
       - master
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+# Permissions required to create a Release and upload assets
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,6 +19,8 @@ jobs:
       # Step 1: Check out the repository code
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history and tags
 
       # Step 2: Set up Java environment (required for Android Gradle builds)
       - name: Set up Java
@@ -34,12 +40,48 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Step 5: Build the release APK (signed with debug keys as configured in Gradle)
+      # Step 5: Build the release APK
       - name: Build APK
         run: flutter build apk --release
 
-      # Step 6: Upload the generated APK as an artifact of the build run
-      - name: Upload APK
+      # Step 6: Extract version from pubspec.yaml
+      - name: Get version from pubspec.yaml
+        id: get_version
+        run: |
+          VERSION=$(grep 'version:' pubspec.yaml | head -n 1 | awk '{print $2}' | cut -d'+' -f1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # Step 7: Check if a GitHub Release for this version already exists
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if git rev-parse "v${{ steps.get_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version v${{ steps.get_version.outputs.version }} already released."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version v${{ steps.get_version.outputs.version }} is new. Creating release."
+          fi
+
+      # Step 8: Automatically create GitHub Release and upload APK if version is bumped
+      - name: Create Release
+        if: steps.check_release.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          body: |
+            Automated release for Zyp Music version ${{ steps.get_version.outputs.version }}.
+            
+            This release contains the compiled APK signed with the debug key.
+          files: build/app/outputs/flutter-apk/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 9: Always upload APK as workflow artifact (backup)
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: zyp-music-release-apk
