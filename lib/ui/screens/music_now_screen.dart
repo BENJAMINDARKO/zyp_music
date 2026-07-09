@@ -361,8 +361,7 @@ class _TopGenreTrackCard extends StatelessWidget {
           onTap: () {
             final player = context.read<PlayerProvider>();
             player.setAutoDJMode(AutoDJMode.sameGenre);
-            player.setQueue([t]);
-            player.playFromQueue(0);
+            player.playTrackWithNewSession(t);
           },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,8 +491,7 @@ class _PopularItemCard extends StatelessWidget {
               thumbnailUrl: item.thumbnailUrl,
             );
             final player = context.read<PlayerProvider>();
-            player.setQueue([track]);
-            player.playFromQueue(0);
+            player.playTrackWithNewSession(track);
           }
         },
         child: Column(

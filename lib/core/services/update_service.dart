@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:ota_update/ota_update.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../utils/app_logger.dart';
 
 class UpdateService {
@@ -124,9 +125,31 @@ class UpdateService {
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext); // Close prompt
-                _showDownloadProgressDialog(context, downloadUrl);
+                
+                // Request install packages permission first on Android
+                final status = await Permission.requestInstallPackages.status;
+                if (!status.isGranted) {
+                  final reqStatus = await Permission.requestInstallPackages.request();
+                  if (!reqStatus.isGranted) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please enable "Install unknown apps" permission for Zyp Music in system settings to perform the update.',
+                          ),
+                          duration: Duration(seconds: 5),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                }
+
+                if (context.mounted) {
+                  _showDownloadProgressDialog(context, downloadUrl);
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.primary,
@@ -204,6 +227,7 @@ class UpdateService {
           .execute(
         downloadUrl,
         destinationFilename: 'zyp_music_update.apk',
+        androidProviderAuthority: 'com.zyx.music.ota_update_provider',
       )
           .listen(
         (OtaEvent event) {

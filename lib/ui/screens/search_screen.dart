@@ -184,8 +184,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
 
   void _playTrack(Track track) {
     final player = context.read<PlayerProvider>();
-    player.setQueue([track]);
-    player.playFromQueue(0);
+    player.playTrackWithNewSession(track);
   }
 
   Widget _buildTrackList(List<Track> tracks) {

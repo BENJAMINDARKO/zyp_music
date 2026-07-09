@@ -324,8 +324,7 @@ class _CompactTrackTile extends StatelessWidget {
       child: InkWell(
         onTap: () {
           final player = context.read<PlayerProvider>();
-          player.setQueue([track]);
-          player.playFromQueue(0);
+          player.playTrackWithNewSession(track);
         },
         onLongPress: () {
           TrackContextMenu.show(context, track);
@@ -448,8 +447,7 @@ class _TrackCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           final player = context.read<PlayerProvider>();
-          player.setQueue([track]);
-          player.playFromQueue(0);
+          player.playTrackWithNewSession(track);
         },
         onLongPress: () {
           TrackContextMenu.show(context, track);

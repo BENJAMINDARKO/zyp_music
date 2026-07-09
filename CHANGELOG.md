@@ -1,3 +1,14 @@
+## [1.2.11] - 2026-07-09
+
+### Added
+- **Auto-Update Permissions**: Added runtime check and prompt for `requestInstallPackages` permission using `permission_handler` before launching update download to ensure installation window can appear on Android.
+
+### Changed
+- **Track Tap Behavior**: Tapping a track now starts a clean listening session (clearing the listening history and resetting the play queue to just that track). Queue and history are only maintained when songs or albums are explicitly added via "Add to Queue".
+
+### Fixed
+- **FileProvider Authority**: Configured explicit `androidProviderAuthority` for `ota_update` to match the application's package name (`com.zyx.music.ota_update_provider`).
+
 ## [1.2.10] - 2026-07-08
 
 ### Fixed

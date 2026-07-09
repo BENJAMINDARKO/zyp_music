@@ -60,8 +60,8 @@ class _ArtistScreenState extends State<ArtistScreen> {
   void _playTrack(int index) {
     if (_artist == null) return;
     final player = context.read<PlayerProvider>();
-    player.setQueue(_artist!.topTracks);
-    player.playFromQueue(index);
+    final track = _artist!.topTracks[index];
+    player.playTrackWithNewSession(track);
   }
 
   void _playAll() {

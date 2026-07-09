@@ -181,8 +181,7 @@ class LibraryScreen extends StatelessWidget {
               ),
               onTap: () {
                 final player = context.read<PlayerProvider>();
-                player.setQueue(favorites);
-                player.playFromQueue(index);
+                player.playTrackWithNewSession(track);
               },
               onLongPress: () => TrackContextMenu.show(context, track),
             ));

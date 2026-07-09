@@ -165,7 +165,6 @@ class _DownloadedViewState extends State<DownloadedView> {
 
   void _playTrack(BuildContext context, Track track) {
     final player = context.read<PlayerProvider>();
-    player.setQueue([track]);
-    player.playFromQueue(0);
+    player.playTrackWithNewSession(track);
   }
 }
