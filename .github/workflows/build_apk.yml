@@ -42,9 +42,18 @@ jobs:
 
       # Step 4.5: Restore debug keystore
       - name: Restore debug keystore
+        shell: python
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
-          mkdir -p ~/.android
-          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d -i > ~/.android/debug.keystore
+          import os
+          import base64
+          data = os.environ['DEBUG_KEYSTORE_BASE64'].replace('\n', '').replace('\r', '').replace(' ', '').strip()
+          keystore = base64.b64decode(data)
+          path = os.path.expanduser('~/.android/debug.keystore')
+          os.makedirs(os.path.dirname(path), exist_ok=True)
+          with open(path, 'wb') as f:
+              f.write(keystore)
 
       # Step 5: Build the release APK
       - name: Build APK
