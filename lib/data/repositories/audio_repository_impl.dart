@@ -779,6 +779,14 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
       },
     );
 
+    if (finalUrl.startsWith('http')) {
+      return LockCachingAudioSource(
+        uri,
+        headers: headers,
+        tag: item,
+      );
+    }
+
     return AudioSource.uri(
       uri,
       headers: headers,

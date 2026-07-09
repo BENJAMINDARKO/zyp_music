@@ -1,3 +1,11 @@
+## [1.2.10] - 2026-07-08
+
+### Fixed
+- **Player Repeat Modes**: Configured LoopMode.off mapping for Repeat All and Repeat None, allowing lookahead gapless mixer to manage queue transition and wrap-around smoothly.
+- **Offline Repeating**: Enabled `LockCachingAudioSource` for remote streams to support loop caching and offline repeating.
+- **Swipe-to-Remove**: Wrapped History and Play Queue lists in Dismissible widgets allowing right-swipe to remove tracks.
+- **Track Duration Display**: Fixed seekbar duration initialization and gapless transition updates.
+
 ## [1.2.9] - 2026-07-08
 
 ### Added

@@ -385,7 +385,7 @@ class MusicAudioHandler extends BaseAudioHandler {
       // connections alive on YouTube paths.
       if (uri.isScheme('HTTP') || uri.isScheme('HTTPS')) {
         await _player.setAudioSource(
-          AudioSource.uri(uri, headers: headers, tag: item),
+          LockCachingAudioSource(uri, headers: headers, tag: item),
         );
       } else {
         await _player.setAudioSource(AudioSource.uri(uri, tag: item));
@@ -477,12 +477,11 @@ class MusicAudioHandler extends BaseAudioHandler {
   LoopMode _convertAudioServiceRepeatMode(AudioServiceRepeatMode mode) {
     switch (mode) {
       case AudioServiceRepeatMode.none:
+      case AudioServiceRepeatMode.all:
+      case AudioServiceRepeatMode.group:
         return LoopMode.off;
       case AudioServiceRepeatMode.one:
         return LoopMode.one;
-      case AudioServiceRepeatMode.all:
-      case AudioServiceRepeatMode.group:
-        return LoopMode.all;
     }
   }
 

@@ -1302,7 +1302,24 @@ class _PlayingScreenState extends State<PlayingScreen>
                 ),
               ],
             ),
-            ...history.map((t) => ListTile(
+            ...history.map((t) {
+              final idx = history.indexOf(t);
+              return Dismissible(
+                key: ValueKey('history_${t.id}_$idx'),
+                direction: DismissDirection.startToEnd,
+                background: Container(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(left: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(PhosphorIconsRegular.trash, color: Colors.white),
+                ),
+                onDismissed: (_) {
+                  player.removeFromRecentlyPlayed(t.id);
+                },
+                child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(6),
@@ -1336,7 +1353,9 @@ class _PlayingScreenState extends State<PlayingScreen>
                   onTap: () {
                     player.playTrack(t);
                   },
-                )),
+                ),
+              );
+            }),
             const SizedBox(height: 16),
           ],
 
@@ -1466,44 +1485,61 @@ class _PlayingScreenState extends State<PlayingScreen>
               itemCount: upcoming.length,
               itemBuilder: (context, index) {
                 final t = upcoming[index];
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: (t.thumbnailUrl?.isNotEmpty ?? false)
-                        ? CachedNetworkImage(
-                            imageUrl: rewriteThumbnailSize(t.thumbnailUrl, 100),
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => Container(color: Colors.white10),
-                          )
-                        : Container(
-                            width: 40,
-                            height: 40,
-                            color: Colors.white10,
-                            child: const Icon(PhosphorIconsRegular.musicNote),
-                          ),
+                final queueIdx = currentIndex + 1 + index;
+                return Dismissible(
+                  key: ValueKey('upcoming_${t.id}_$queueIdx'),
+                  direction: DismissDirection.startToEnd,
+                  background: Container(
+                    alignment: Alignment.centerLeft,
+                    padding: const EdgeInsets.only(left: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(PhosphorIconsRegular.trash, color: Colors.white),
                   ),
-                  title: Text(
-                    t.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  subtitle: Text(
-                    t.author ?? 'Unknown',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13),
-                  ),
-                  trailing: const Padding(
-                    padding: EdgeInsets.only(right: 8.0),
-                    child: Icon(PhosphorIconsRegular.equals, size: 20),
-                  ),
-                  onTap: () {
-                    player.playFromQueue(currentIndex + 1 + index);
+                  onDismissed: (_) {
+                    player.removeFromQueue(queueIdx);
                   },
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: (t.thumbnailUrl?.isNotEmpty ?? false)
+                          ? CachedNetworkImage(
+                              imageUrl: rewriteThumbnailSize(t.thumbnailUrl, 100),
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                            )
+                          : Container(
+                              width: 40,
+                              height: 40,
+                              color: Colors.white10,
+                              child: const Icon(PhosphorIconsRegular.musicNote),
+                            ),
+                    ),
+                    title: Text(
+                      t.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      t.author ?? 'Unknown',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13),
+                    ),
+                    trailing: const Padding(
+                      padding: EdgeInsets.only(right: 8.0),
+                      child: Icon(PhosphorIconsRegular.equals, size: 20),
+                    ),
+                    onTap: () {
+                      player.playFromQueue(queueIdx);
+                    },
+                  ),
                 );
               },
             ),

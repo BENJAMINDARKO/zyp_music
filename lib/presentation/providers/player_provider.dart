@@ -463,6 +463,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     // Unify next track resolution under the PlayerProvider context
     _mixer?.nextTrackResolver = (current) async {
+      if (_repeatMode == repeat.PlaybackRepeatMode.none) {
+        return null;
+      }
       // 1. If we have a next song in the manual queue, return it
       if (_currentIndex + 1 < _queue.length) {
         final nextTrack = _queue[_currentIndex + 1];
@@ -702,6 +705,26 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _recentlyPlayed.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_recentlyPlayedKey);
+    notifyListeners();
+  }
+
+  Future<void> removeFromRecentlyPlayed(String trackId) async {
+    _recentlyPlayed.removeWhere((t) => t.id == trackId);
+    final prefs = await SharedPreferences.getInstance();
+    final json = jsonEncode(
+      _recentlyPlayed
+          .map(
+            (t) => {
+              'id': t.id,
+              'title': t.title,
+              'author': t.author,
+              'thumbnailUrl': t.thumbnailUrl,
+              'durationSeconds': t.duration?.inSeconds,
+            },
+          )
+          .toList(),
+    );
+    await prefs.setString(_recentlyPlayedKey, json);
     notifyListeners();
   }
 
@@ -1528,6 +1551,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     final resetPosition = startAt ?? Duration.zero;
     positionNotifier.value = resetPosition;
     _position = resetPosition;
+    _duration = track.duration ?? Duration.zero;
+    durationNotifier.value = track.duration ?? Duration.zero;
 
     _isLoading = true;
     _error = null;
@@ -2064,6 +2089,10 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // miniplayer duration label frozen at the outgoing track's value.
       if (item.duration != null && item.duration != Duration.zero) {
         _duration = item.duration!;
+        durationNotifier.value = item.duration!;
+      } else if (resolved.duration != null) {
+        _duration = resolved.duration!;
+        durationNotifier.value = resolved.duration!;
       }
       _historyLoggedForCurrentTrack = false;
       _fetchLyricsForCurrentTrack();
@@ -2107,6 +2136,10 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (resolved != null) {
         _currentTrack = resolved;
         if (newIndex != null) _currentIndex = newIndex;
+        if (resolved.duration != null && resolved.duration != Duration.zero) {
+          _duration = resolved.duration!;
+          durationNotifier.value = resolved.duration!;
+        }
         _historyLoggedForCurrentTrack = false;
         _fetchLyricsForCurrentTrack();
         _extractDominantColor(_currentTrack?.thumbnailUrl);
@@ -2271,6 +2304,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       if (_repeatMode == repeat.PlaybackRepeatMode.one) {
         _audioRepository.resume();
+      } else if (_repeatMode == repeat.PlaybackRepeatMode.none) {
+        _stopAfterQueue();
       } else if (_currentIndex + 1 < _queue.length) {
         await next();
       } else if (_repeatMode == repeat.PlaybackRepeatMode.all) {

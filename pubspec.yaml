@@ -1,7 +1,7 @@
 name: zyp_music
 description: ZYPMusic - Native Audio Streamer
 publish_to: 'none'
-version: 1.2.9+17
+version: 1.2.10+18
 
 environment:
   sdk: ^3.12.0
