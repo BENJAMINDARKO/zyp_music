@@ -40,20 +40,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Step 4.5: Restore debug keystore
-      - name: Restore debug keystore
-        shell: python
+      # Step 4.5: Install fixed debug keystore from secret
+      - name: Install debug keystore
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
-          import os
-          import base64
-          data = os.environ['DEBUG_KEYSTORE_BASE64'].replace('\n', '').replace('\r', '').replace(' ', '').strip()
-          keystore = base64.b64decode(data)
-          path = os.path.expanduser('~/.android/debug.keystore')
-          os.makedirs(os.path.dirname(path), exist_ok=True)
-          with open(path, 'wb') as f:
-              f.write(keystore)
+          mkdir -p ~/.android
+          printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 --decode --ignore-garbage > ~/.android/debug.keystore
+          echo "Keystore written: $(wc -c < ~/.android/debug.keystore) bytes"
 
       # Step 5: Build the release APK
       - name: Build APK
