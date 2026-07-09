@@ -44,7 +44,7 @@ jobs:
       - name: Restore debug keystore
         run: |
           mkdir -p ~/.android
-          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | tr -d '\n' | base64 -d > ~/.android/debug.keystore
+          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 -d -i > ~/.android/debug.keystore
 
       # Step 5: Build the release APK
       - name: Build APK
