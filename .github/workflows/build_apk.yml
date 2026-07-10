@@ -48,6 +48,10 @@ jobs:
           mkdir -p ~/.android
           printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 --decode --ignore-garbage > ~/.android/debug.keystore
           echo "Keystore written: $(wc -c < ~/.android/debug.keystore) bytes"
+          if [ ! -s ~/.android/debug.keystore ]; then
+            echo "ERROR: Keystore file is empty or does not exist. Check if DEBUG_KEYSTORE_BASE64 secret is configured correctly."
+            exit 1
+          fi
 
       # Step 5: Build the release APK
       - name: Build APK
