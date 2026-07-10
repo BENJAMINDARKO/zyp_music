@@ -1,3 +1,8 @@
+## [1.2.15] - 2026-07-10
+
+### Added
+- **OTA Verification Release**: Triggered a test release to verify OTA update installation workflow.
+
 ## [1.2.14] - 2026-07-10
 
 ### Fixed
