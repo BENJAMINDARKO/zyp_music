@@ -275,13 +275,12 @@ class _PlayingScreenState extends State<PlayingScreen>
                       )
                     : ColoredBox(color: Colors.black.withOpacity(0.75)),
               ),
-              Column(
-                children: [
-                  // Top bar
-                  if (_lyricsViewMode != _LyricsViewMode.fullscreen)
-                    SafeArea(
-                      bottom: false,
-                      child: Padding(
+              SafeArea(
+                child: Column(
+                  children: [
+                    // Top bar
+                    if (_lyricsViewMode != _LyricsViewMode.fullscreen)
+                      Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 4,
@@ -323,25 +322,15 @@ class _PlayingScreenState extends State<PlayingScreen>
                                   ? 'Auto DJ: ${player.autoDJMode.label} — tap to change'
                                   : 'Engage Auto DJ',
                               onPressed: () {
-                                // Phase 0: opens the mode picker so the
-                                // user can pick / change / disengage the
-                                // engine. The picker writes through to
-                                // PlayerProvider.setAutoDJMode; the
-                                // per-mode engine logic lands in Phase 1.
                                 AutoDJModePicker.show(context);
                               },
                             ),
                           ],
                         ),
                       ),
-                    ),
 
-                  const SizedBox(height: 12),
-
-                  if (_lyricsViewMode == _LyricsViewMode.fullscreen) ...[
-                    SafeArea(
-                      bottom: false,
-                      child: Column(
+                    if (_lyricsViewMode == _LyricsViewMode.fullscreen)
+                      Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // Handle
@@ -446,162 +435,157 @@ class _PlayingScreenState extends State<PlayingScreen>
                           ),
                         ],
                       ),
-                    ),
 
-                    // Fullscreen lyrics (normal or karaoke)
+                    // Expanded main body
                     Expanded(
-                      child: AnimatedPadding(
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeInOut,
-                        padding: EdgeInsets.only(
-                          bottom: _showControls ? 280.0 : 80.0,
-                        ),
-                        child: _karaokeMode
-                            ? _buildKaraokeView(context)
-                            : (player.isLoadingLyrics || player.lyrics != null
-                                ? ValueListenableBuilder<Duration>(
-                                    valueListenable: player.positionNotifier,
-                                    builder: (_, pos, __) {
-                                      final effectivePos = _lyricsScrollPaused &&
-                                              _frozenPositionMs != null
-                                          ? Duration(
-                                              milliseconds: _frozenPositionMs!)
-                                          : pos;
-                                      return Opacity(
-                                        opacity: _lyricsScrollPaused ? 0.5 : 1.0,
-                                        child: SyncedLyricsWidget(
-                                          lyricsText: player.lyrics ?? '',
-                                          isLoading: player.isLoadingLyrics,
-                                          position: Duration(
-                                            milliseconds:
-                                                effectivePos.inMilliseconds +
-                                                    player.lyricsSyncOffsetMs,
+                      child: _lyricsViewMode == _LyricsViewMode.fullscreen
+                          ? (_karaokeMode
+                              ? _buildKaraokeView(context)
+                              : (player.isLoadingLyrics || player.lyrics != null
+                                  ? ValueListenableBuilder<Duration>(
+                                      valueListenable: player.positionNotifier,
+                                      builder: (_, pos, __) {
+                                        final effectivePos = _lyricsScrollPaused &&
+                                                _frozenPositionMs != null
+                                            ? Duration(
+                                                milliseconds: _frozenPositionMs!)
+                                            : pos;
+                                        return Opacity(
+                                          opacity: _lyricsScrollPaused ? 0.5 : 1.0,
+                                          child: SyncedLyricsWidget(
+                                            lyricsText: player.lyrics ?? '',
+                                            isLoading: player.isLoadingLyrics,
+                                            position: Duration(
+                                              milliseconds:
+                                                  effectivePos.inMilliseconds +
+                                                      player.lyricsSyncOffsetMs,
+                                            ),
+                                            karaokeMode: false,
+                                            autoScroll: !_lyricsScrollPaused,
+                                            bottomPadding: 32.0,
+                                            topPadding: 24.0,
+                                            selectionMode: _lyricsSelectionMode,
+                                            selectedIndices: _selectedLyricIndices,
+                                            onLineToggled: _toggleLyricSelection,
+                                            onLineLongPressed: _enterSelectionMode,
+                                            onSeek: (time) {
+                                              _resetHideControlsTimer();
+                                              player.startSeek();
+                                              player.endSeek(time);
+                                            },
                                           ),
-                                          karaokeMode: false,
-                                          autoScroll: !_lyricsScrollPaused,
-                                          bottomPadding: 120.0,
-                                          topPadding: 24.0,
-                                          selectionMode: _lyricsSelectionMode,
-                                          selectedIndices: _selectedLyricIndices,
-                                          onLineToggled: _toggleLyricSelection,
-                                          onLineLongPressed: _enterSelectionMode,
-                                          onSeek: (time) {
-                                            _resetHideControlsTimer();
-                                            player.startSeek();
-                                            player.endSeek(time);
-                                          },
+                                        );
+                                      },
+                                    )
+                                  : Center(
+                                      child: Text(
+                                        'No lyrics available',
+                                        style: TextStyle(
+                                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                                          fontSize: 16,
                                         ),
-                                      );
-                                    },
-                                  )
-                                : Center(
-                                    child: Text(
-                                      'No lyrics available',
-                                      style: TextStyle(
-                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
-                                        fontSize: 16,
                                       ),
-                                    ),
-                                  )),
-                      ),
-                    ),
-                  ] else if (_showQueue) ...[
-                      // Queue View
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 280.0),
-                          child: _buildInlineQueueView(context, player, track),
-                        ),
-                      ),
-                    ] else ...[
-                      // State A: boxed album art → lyric → title/artist
+                                    )))
+                          : _showQueue
+                              ? _buildInlineQueueView(context, player, track)
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final screenWidth = MediaQuery.of(context).size.width;
+                                    final maxArtSize = screenWidth * 0.80;
+                                    
+                                    // Scale the album art dynamically based on available height constraints
+                                    final double artSize = (constraints.maxHeight - 80).clamp(160.0, maxArtSize);
 
-                      // Boxed album art (centered, 70% width, 8px radius)
-                      Center(
-                        child: ClipRRect(
-                          key: const Key('album-art'),
-                          borderRadius: BorderRadius.circular(8),
-                          child: SizedBox(
-                            width: MediaQuery.of(context).size.width * 0.85,
-                            height: MediaQuery.of(context).size.width * 0.85,
-                            child: (track.thumbnailUrl?.isNotEmpty ?? false)
-                                ? CachedNetworkImage(
-                                    imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
-                                    fit: BoxFit.cover,
-                                    errorWidget: (_, __, ___) => track.thumbnailUrl?.contains('maxresdefault.jpg') == true || rewriteThumbnailSize(track.thumbnailUrl, 1200).contains('maxresdefault.jpg')
-                                        ? CachedNetworkImage(
-                                            imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200).replaceFirst('maxresdefault.jpg', 'sddefault.jpg'),
-                                            fit: BoxFit.cover,
-                                            errorWidget: (____, _____, ______) => CachedNetworkImage(
-                                              imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200).replaceFirst('maxresdefault.jpg', 'hqdefault.jpg'),
-                                              fit: BoxFit.cover,
-                                              errorWidget: (_______, ________, _________) => Container(
-                                                color: const Color(0xFF0A0A0A),
-                                                child: Icon(
-                                                  PhosphorIconsRegular.musicNote,
-                                                  size: 80,
-                                                  color: Colors.white38,
-                                                ),
-                                              ),
-                                            ),
-                                          )
-                                        : Container(
-                                            color: const Color(0xFF0A0A0A),
-                                            child: Icon(
-                                              PhosphorIconsRegular.musicNote,
-                                              size: 80,
-                                              color: Colors.white38,
+                                    return Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Center(
+                                          child: ClipRRect(
+                                            key: const Key('album-art'),
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: SizedBox(
+                                              width: artSize,
+                                              height: artSize,
+                                              child: (track.thumbnailUrl?.isNotEmpty ?? false)
+                                                  ? CachedNetworkImage(
+                                                      imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200),
+                                                      fit: BoxFit.cover,
+                                                      errorWidget: (_, __, ___) => track.thumbnailUrl?.contains('maxresdefault.jpg') == true || rewriteThumbnailSize(track.thumbnailUrl, 1200).contains('maxresdefault.jpg')
+                                                          ? CachedNetworkImage(
+                                                              imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200).replaceFirst('maxresdefault.jpg', 'sddefault.jpg'),
+                                                              fit: BoxFit.cover,
+                                                              errorWidget: (____, _____, ______) => CachedNetworkImage(
+                                                                imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 1200).replaceFirst('maxresdefault.jpg', 'hqdefault.jpg'),
+                                                                fit: BoxFit.cover,
+                                                                errorWidget: (_______, ________, _________) => Container(
+                                                                  color: const Color(0xFF0A0A0A),
+                                                                  child: Icon(
+                                                                    PhosphorIconsRegular.musicNote,
+                                                                    size: 80,
+                                                                    color: Colors.white38,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            )
+                                                          : Container(
+                                                              color: const Color(0xFF0A0A0A),
+                                                              child: Icon(
+                                                                PhosphorIconsRegular.musicNote,
+                                                                size: 80,
+                                                                color: Colors.white38,
+                                                              ),
+                                                            ),
+                                                    )
+                                                  : Container(
+                                                      color: const Color(0xFF0A0A0A),
+                                                      child: Icon(
+                                                        PhosphorIconsRegular.musicNote,
+                                                        size: 80,
+                                                        color: Colors.white38,
+                                                      ),
+                                                    ),
                                             ),
                                           ),
-                                  )
-                                : Container(
-                                    color: const Color(0xFF0A0A0A),
-                                    child: Icon(
-                                      PhosphorIconsRegular.musicNote,
-                                      size: 80,
-                                      color: Colors.white38,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ),
+                                        ),
+                                        const SizedBox(height: 24),
+                                        SingleLineLyricsWidget(),
+                                      ],
+                                    );
+                                  },
+                                ),
+                    ),
 
-                      const SizedBox(height: 32),
-
-                      // Single-line active lyrics
-                      SingleLineLyricsWidget(),
-
-                      const Spacer(),                    ],
-
-                    const SizedBox(height: 8),
+                    // Media controls naturally laid out at the bottom
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      child: _showControls
+                          ? IgnorePointer(
+                              ignoring: !_showControls,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 300),
+                                opacity: _showControls ? 1.0 : 0.0,
+                                child: _buildMediaControls(
+                                  context,
+                                  player,
+                                  track,
+                                  seekbarColor,
+                                  settings,
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
                   ],
                 ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              ignoring: !_showControls,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 300),
-                opacity: _showControls ? 1.0 : 0.0,
-                child: _buildMediaControls(
-                  context,
-                  player,
-                  track,
-                  seekbarColor,
-                  settings,
-                ),
               ),
-            ),
+            ],
           ),
-        ],
         ),
-          ),
-        );
-      },
-    );
-  }
+      );
+    },
+  );
+}
 
   Color _contrastingIconColor(Color background) {
     return background.computeLuminance() > 0.5 ? Colors.black : Colors.white;

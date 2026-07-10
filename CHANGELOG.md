@@ -1,3 +1,8 @@
+## [1.2.16] - 2026-07-10
+
+### Fixed
+- **Responsive Layout Design**: Refactored the Now Playing and Fullscreen Lyrics layouts to place the bottom controls naturally in the main layout column, completely preventing content overlap. Configured dynamic album art scaling using LayoutBuilder to fit smaller screens.
+
 ## [1.2.15] - 2026-07-10
 
 ### Added
