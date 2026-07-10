@@ -1,3 +1,8 @@
+## [1.2.14] - 2026-07-10
+
+### Fixed
+- **CI Signing Configuration**: Configured explicit `release` signing config block in `build.gradle.kts` targeting the decoded keystore path directly, resolving unsigned APK builds in GitHub Actions.
+
 ## [1.2.13] - 2026-07-10
 
 ### Fixed
