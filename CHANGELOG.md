@@ -1,3 +1,8 @@
+## [1.2.13] - 2026-07-10
+
+### Fixed
+- **OTA Update Crash**: Added `<provider>` FileProvider declaration to `AndroidManifest.xml` and configured `filepaths.xml` resource mapping to resolve OS installer crashes on download completion.
+
 ## [1.2.12] - 2026-07-10
 
 ### Added
