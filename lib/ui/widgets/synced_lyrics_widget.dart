@@ -12,6 +12,16 @@ class SyncedLyricsWidget extends StatefulWidget {
   final double topPadding;
   final ValueChanged<Duration>? onSeek;
 
+  // ── Selection mode ────────────────────────────────────────
+  /// When true the user can long-press / tap to select lines.
+  final bool selectionMode;
+  /// Indices of currently-selected lyric lines.
+  final Set<int> selectedIndices;
+  /// Called when a line is tapped in selection mode.
+  final ValueChanged<int>? onLineToggled;
+  /// Called when any line is long-pressed (used to *enter* selection mode).
+  final ValueChanged<int>? onLineLongPressed;
+
   const SyncedLyricsWidget({
     super.key,
     required this.lyricsText,
@@ -22,6 +32,10 @@ class SyncedLyricsWidget extends StatefulWidget {
     this.bottomPadding = 350.0,
     this.topPadding = 8.0,
     this.onSeek,
+    this.selectionMode = false,
+    this.selectedIndices = const {},
+    this.onLineToggled,
+    this.onLineLongPressed,
   });
 
   @override
@@ -380,17 +394,44 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
         final line = _lyrics[index];
         final isActive = index == _currentIndex;
         final isPassed = index < _currentIndex;
+        final isSelected = widget.selectedIndices.contains(index);
 
         if (line.words.isEmpty) {
           return const SizedBox(height: 24);
         }
 
-        final double alpha = isActive ? 1.0 : (isPassed ? 0.3 : 0.4);
+        final double alpha = widget.selectionMode
+            ? (isSelected ? 1.0 : 0.35)
+            : (isActive ? 1.0 : (isPassed ? 0.3 : 0.4));
 
         return GestureDetector(
-          onTap: () => widget.onSeek?.call(line.time),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+          onTap: () {
+            if (widget.selectionMode) {
+              widget.onLineToggled?.call(index);
+            } else {
+              widget.onSeek?.call(line.time);
+            }
+          },
+          onLongPress: () => widget.onLineLongPressed?.call(index),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: isSelected ? 12 : 0,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: isSelected
+                  ? Border.all(
+                      color: Colors.white.withOpacity(0.25),
+                      width: 1,
+                    )
+                  : null,
+            ),
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOut,

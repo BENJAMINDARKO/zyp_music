@@ -1,3 +1,11 @@
+## [1.2.12] - 2026-07-10
+
+### Added
+- **Share Lyrics as Image**: Added ability to long-press a lyric line to enter selection mode, select multiple lines, and share them as a beautifully formatted image with dynamic color theming based on the album art (with 5 other manual color presets).
+
+### Fixed
+- **Persistent Keystore in CI**: Configured GitHub Actions to restore a fixed, persistent debug keystore from repository secrets, ensuring consistent APK signatures across runs for clean over-the-air updates.
+
 ## [1.2.11] - 2026-07-09
 
 ### Added

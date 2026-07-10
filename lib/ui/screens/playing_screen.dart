@@ -17,6 +17,7 @@ import '../widgets/synced_lyrics_widget.dart';
 import '../widgets/single_line_lyrics_widget.dart';
 import '../widgets/lyrics_timing_slider.dart';
 import '../widgets/audio_output_selector.dart';
+import '../widgets/lyrics_share_bottom_sheet.dart';
 import 'dart:async';
 import '../../presentation/providers/settings_provider.dart';
 import '../../presentation/providers/download_provider.dart';
@@ -77,6 +78,58 @@ class _PlayingScreenState extends State<PlayingScreen>
 
   bool _lyricsScrollPaused = false;
   int? _frozenPositionMs;
+
+  // ── Lyrics selection state ───────────────────────────────────
+  bool _lyricsSelectionMode = false;
+  final Set<int> _selectedLyricIndices = {};
+  List<LyricLine> _parsedLyricsCache = [];
+
+  void _enterSelectionMode(int index) {
+    final lyrics = context.read<PlayerProvider>().lyrics ?? '';
+    setState(() {
+      _parsedLyricsCache = _parseLyrics(lyrics);
+      _lyricsSelectionMode = true;
+      _selectedLyricIndices.add(index);
+      // pause scroll so lyrics don't jump while selecting
+      if (!_lyricsScrollPaused) _toggleLyricsScroll();
+    });
+  }
+
+  void _toggleLyricSelection(int index) {
+    setState(() {
+      if (_selectedLyricIndices.contains(index)) {
+        _selectedLyricIndices.remove(index);
+      } else {
+        _selectedLyricIndices.add(index);
+      }
+    });
+  }
+
+  void _cancelSelectionMode() {
+    setState(() {
+      _lyricsSelectionMode = false;
+      _selectedLyricIndices.clear();
+    });
+  }
+
+  void _openShareSheet(PlayerProvider player) {
+    if (_selectedLyricIndices.isEmpty) return;
+    final sorted = _selectedLyricIndices.toList()..sort();
+    final lines = sorted
+        .where((i) => i < _parsedLyricsCache.length)
+        .map((i) => _parsedLyricsCache[i].words)
+        .where((w) => w.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return;
+    LyricsShareBottomSheet.show(
+      context,
+      selectedLines: lines,
+      title: player.currentTrack?.title ?? '',
+      artist: player.currentTrack?.author ?? '',
+      thumbnailUrl: player.currentTrack?.thumbnailUrl,
+      dominantColor: player.dominantColor ?? const Color(0xFF2B2B00),
+    );
+  }
 
 
   void _toggleLyricsScroll() {
@@ -428,6 +481,10 @@ class _PlayingScreenState extends State<PlayingScreen>
                                           autoScroll: !_lyricsScrollPaused,
                                           bottomPadding: 120.0,
                                           topPadding: 24.0,
+                                          selectionMode: _lyricsSelectionMode,
+                                          selectedIndices: _selectedLyricIndices,
+                                          onLineToggled: _toggleLyricSelection,
+                                          onLineLongPressed: _enterSelectionMode,
                                           onSeek: (time) {
                                             _resetHideControlsTimer();
                                             player.startSeek();
@@ -606,23 +663,28 @@ class _PlayingScreenState extends State<PlayingScreen>
         children: [
           if (_lyricsViewMode == _LyricsViewMode.fullscreen) ...[
   
-                        // Lyrics timing slider + pause/resume (visible only in State B)
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                _lyricsScrollPaused
-                                    ? PhosphorIconsFill.play
-                                    : PhosphorIconsFill.pause,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                              onPressed: _toggleLyricsScroll,
-                              tooltip: _lyricsScrollPaused
-                                  ? 'Resume scrolling'
-                                  : 'Pause scrolling',
-                            ),
-                            const Expanded(child: LyricsTimingSlider()),
-                          ],
+                        // Lyrics timing slider / selection action bar
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: _lyricsSelectionMode
+                              ? _buildSelectionActionBar(player)
+                              : Row(
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        _lyricsScrollPaused
+                                            ? PhosphorIconsFill.play
+                                            : PhosphorIconsFill.pause,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                      onPressed: _toggleLyricsScroll,
+                                      tooltip: _lyricsScrollPaused
+                                          ? 'Resume scrolling'
+                                          : 'Pause scrolling',
+                                    ),
+                                    const Expanded(child: LyricsTimingSlider()),
+                                  ],
+                                ),
                         ),
   
           ] else ...[
@@ -914,6 +976,41 @@ class _PlayingScreenState extends State<PlayingScreen>
     );
   }
 
+  Widget _buildSelectionActionBar(PlayerProvider player) {
+    final count = _selectedLyricIndices.length;
+    return Padding(
+      key: const ValueKey('selection_bar'),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Cancel selection',
+            onPressed: _cancelSelectionMode,
+          ),
+          Expanded(
+            child: Text(
+              count == 0
+                  ? 'Tap lines to select'
+                  : '$count line${count == 1 ? '' : 's'} selected',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+              ),
+            ),
+          ),
+          if (count > 0)
+            IconButton(
+              icon: const Icon(Icons.share_rounded),
+              tooltip: 'Share selected lyrics',
+              onPressed: () => _openShareSheet(player),
+            ),
+        ],
+      ),
+    );
+  }
+
   LyricLine? _findActiveLine(List<LyricLine> lyrics, Duration position) {
     LyricLine? active;
     for (final line in lyrics) {
@@ -957,6 +1054,8 @@ class _PlayingScreenState extends State<PlayingScreen>
       }
     }
 
+    // Cache so the share sheet can read the lyric words by index.
+    _parsedLyricsCache = result;
     return result;
   }
 
