@@ -61,8 +61,7 @@ class _AlbumScreenState extends State<AlbumScreen> {
   void _playTrack(int index) {
     if (_album == null) return;
     final player = context.read<PlayerProvider>();
-    final track = _album!.tracks[index];
-    player.playTrackWithNewSession(track);
+    player.playQueueWithNewSession(_album!.tracks, startIndex: index, playlistId: _album!.id);
   }
 
   void _playAll() {

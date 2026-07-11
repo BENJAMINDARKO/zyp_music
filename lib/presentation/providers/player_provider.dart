@@ -736,6 +736,16 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     await playTrack(track);
   }
 
+  Future<void> playQueueWithNewSession(List<Track> tracks, {int startIndex = 0, String? playlistId}) async {
+    _recentlyPlayed.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_recentlyPlayedKey);
+    setQueue(tracks, startIndex: startIndex, playlistId: playlistId);
+    if (tracks.isNotEmpty && startIndex >= 0 && startIndex < tracks.length) {
+      await playTrack(tracks[startIndex]);
+    }
+  }
+
   Future<void> _addToRecentlyPlayed(Track track) async {
     _recentlyPlayed.removeWhere((t) => t.id == track.id);
     _recentlyPlayed.insert(0, track);

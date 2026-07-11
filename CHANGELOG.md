@@ -1,3 +1,8 @@
+## [1.2.18] - 2026-07-10
+
+### Added
+- **Complete Album/Playlist Playback**: Tapping "Play All" or any track inside an Album or Playlist now queues the entire list and begins playing from the selected track, instead of queueing only that single track.
+
 ## [1.2.17] - 2026-07-10
 
 ### Changed

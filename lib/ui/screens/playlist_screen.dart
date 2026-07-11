@@ -59,8 +59,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   void _playTrack(int index) {
     if (_playlist == null) return;
     final player = context.read<PlayerProvider>();
-    final track = _playlist!.tracks[index];
-    player.playTrackWithNewSession(track);
+    player.playQueueWithNewSession(_playlist!.tracks, startIndex: index, playlistId: _playlist!.id);
   }
 
   void _playAll() {
