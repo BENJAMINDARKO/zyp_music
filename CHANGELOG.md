@@ -1,3 +1,15 @@
+## [1.2.25] - 2026-07-11
+
+### Added
+- **Dynamic Release Notes in Update Popup**: The automatic update dialog now fetches and displays the actual release notes/changelog body directly from the GitHub release.
+
+### Changed
+- **Fullscreen Lyrics Overhaul**: Housed the lyrics and player controls in separate frosted glass cards.
+- **Top-Stretching Layout**: Integrated the drag handle, spinning CD, track title/artist, and karaoke button directly inside the frosted lyrics card. Hid the compact top bar in fullscreen lyrics mode, allowing the card to stretch all the way to the top under SafeArea.
+- **Standard Controls Reuse**: Reused the exact same full-featured media player controls at the bottom, removing duplicate player layouts.
+- **7-Second Inactivity Collapse**: Implemented a 7-second inactivity timer that smoothly fades out and collapses the bottom controls card. Tapping the lyrics card instantly slides the controls card back up and resets the timer.
+- **Downsized Lyrics Text**: Downsized all lyric font sizes by 35% in `synced_lyrics_widget.dart` to fit beautifully inside the frosted container.
+
 ## [1.2.24] - 2026-07-10
 
 ### Changed

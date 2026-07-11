@@ -31,6 +31,7 @@ class UpdateService {
         final Map<String, dynamic> data = json.decode(response.body);
         final String latestVersion = data['tag_name'] ?? '';
         final List<dynamic> assets = data['assets'] ?? [];
+        final String? changelog = data['body'];
 
         if (latestVersion.isEmpty) return;
 
@@ -51,7 +52,7 @@ class UpdateService {
           }
 
           if (apkUrl != null && context.mounted) {
-            _showUpdateDialog(context, latestVersion, apkUrl);
+            _showUpdateDialog(context, latestVersion, apkUrl, changelog);
           } else {
             AppLogger.log(
               'New version found but no APK asset is attached to the release.',
@@ -105,6 +106,7 @@ class UpdateService {
         final Map<String, dynamic> data = json.decode(response.body);
         final String latestVersion = data['tag_name'] ?? '';
         final List<dynamic> assets = data['assets'] ?? [];
+        final String? changelog = data['body'];
 
         if (latestVersion.isEmpty) {
           if (context.mounted) {
@@ -129,7 +131,7 @@ class UpdateService {
           if (context.mounted) {
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
             if (apkUrl != null) {
-              _showUpdateDialog(context, latestVersion, apkUrl);
+              _showUpdateDialog(context, latestVersion, apkUrl, changelog);
             } else {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('New version found but no APK asset is attached.')),
@@ -198,6 +200,7 @@ class UpdateService {
     BuildContext context,
     String latestVersion,
     String downloadUrl,
+    String? changelog,
   ) {
     showDialog(
       context: context,
@@ -211,8 +214,48 @@ class UpdateService {
             'Update Available ($latestVersion)',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          content: const Text(
-            'A new version of Zyp Music is available. Would you like to download and install it now?',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'A new version of Zyp Music is available. Would you like to download and install it now?',
+                  style: TextStyle(fontSize: 14),
+                ),
+                if (changelog != null && changelog.trim().isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'What\'s New:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.maxFinite,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.08),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      changelog,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withOpacity(0.85),
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
           actions: [
             TextButton(

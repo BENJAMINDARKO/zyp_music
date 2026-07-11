@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dart_ytmusic_api/types.dart' as ytm_types;
 import '../../domain/entities/playlist.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
@@ -581,7 +582,39 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<Artist> getArtist(String artistId) async {
-    final a = await remoteDataSource.getArtist(artistId);
+    final results = await Future.wait([
+      remoteDataSource.getArtist(artistId),
+      remoteDataSource.getArtistSongs(artistId).catchError((e) {
+        return <ytm_types.SongDetailed>[];
+      }),
+    ]);
+
+    final a = results[0] as ytm_types.ArtistFull;
+    final songsList = results[1] as List<ytm_types.SongDetailed>;
+
+    List<Track> topTracks;
+    if (songsList.isNotEmpty) {
+      topTracks = songsList.map((s) => Track(
+        id: s.videoId,
+        title: s.name,
+        thumbnailUrl: s.thumbnails.lastOrNull?.url,
+        duration: s.duration == null ? null : Duration(seconds: s.duration!),
+        author: a.name,
+        albumId: s.album?.albumId,
+        index: 0,
+      )).toList();
+    } else {
+      topTracks = a.topSongs.map((s) => Track(
+        id: s.videoId,
+        title: s.name,
+        thumbnailUrl: s.thumbnails.lastOrNull?.url,
+        duration: s.duration == null ? null : Duration(seconds: s.duration!),
+        author: a.name,
+        albumId: s.album?.albumId,
+        index: 0,
+      )).toList();
+    }
+
     return Artist(
       id: a.artistId,
       name: a.name,
@@ -593,18 +626,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         year: al.year?.toString(),
         thumbnailUrl: al.thumbnails.lastOrNull?.url,
       )).toList(),
-      topTracks: a.topSongs.map((s) => Track(
-        id: s.videoId,
-        title: s.name,
-        thumbnailUrl: s.thumbnails.lastOrNull?.url,
-        // C1: preserve null. See sibling block above.
-        duration: s.duration == null
-            ? null
-            : Duration(seconds: s.duration!),
-        author: a.name,
-        albumId: s.album?.albumId,
-        index: 0,
-      )).toList(),
+      topTracks: topTracks,
     );
   }
 

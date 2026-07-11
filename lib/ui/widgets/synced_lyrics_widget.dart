@@ -293,7 +293,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
           child: Text(
             widget.lyricsText,
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 13,
               height: 1.8,
               fontWeight: FontWeight.normal,
             ),
@@ -437,7 +437,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
               curve: Curves.easeOut,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: alpha),
-                fontSize: 32.0,
+                fontSize: 21.0,
                 fontWeight: FontWeight.w800,
                 height: 1.3,
                 letterSpacing: -1.0,
@@ -472,7 +472,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
             key: ValueKey(currentLine),
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 30,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
               height: 1.4,
             ),

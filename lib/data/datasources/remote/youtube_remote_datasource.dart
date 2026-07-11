@@ -426,6 +426,10 @@ class YoutubeRemoteDataSource {
     return await _ytMusic.getArtist(artistId);
   }
 
+  Future<List<ytm_types.SongDetailed>> getArtistSongs(String artistId) async {
+    return await _ytMusic.getArtistSongs(artistId);
+  }
+
   Future<ytm_types.PlaylistFull> getPlaylistFull(String playlistId) async {
     return await _ytMusic.getPlaylist(playlistId);
   }
