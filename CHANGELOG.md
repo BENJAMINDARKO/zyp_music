@@ -1,7 +1,7 @@
-## [1.3.0] - 2026-07-11
+## [1.3.1] - 2026-07-11
 
 ### Added
-- **About Tab in Settings**: Added a new settings tab displaying description, version 1.3.0, and clickable GitHub repository link.
+- **About Tab in Settings**: Added a new settings tab displaying description, version 1.3.1, and clickable GitHub repository link.
 - **History Queue Context Menu**: Long-pressing a track in the recently played history list now correctly opens the options menu.
 
 ### Changed

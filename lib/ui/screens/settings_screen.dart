@@ -600,7 +600,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Version 1.3.0',
+                'Version 1.3.1',
                 style: TextStyle(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
