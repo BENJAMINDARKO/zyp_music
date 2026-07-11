@@ -130,7 +130,7 @@ Future<void> main() async {
         androidNotificationChannelId: 'ytmusix_music',
         androidNotificationChannelName: 'Music Playback',
         androidNotificationIcon: 'mipmap/ic_launcher',
-        androidNotificationOngoing: true,
+        androidNotificationOngoing: false,
         androidNotificationClickStartsActivity: true,
         androidStopForegroundOnPause: false,
       ),
