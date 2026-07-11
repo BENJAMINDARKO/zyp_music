@@ -1,3 +1,8 @@
+## [1.2.19] - 2026-07-10
+
+### Changed
+- **Album Page Redesign**: Styled the album cover background with a centered circular play button, a love icon on the bottom-left, a download icon on the bottom-right, and a centered album title. Replaced caret left icon with thin left arrow. Added circular track thumbnail indicators and configured track love icons to turn green when toggled.
+
 ## [1.2.18] - 2026-07-10
 
 ### Added

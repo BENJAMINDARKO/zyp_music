@@ -106,27 +106,33 @@ class _AlbumScreenState extends State<AlbumScreen> {
         slivers: [
           SliverAppBar(
             backgroundColor: Colors.black,
-            expandedHeight: 300,
+            expandedHeight: 320,
             pinned: true,
-            actions: [
-              Consumer<PlaylistProvider>(
-                builder: (context, provider, _) {
-                  final isFavorite = provider.isAlbumFavorite(_album!.id);
-                  return IconButton(
-                    icon: Icon(isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart, color: isFavorite ? Colors.red : Colors.white),
-                    onPressed: () => provider.toggleFavoriteAlbum(_album!),
-                  );
-                },
+            centerTitle: true,
+            title: const Text(
+              'Album',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: Colors.white,
               ),
+            ),
+            actions: [
               IconButton(
                 icon: const Icon(PhosphorIconsRegular.queue, color: Colors.white),
                 onPressed: () {
                   final player = context.read<PlayerProvider>();
                   player.appendToQueue(_album!.tracks);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${_album!.tracks.length} tracks to queue')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Added ${_album!.tracks.length} tracks to queue')),
+                  );
                 },
               ),
             ],
+            leading: IconButton(
+              icon: Icon(PhosphorIconsRegular.arrowLeft, color: Theme.of(context).colorScheme.onSurface),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -149,76 +155,87 @@ class _AlbumScreenState extends State<AlbumScreen> {
                       ),
                     ),
                   ),
-                  Positioned(
-                    bottom: 24,
-                    left: 24,
-                    right: 24,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _album!.title,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${_album!.artistName ?? 'Unknown Artist'} • ${_album!.year ?? ''}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _playAll,
-                              icon: const Icon(PhosphorIconsFill.play, color: Colors.black),
-                              label: const Text("Play", style: TextStyle(color: Colors.black)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFEAB308),
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                              ),
+                  // Center play button
+                  Align(
+                    alignment: Alignment.center,
+                    child: GestureDetector(
+                      onTap: _playAll,
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFFE91E63).withOpacity(0.85),
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
                             ),
-                            const SizedBox(width: 12),
-                            // Favorite album button
-                            Consumer<PlaylistProvider>(
-                              builder: (context, pp, _) {
-                                final isFav = pp.favoriteAlbums.any((a) => a.id == _album!.id);
-                                return IconButton(
-                                  icon: Icon(
-                                    isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                                    color: isFav ? Colors.red : Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
-                                    size: 28,
-                                  ),
-                                  onPressed: () => pp.toggleFavoriteAlbum(
-                                    _album!,
-                                    downloadProvider: context.read<DownloadProvider>(),
-                                  ),
-                                );
-                              },
-                            ),
-                            // Export album button
-                            AlbumExportIcon(album: _album!, size: 28),
-                            const SizedBox(width: 8),
-                            // Download album button
-                            AlbumDownloadIcon(album: _album!, size: 28),
                           ],
                         ),
-                      ],
+                        child: const Icon(
+                          PhosphorIconsFill.play,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
                     ),
+                  ),
+                  // Bottom Left: Album Favourite (A love)
+                  Positioned(
+                    bottom: 12,
+                    left: 16,
+                    child: Consumer<PlaylistProvider>(
+                      builder: (context, provider, _) {
+                        final isFavorite = provider.isAlbumFavorite(_album!.id);
+                        return IconButton(
+                          icon: Icon(
+                            isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                            color: isFavorite ? Colors.red : Colors.white,
+                            size: 28,
+                          ),
+                          onPressed: () => provider.toggleFavoriteAlbum(
+                            _album!,
+                            downloadProvider: context.read<DownloadProvider>(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  // Bottom Center: Album Title
+                  Positioned(
+                    bottom: 24, // vertical center offset alignment
+                    left: 64,
+                    right: 64,
+                    child: Text(
+                      _album!.title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black87,
+                            offset: Offset(0, 2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Bottom Right: Download Icon
+                  Positioned(
+                    bottom: 16,
+                    right: 20,
+                    child: AlbumDownloadIcon(album: _album!, size: 28),
                   ),
                 ],
               ),
-            ),
-            leading: IconButton(
-              icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
-              onPressed: () => Navigator.of(context).pop(),
             ),
           ),
           SliverPadding(
@@ -230,21 +247,39 @@ class _AlbumScreenState extends State<AlbumScreen> {
                   return PlayingTrackMask(
                     track: track,
                     child: ListTile(
-                      leading: SizedBox(
-                        width: 40,
-                        child: Center(
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                        ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: (_album!.thumbnailUrl != null)
+                            ? CachedNetworkImage(
+                                imageUrl: rewriteThumbnailSize(_album!.thumbnailUrl, 200),
+                                width: 40,
+                                height: 40,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Container(
+                                  width: 40,
+                                  height: 40,
+                                  color: Colors.grey[850],
+                                  child: const Icon(PhosphorIconsRegular.musicNote, size: 20, color: Colors.white30),
+                                ),
+                              )
+                            : Container(
+                                width: 40,
+                                height: 40,
+                                color: Colors.grey[850],
+                                child: const Icon(PhosphorIconsRegular.musicNote, size: 20, color: Colors.white30),
+                              ),
                       ),
                       title: Row(
                         children: [
                           Expanded(
                             child: Text(
                               track.title,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.white,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -252,47 +287,46 @@ class _AlbumScreenState extends State<AlbumScreen> {
                           if (track.isExplicit) const ExplicitIcon(),
                         ],
                       ),
-                    subtitle: Text(
-                      track.author ?? 'Unknown Artist',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Consumer<PlaylistProvider>(
-                          builder: (context, playlistProvider, _) {
-                            final isFav = playlistProvider.isFavorite(track.id);
-                            return IconButton(
-                              icon: Icon(
-                                isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                                color: isFav ? const Color(0xFFEAB308) : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                playlistProvider.toggleFavorite(
-                                  track,
-                                  downloadProvider: context.read<DownloadProvider>(),
-                                );
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            );
-                          },
+                      subtitle: Text(
+                        '${track.author ?? 'Unknown Artist'} - ${_album!.title}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 12,
                         ),
-                        const SizedBox(width: 8),
-                        TrackExportIcon(track: track, size: 20),
-                        const SizedBox(width: 8),
-                        TrackDownloadIcon(track: track, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          formatDuration(track.duration),
-                        ),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TrackDownloadIcon(track: track, size: 20),
+                          const SizedBox(width: 12),
+                          Consumer<PlaylistProvider>(
+                            builder: (context, playlistProvider, _) {
+                              final isFav = playlistProvider.isFavorite(track.id);
+                              return IconButton(
+                                icon: Icon(
+                                  isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                                  color: isFav ? const Color(0xFF22C55E) : Colors.white.withOpacity(0.5),
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  playlistProvider.toggleFavorite(
+                                    track,
+                                    downloadProvider: context.read<DownloadProvider>(),
+                                  );
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      onTap: () => _playTrack(index),
+                      onLongPress: () => TrackContextMenu.show(context, track),
                     ),
-                    onTap: () => _playTrack(index),
-                    onLongPress: () => TrackContextMenu.show(context, track),
-                  ));
+                  );
                 },
                 childCount: _album!.tracks.length,
               ),
