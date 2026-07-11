@@ -78,6 +78,10 @@ class SingleLineLyricsWidget extends StatelessWidget {
               return const SizedBox.shrink();
             }
 
+            final screenHeight = MediaQuery.of(context).size.height;
+            final bool isSmallScreen = screenHeight < 680;
+            final double lyricFontSize = isSmallScreen ? 15.0 : 20.0;
+
             return AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               switchInCurve: Curves.easeIn,
@@ -99,6 +103,7 @@ class SingleLineLyricsWidget extends StatelessWidget {
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w400,
                     color: theme.colorScheme.onSurface,
+                    fontSize: lyricFontSize,
                     height: 1.3,
                   ),
                   maxLines: 2,

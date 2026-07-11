@@ -1,3 +1,8 @@
+## [1.2.24] - 2026-07-10
+
+### Changed
+- **Frosted Glass Controls & Responsive Layout Squeezing**: Redesigned the bottom controls of the Now Playing player screen to use a frosted glass container with white-contrasting text and control buttons. Squeezed card paddings, font sizes, margins, and icons to fit within less than 25% of the screen estate. Added dynamic `Spacer` distribution and capped artwork sizes to provide the lyrics section with plenty of breathing room and prevent RenderFlex overflows. Changed the dismiss button to a back-pointing caret and converted the audio output selector pill to a static readout.
+
 ## [1.2.23] - 2026-07-10
 
 ### Changed

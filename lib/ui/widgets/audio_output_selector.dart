@@ -141,89 +141,7 @@ class _AudioOutputSelectorState extends State<AudioOutputSelector> {
     }
   }
 
-  void _showOutputPicker() {
-    final devices = _outputDevices;
-    if (devices.isEmpty) return;
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 8),
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'Audio Output',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-                ...devices.map((device) {
-                  final isActive = _activeDevice?.id == device.id;
-                  return ListTile(
-                    leading: Icon(
-                      _iconForType(device.type),
-                      color: isActive
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    title: Text(
-                      _displayName(device),
-                      style: TextStyle(
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                        color: isActive
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    trailing: isActive
-                        ? Icon(PhosphorIconsFill.checkCircle,
-                            color: Theme.of(context).colorScheme.primary, size: 20)
-                        : null,
-                    onTap: () {
-                      // On Android, we cannot programmatically switch the audio
-                      // output route at the application level — the OS manages
-                      // routing. But we can launch the system media-output
-                      // panel so the user can switch there:
-                      _launchSystemOutputPanel();
-                      Navigator.pop(ctx);
-                    },
-                  );
-                }),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _launchSystemOutputPanel() async {
-    // On Android, audio routing is managed by the OS. The in-app picker
-    // above shows the user which devices are connected. Actual switching
-    // happens at the system level (e.g. connecting/disconnecting BT).
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -231,34 +149,37 @@ class _AudioOutputSelectorState extends State<AudioOutputSelector> {
     final label = device != null ? _displayName(device) : 'Speaker';
     final icon = device != null ? _iconForType(device.type) : PhosphorIconsRegular.speakerHigh;
 
-    return GestureDetector(
-      onTap: _showOutputPicker,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: widget.iconColor.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: widget.iconColor, size: 18),
-            const SizedBox(width: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 120),
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: widget.iconColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+    final screenHeight = MediaQuery.of(context).size.height;
+    final bool isSmallScreen = screenHeight < 680;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmallScreen ? 8.0 : 12.0,
+        vertical: isSmallScreen ? 4.0 : 6.0,
+      ),
+      decoration: BoxDecoration(
+        color: widget.iconColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: widget.iconColor, size: isSmallScreen ? 14 : 18),
+          SizedBox(width: isSmallScreen ? 4 : 6),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isSmallScreen ? 90 : 120),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: widget.iconColor,
+                fontSize: isSmallScreen ? 10 : 12,
+                fontWeight: FontWeight.w500,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
