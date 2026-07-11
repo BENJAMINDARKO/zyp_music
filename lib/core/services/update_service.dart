@@ -31,7 +31,7 @@ class UpdateService {
         final Map<String, dynamic> data = json.decode(response.body);
         final String latestVersion = data['tag_name'] ?? '';
         final List<dynamic> assets = data['assets'] ?? [];
-        final String? changelog = data['body'];
+        final String? changelog = _sanitizeChangelog(data['body']);
 
         if (latestVersion.isEmpty) return;
 
@@ -106,7 +106,7 @@ class UpdateService {
         final Map<String, dynamic> data = json.decode(response.body);
         final String latestVersion = data['tag_name'] ?? '';
         final List<dynamic> assets = data['assets'] ?? [];
-        final String? changelog = data['body'];
+        final String? changelog = _sanitizeChangelog(data['body']);
 
         if (latestVersion.isEmpty) {
           if (context.mounted) {
@@ -193,6 +193,22 @@ class UpdateService {
       AppLogger.log('Error parsing version strings: $e', name: 'UpdateService');
     }
     return false;
+  }
+
+  static String? _sanitizeChangelog(String? changelog) {
+    if (changelog == null) return null;
+    final lines = changelog.split('\n');
+    final cleanLines = lines.where((line) {
+      final l = line.trim().toLowerCase();
+      if (l.contains('automated release for zyp music') ||
+          l.contains('signed with the debug key') ||
+          l.contains('compiled apk signed with')) {
+        return false;
+      }
+      return true;
+    }).toList();
+    final result = cleanLines.join('\n').trim();
+    return result.isEmpty ? null : result;
   }
 
   /// Prompt the user to update.

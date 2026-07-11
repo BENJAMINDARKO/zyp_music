@@ -83,7 +83,7 @@ class MusicAudioHandler extends BaseAudioHandler {
       processingState: _convertState(newPlayer.processingState),
       controls: _controls,
       systemActions: _systemActions,
-      androidCompactActionIndices: [1, 0, 3],
+      androidCompactActionIndices: _compactActionIndices(wasPlaying),
     );
     debugPrint('[PBS-EMIT] (replacePlayer) playing=${reemitState.playing} '
         'proc=${reemitState.processingState} pos=${reemitState.updatePosition}');
@@ -128,12 +128,16 @@ class MusicAudioHandler extends BaseAudioHandler {
     MediaAction.play,
     MediaAction.pause,
     MediaAction.skipToNext,
+    MediaAction.seek,
   };
+
+  List<int> _compactActionIndices(bool playing) =>
+      playing ? const [0, 2, 3] : const [0, 1, 3];
 
   PlaybackState get _defaultPlaybackState => PlaybackState(
         controls: _controls,
         systemActions: _systemActions,
-        androidCompactActionIndices: [1, 0, 3],
+        androidCompactActionIndices: const [0, 1, 3],
         processingState: AudioProcessingState.idle,
         playing: false,
         updatePosition: Duration.zero,
@@ -222,7 +226,7 @@ class MusicAudioHandler extends BaseAudioHandler {
         processingState: _convertState(_player.processingState),
         controls: _controls,
         systemActions: _systemActions,
-        androidCompactActionIndices: [1, 0, 3],
+        androidCompactActionIndices: _compactActionIndices(_player.playing),
       );
       debugPrint('[PBS-EMIT] playing=${newState.playing} '
           'proc=${newState.processingState} pos=${newState.updatePosition}');
@@ -302,7 +306,7 @@ class MusicAudioHandler extends BaseAudioHandler {
       processingState: _convertState(state.processingState),
       controls: _controls,
       systemActions: _systemActions,
-      androidCompactActionIndices: [1, 0, 3],
+      androidCompactActionIndices: _compactActionIndices(state.playing),
     );
     debugPrint('[PBS-EMIT] playing=${newState.playing} '
         'proc=${newState.processingState} pos=${newState.updatePosition}');
@@ -441,7 +445,7 @@ class MusicAudioHandler extends BaseAudioHandler {
     final stopState = _defaultPlaybackState.copyWith(
       controls: _controls,
       systemActions: _systemActions,
-      androidCompactActionIndices: [1, 0, 3],
+      androidCompactActionIndices: const [0, 1, 3],
     );
     debugPrint('[PBS-EMIT] (stop) playing=${stopState.playing} '
         'proc=${stopState.processingState} pos=${stopState.updatePosition}');

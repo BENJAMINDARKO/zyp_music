@@ -1,6 +1,7 @@
 ## [1.3.0] - 2026-07-11
 
 ### Added
+- **About Tab in Settings**: Added a new settings tab displaying description, version 1.3.0, and clickable GitHub repository link.
 - **History Queue Context Menu**: Long-pressing a track in the recently played history list now correctly opens the options menu.
 
 ### Changed
@@ -8,8 +9,13 @@
 - **System-Wide Back Gestures & Navigation**: Back gestures and android physical buttons now correctly navigate to previous sub-pages (e.g. nested artist details or albums) instead of immediately returning to the home screen.
 - **Always-Available Album Navigation**: The context menu now always displays "Go to Album". If a track lacks explicit album metadata, it falls back to a search query based on the track title and artist.
 - **Restored Lyrics Adjustment Row**: Re-integrated scrolling controls, timing offset slider, and playback speed selector directly at the bottom of the frosted lyrics card.
+- **Dynamic Compact Notification Icons**: Play/Pause button in the collapsed notification drawer now dynamically toggles based on playback state instead of hardcoding a disabled Play icon.
+- **Automated Release Notes in CI**: Updated the release workflow to dynamically extract and upload version release notes from CHANGELOG.md to the GitHub release.
 
 ### Fixed
+- **AutoDJ Cold Start**: Resolved why AutoDJ sometimes failed to play from an empty state by executing the Phase 5 "Idle Cold-Start Playback Rule" (`_coldStartForMode`) on arm.
+- **Background Playback Stability**: Fixed background audio dropouts by keeping the foreground service alive when paused.
+- **Notification Seekbar & Skips**: Enabled seekbar scrubbing and skip controls from the notification drawer by registering `MediaAction.seek` and syncing Dart player queue changes.
 - **AutoDJ Repeat Conflict**: Fixed a conflict between repeat modes and AutoDJ generation where repeat mode "none" or "all" would prevent AutoDJ from queueing up and playing new tracks when reaching the end of the manual queue.
 
 ## [1.2.25] - 2026-07-11

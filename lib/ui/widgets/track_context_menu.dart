@@ -196,7 +196,7 @@ class TrackContextMenu {
                       subtitle: 'Start Auto DJ recommended station',
                       onTap: () {
                         Navigator.pop(sheetContext);
-                        AutoDJModePicker.show(context);
+                        AutoDJModePicker.show(context, seedTrack: track);
                       },
                     ),
                     AppleMusicSheet.buildMenuItem(

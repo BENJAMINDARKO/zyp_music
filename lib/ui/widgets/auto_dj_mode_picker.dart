@@ -5,11 +5,12 @@ import 'package:provider/provider.dart';
 import '../../core/services/auto_dj_routing_service.dart';
 import '../../data/datasources/local/playlist_database.dart';
 import '../../domain/entities/auto_dj_mode.dart';
+import '../../domain/entities/video.dart';
 import '../../presentation/providers/player_provider.dart';
 import 'apple_music_sheet.dart';
 
 class AutoDJModePicker {
-  static void show(BuildContext context) {
+  static void show(BuildContext context, {Track? seedTrack}) {
     final messenger = ScaffoldMessenger.of(context);
     showModalBottomSheet(
       context: context,
@@ -57,6 +58,9 @@ class AutoDJModePicker {
                             routing.setShuffleLibraryGenreFilter(filter);
                           }
                           final provider = sheetContext.read<PlayerProvider>();
+                          if (seedTrack != null) {
+                            await provider.playTrackWithNewSession(seedTrack);
+                          }
                           await provider.setAutoDJMode(AutoDJMode.shuffleLibrary);
                           final filterName = filter ?? 'no filter';
                           messenger.showSnackBar(
@@ -71,6 +75,9 @@ class AutoDJModePicker {
                         }
                         Navigator.pop(sheetContext);
                         final provider = sheetContext.read<PlayerProvider>();
+                        if (seedTrack != null && mode != AutoDJMode.off) {
+                          await provider.playTrackWithNewSession(seedTrack);
+                        }
                         final result = await provider.setAutoDJMode(mode);
                         final message = _snackbarFor(mode, result);
                         messenger.showSnackBar(

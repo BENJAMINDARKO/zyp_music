@@ -132,6 +132,7 @@ Future<void> main() async {
         androidNotificationIcon: 'mipmap/ic_launcher',
         androidNotificationOngoing: true,
         androidNotificationClickStartsActivity: true,
+        androidStopForegroundOnPause: false,
       ),
     );
     debugPrint('[Main] audioHandler runtimeType=${audioHandler.runtimeType} hash=${identityHashCode(audioHandler)}');

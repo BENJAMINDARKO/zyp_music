@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../presentation/providers/miniplayer_visibility_provider.dart';
 import '../../core/utils/app_logger.dart';
 import 'package:file_picker/file_picker.dart';
@@ -39,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         appBar: AppBar(
           title: Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -58,6 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Tab(text: "Audio"),
               Tab(text: "Downloads"),
               Tab(text: "System"),
+              Tab(text: "About"),
             ],
           ),
         ),
@@ -71,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildAudioTab(provider, context),
                 _buildDownloadsTab(provider, context),
                 _buildSystemTab(provider, context),
+                _buildAboutTab(context),
               ],
             );
           },
@@ -554,6 +557,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
             label: label,
             onChanged: onChanged,
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAboutTab(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Center(
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    PhosphorIconsRegular.musicNotes,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'ZYP Music',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Version 1.3.0',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+        _buildSectionHeader('About the Project'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Text(
+            'ZYP Music is a premium open-source native audio streaming application designed for Android. It features high-fidelity YouTube audio streaming, robust offline caching and download capabilities, gapless crossfade transitions, synchronized lyrics, and smart Auto DJ seed recommendations for endless music playback.',
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        _buildSectionHeader('Links'),
+        ListTile(
+          title: const Text('GitHub Repository'),
+          subtitle: Text(
+            'github.com/BENJAMINDARKO/zyp_music',
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+          ),
+          leading: Icon(PhosphorIconsRegular.githubLogo, color: Theme.of(context).colorScheme.onSurface),
+          trailing: Icon(PhosphorIconsRegular.arrowSquareOut, color: Theme.of(context).colorScheme.primary),
+          onTap: () async {
+            final uri = Uri.parse('https://github.com/BENJAMINDARKO/zyp_music');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            } else {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not open repository link.')),
+                );
+              }
+            }
+          },
         ),
       ],
     );

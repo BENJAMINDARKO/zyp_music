@@ -81,7 +81,7 @@ class _PlayingScreenState extends State<PlayingScreen>
   void _resetHideControlsTimer() {
     setState(() => _showControls = true);
     _hideControlsTimer?.cancel();
-    if (_lyricsViewMode == _LyricsViewMode.fullscreen && !_karaokeMode) {
+    if (_lyricsViewMode == _LyricsViewMode.fullscreen) {
       _hideControlsTimer = Timer(const Duration(seconds: 5), () {
         if (mounted && _lyricsViewMode == _LyricsViewMode.fullscreen) {
           setState(() => _showControls = false);
@@ -356,15 +356,13 @@ class _PlayingScreenState extends State<PlayingScreen>
                     // Expanded main body
                     Expanded(
                       child: _lyricsViewMode == _LyricsViewMode.fullscreen
-                          ? (_karaokeMode
-                              ? _buildKaraokeView(context)
-                              : _buildUnifiedLyricsCard(
-                                  context,
-                                  player,
-                                  track,
-                                  seekbarColor,
-                                  settings,
-                                ))
+                          ? _buildUnifiedLyricsCard(
+                              context,
+                              player,
+                              track,
+                              seekbarColor,
+                              settings,
+                            )
                           : _showQueue
                               ? _buildInlineQueueView(context, player, track)
                               : LayoutBuilder(
@@ -448,7 +446,7 @@ class _PlayingScreenState extends State<PlayingScreen>
                     // Media controls naturally laid out at the bottom
                     Builder(
                       builder: (context) {
-                        final bool showBottomControls = _showControls || (_lyricsViewMode == _LyricsViewMode.fullscreen && !_karaokeMode);
+                        final bool showBottomControls = _showControls || (_lyricsViewMode == _LyricsViewMode.fullscreen);
                         return AnimatedSize(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
@@ -539,7 +537,7 @@ class _PlayingScreenState extends State<PlayingScreen>
     final double internalSpacing2 = isSmallScreen ? 1.0 : 4.0;
     final double actionIconSize = isSmallScreen ? 16.0 : 20.0;
 
-    final bool isFullscreenLyrics = _lyricsViewMode == _LyricsViewMode.fullscreen && !_karaokeMode;
+    final bool isFullscreenLyrics = _lyricsViewMode == _LyricsViewMode.fullscreen;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -631,6 +629,9 @@ class _PlayingScreenState extends State<PlayingScreen>
     final double cardMarginHorizontal = isSmallScreen ? 12.0 : 16.0;
     final double cardMarginBottom = isSmallScreen ? 4.0 : 12.0;
 
+    final lyricsText = player.lyrics;
+    final lyrics = (lyricsText != null && lyricsText.isNotEmpty) ? _parseLyrics(lyricsText) : <LyricLine>[];
+
     return Padding(
       padding: EdgeInsets.only(
         left: cardMarginHorizontal,
@@ -653,26 +654,54 @@ class _PlayingScreenState extends State<PlayingScreen>
             ),
             child: Column(
               children: [
-                // Top drag/indicator handle
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 5,
-                    margin: const EdgeInsets.only(top: 8, bottom: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(2.5),
+                // Top drag/indicator handle (tappable to minimize)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() {
+                      _lyricsViewMode = _LyricsViewMode.compact;
+                      _lyricsExpanded = false;
+                      _lyricsExpansionTimer?.cancel();
+                    });
+                  },
+                  child: Center(
+                    child: Container(
+                      width: 36,
+                      height: 5,
+                      margin: const EdgeInsets.only(top: 8, bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2.5),
+                      ),
                     ),
                   ),
                 ),
-                // Header Row (Spinning CD + Info + Karaoke button)
+                // Header Row (Minimize button + Spinning CD + Info + Karaoke button)
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20.0,
+                    horizontal: 16.0,
                     vertical: 4.0,
                   ),
                   child: Row(
                     children: [
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        icon: Icon(
+                          PhosphorIconsRegular.caretDown,
+                          color: Colors.white.withOpacity(0.6),
+                          size: 24,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _lyricsViewMode = _LyricsViewMode.compact;
+                            _lyricsExpanded = false;
+                            _lyricsExpansionTimer?.cancel();
+                          });
+                        },
+                        tooltip: 'Minimize lyrics',
+                      ),
+                      const SizedBox(width: 12),
                       RotationTransition(
                         turns: _rotationController,
                         child: Container(
@@ -765,52 +794,103 @@ class _PlayingScreenState extends State<PlayingScreen>
                     behavior: HitTestBehavior.translucent,
                     onTap: _resetLyricsExpansionTimer,
                     onPanDown: (_) => _resetLyricsExpansionTimer(),
-                    child: (player.isLoadingLyrics || player.lyrics != null)
-                        ? ValueListenableBuilder<Duration>(
-                            valueListenable: player.positionNotifier,
-                            builder: (_, pos, __) {
-                              final effectivePos = _lyricsScrollPaused &&
-                                      _frozenPositionMs != null
-                                  ? Duration(milliseconds: _frozenPositionMs!)
-                                  : pos;
-                              return Opacity(
-                                opacity: _lyricsScrollPaused ? 0.5 : 1.0,
-                                child: SyncedLyricsWidget(
-                                  lyricsText: player.lyrics ?? '',
-                                  isLoading: player.isLoadingLyrics,
-                                  position: Duration(
-                                    milliseconds: effectivePos.inMilliseconds +
-                                        player.lyricsSyncOffsetMs,
+                    child: _karaokeMode
+                        ? (player.lyrics == null || player.lyrics!.trim().isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No lyrics available',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                                    fontSize: 16,
                                   ),
-                                  karaokeMode: false,
-                                  autoScroll: !_lyricsScrollPaused,
-                                  bottomPadding: 24.0,
-                                  topPadding: 24.0,
-                                  selectionMode: _lyricsSelectionMode,
-                                  selectedIndices: _selectedLyricIndices,
-                                  onLineToggled: _toggleLyricSelection,
-                                  onLineLongPressed: _enterSelectionMode,
-                                  onSeek: (time) {
-                                    _resetLyricsExpansionTimer();
-                                    player.startSeek();
-                                    player.endSeek(time);
+                                ),
+                              )
+                            : Center(
+                                child: ValueListenableBuilder<Duration>(
+                                  valueListenable: player.positionNotifier,
+                                  builder: (context, position, _) {
+                                    final effectivePosition = _lyricsScrollPaused &&
+                                            _frozenPositionMs != null
+                                        ? Duration(milliseconds: _frozenPositionMs!)
+                                        : position;
+                                    final activeLine =
+                                        _findActiveLine(lyrics, effectivePosition);
+
+                                    return AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 300),
+                                      layoutBuilder: (currentChild, previousChildren) {
+                                        return currentChild ?? const SizedBox.shrink();
+                                      },
+                                      transitionBuilder: (child, animation) {
+                                        return FadeTransition(opacity: animation, child: child);
+                                      },
+                                      child: Padding(
+                                        key: ValueKey('karaoke-${activeLine?.time.inMilliseconds ?? -1}'),
+                                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                                        child: Text(
+                                          activeLine?.words ?? '•••',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 24,
+                                            color: Colors.white.withOpacity(
+                                                _lyricsScrollPaused ? 0.5 : 1.0),
+                                            height: 1.4,
+                                          ),
+                                          maxLines: 4,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    );
                                   },
                                 ),
-                              );
-                            },
-                          )
-                        : Center(
-                            child: Text(
-                              'No lyrics available',
-                              style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.54),
-                                fontSize: 16,
+                              ))
+                        : (player.isLoadingLyrics || player.lyrics != null)
+                            ? ValueListenableBuilder<Duration>(
+                                valueListenable: player.positionNotifier,
+                                builder: (_, pos, __) {
+                                  final effectivePos = _lyricsScrollPaused &&
+                                          _frozenPositionMs != null
+                                      ? Duration(milliseconds: _frozenPositionMs!)
+                                      : pos;
+                                  return Opacity(
+                                    opacity: _lyricsScrollPaused ? 0.5 : 1.0,
+                                    child: SyncedLyricsWidget(
+                                      lyricsText: player.lyrics ?? '',
+                                      isLoading: player.isLoadingLyrics,
+                                      position: Duration(
+                                        milliseconds: effectivePos.inMilliseconds +
+                                            player.lyricsSyncOffsetMs,
+                                      ),
+                                      karaokeMode: false,
+                                      autoScroll: !_lyricsScrollPaused,
+                                      bottomPadding: 24.0,
+                                      topPadding: 24.0,
+                                      selectionMode: _lyricsSelectionMode,
+                                      selectedIndices: _selectedLyricIndices,
+                                      onLineToggled: _toggleLyricSelection,
+                                      onLineLongPressed: _enterSelectionMode,
+                                      onSeek: (time) {
+                                        _resetLyricsExpansionTimer();
+                                        player.startSeek();
+                                        player.endSeek(time);
+                                      },
+                                    ),
+                                  );
+                                },
+                              )
+                            : Center(
+                                child: Text(
+                                  'No lyrics available',
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacity(0.54),
+                                    fontSize: 16,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
                   ),
                 ),
                 // Divider line separating lyrics from controls
@@ -1349,104 +1429,7 @@ class _PlayingScreenState extends State<PlayingScreen>
     );
   }
 
-  Widget _buildKaraokeView(BuildContext context) {
-    final theme = Theme.of(context);
-    final iconColor = Theme.of(context).colorScheme.onSurface;
 
-    return Consumer<PlayerProvider>(
-      builder: (context, player, _) {
-        final lyricsText = player.lyrics;
-        if (lyricsText == null || lyricsText.trim().isEmpty) {
-          return Center(
-            child: Text(
-              'No lyrics available',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: iconColor.withOpacity(0.5),
-              ),
-            ),
-          );
-        }
-
-        final lyrics = _parseLyrics(lyricsText);
-        if (lyrics.isEmpty) {
-          return Center(
-            child: Text(
-              'No lyrics available',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: iconColor.withOpacity(0.5),
-              ),
-            ),
-          );
-        }
-
-        return Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: ValueListenableBuilder<Duration>(
-                  valueListenable: player.positionNotifier,
-                  builder: (context, position, _) {
-                    final effectivePosition = _lyricsScrollPaused &&
-                            _frozenPositionMs != null
-                        ? Duration(milliseconds: _frozenPositionMs!)
-                        : position;
-                    final activeLine =
-                        _findActiveLine(lyrics, effectivePosition);
-
-                    if (activeLine == null) {
-                      return const SizedBox.shrink();
-                    }
-
-                    return AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      layoutBuilder: (currentChild, previousChildren) {
-                        return currentChild ?? const SizedBox.shrink();
-                      },
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(opacity: animation, child: child);
-                      },
-                      child: Padding(
-                        key: ValueKey('karaoke-${activeLine.time.inMilliseconds}'),
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Text(
-                          activeLine.words,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: iconColor.withOpacity(
-                                _lyricsScrollPaused ? 0.5 : 1.0),
-                            height: 1.4,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Speed:',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: iconColor.withOpacity(0.7),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const SizedBox.shrink(),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   void _showUpNextModal(BuildContext context, PlayerProvider player) {
     if (_queueSheetController != null) {

@@ -75,6 +75,42 @@ jobs:
             echo "Version v${{ steps.get_version.outputs.version }} is new. Creating release."
           fi
 
+      # Step 7.5: Extract release notes for this version from CHANGELOG.md
+      - name: Extract release notes
+        run: |
+          python3 -c '
+          import sys, re
+          version = "${{ steps.get_version.outputs.version }}"
+          print(f"Extracting release notes for version: {version}")
+          try:
+              with open("CHANGELOG.md", "r") as f:
+                  content = f.read()
+              lines = content.split("\n")
+              started = False
+              notes = []
+              for line in lines:
+                  if line.startswith("## ") or line.startswith("### "):
+                      m = re.search(r"##\s*\[?" + re.escape(version) + r"\]?", line)
+                      if m:
+                          started = True
+                          continue
+                      elif started and line.startswith("## "):
+                          break
+                  if started:
+                      notes.append(line)
+              notes_str = "\n".join(notes).strip()
+              if not notes_str:
+                  notes_str = f"Release notes for v{version}"
+              with open("release_notes.md", "w") as f:
+                  f.write(notes_str)
+              print("Successfully wrote release_notes.md:")
+              print(notes_str)
+          except Exception as e:
+              with open("release_notes.md", "w") as f:
+                  f.write(f"Release v{version}")
+              print(f"Error extracting release notes: {e}")
+          '
+
       # Step 8: Automatically create GitHub Release and upload APK if version is bumped
       - name: Create Release
         if: steps.check_release.outputs.exists == 'false'
@@ -82,10 +118,7 @@ jobs:
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: Release v${{ steps.get_version.outputs.version }}
-          body: |
-            Automated release for Zyp Music version ${{ steps.get_version.outputs.version }}.
-            
-            This release contains the compiled APK signed with the debug key.
+          body_path: release_notes.md
           files: build/app/outputs/flutter-apk/app-release.apk
           draft: false
           prerelease: false

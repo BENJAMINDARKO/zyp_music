@@ -943,6 +943,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (index < _currentIndex) _currentIndex--;
       notifyListeners();
     }
+    unawaited(_syncRestoredStateToAudioHandler());
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
@@ -960,6 +961,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
     notifyListeners();
+    unawaited(_syncRestoredStateToAudioHandler());
   }
 
   Track? get currentTrack => _currentTrack;
@@ -1128,6 +1130,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       unawaited(_warmUpNewMode(activeAutoDJMode, currentTrack: seed));
     }
     notifyListeners();
+    unawaited(_syncRestoredStateToAudioHandler());
   }
 
   /// Cleared: the Auto DJ functional block has been migrated to
@@ -1274,13 +1277,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
 
     if (isActive && _isColdIdle) {
-      _isArmedStandby = true;
-      AppLogger.log(
-        '[AutoDJEngine] Entering Armed Standby. '
-        'Waiting for explicit user track choice before activating lookahead.',
-        name: 'PlayerProvider',
-      );
-      return ColdStartResult.skipped;
+      _isArmedStandby = false;
+      return _coldStartForMode(triggeredMode);
     }
 
     if (!isActive && _isArmedStandby) {
@@ -1361,6 +1359,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     
     if (fetched > 1) {
       notifyListeners();
+    }
+    if (fetched > 0) {
+      unawaited(_syncRestoredStateToAudioHandler());
     }
   }
 
@@ -1461,6 +1462,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     _queue.add(next);
     _currentIndex = 0;
     _currentTrack = next;
+    unawaited(_syncRestoredStateToAudioHandler());
     try {
       await playFromQueue(0);
     } catch (e) {
@@ -1483,6 +1485,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (tracks.isEmpty) return;
     _queue.addAll(tracks);
     notifyListeners();
+    unawaited(_syncRestoredStateToAudioHandler());
   }
 
   void toggleShuffle() {
@@ -1511,6 +1514,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       _shuffleMode = true;
     }
     notifyListeners();
+    unawaited(_syncRestoredStateToAudioHandler());
   }
 
   void cycleRepeatMode() {
@@ -2351,6 +2355,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     _queue.add(next);
+    unawaited(_syncRestoredStateToAudioHandler());
     await playFromQueue(_currentIndex + 1);
   }
 
