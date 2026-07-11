@@ -1,3 +1,8 @@
+## [1.2.17] - 2026-07-10
+
+### Changed
+- **Search Interaction**: Configured search queries to trigger only when pressing the keyboard's "Enter" or "Search" key, replacing the automatic character debounce. Added search action type for native software keyboards.
+
 ## [1.2.16] - 2026-07-10
 
 ### Fixed

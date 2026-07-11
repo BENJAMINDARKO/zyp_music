@@ -139,16 +139,10 @@ class _MainLayoutState extends State<MainLayout> {
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
+                  textInputAction: TextInputAction.search,
                   onChanged: (value) {
                     setState(() {
                       _searchQuery = value;
-                    });
-                    if (_debounce?.isActive ?? false) _debounce!.cancel();
-                    _debounce = Timer(const Duration(milliseconds: 1200), () {
-                      setState(() {
-                        _submittedQuery = value;
-                      });
-                      _searchNotifier.value = value;
                     });
                   },
                   onSubmitted: (value) {
