@@ -67,6 +67,9 @@ class UpdateService {
           name: 'UpdateService',
         );
       }
+    } catch (e) {
+      AppLogger.log('Update check failed: $e', name: 'UpdateService');
+    }
   }
 
   /// Check for updates manually with user feedback (SnackBar / Dialogs).

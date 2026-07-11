@@ -1,3 +1,8 @@
+## [1.2.22] - 2026-07-10
+
+### Fixed
+- **Syntax Error Fix**: Resolved compile failure on UpdateService by restoring the catch block in the automatic update check function.
+
 ## [1.2.21] - 2026-07-10
 
 ### Changed
