@@ -16,6 +16,7 @@ import '../widgets/add_to_playlist_modal.dart';
 import '../widgets/synced_lyrics_widget.dart';
 import '../widgets/single_line_lyrics_widget.dart';
 import '../widgets/lyrics_timing_slider.dart';
+import '../widgets/playback_speed_selector.dart';
 import '../widgets/audio_output_selector.dart';
 import '../widgets/lyrics_share_bottom_sheet.dart';
 import 'dart:async';
@@ -444,99 +445,31 @@ class _PlayingScreenState extends State<PlayingScreen>
                                 ),
                     ),
 
-                    // Collapsible controls for fullscreen lyrics mode
-                    if (_lyricsViewMode == _LyricsViewMode.fullscreen && !_karaokeMode)
-                      AnimatedOpacity(
-                        duration: const Duration(milliseconds: 400),
-                        opacity: _lyricsExpanded ? 0.0 : 1.0,
-                        child: AnimatedSize(
-                          duration: const Duration(milliseconds: 400),
-                          curve: Curves.fastOutSlowIn,
-                          child: !_lyricsExpanded
-                              ? Padding(
-                                  padding: EdgeInsets.only(
-                                    left: MediaQuery.of(context).size.height < 680 ? 12.0 : 16.0,
-                                    right: MediaQuery.of(context).size.height < 680 ? 12.0 : 16.0,
-                                    bottom: MediaQuery.of(context).size.height < 680 ? 4.0 : 12.0,
-                                    top: 2.0,
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(24),
-                                    child: BackdropFilter(
-                                      filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(
-                                          vertical: MediaQuery.of(context).size.height < 680 ? 4.0 : 10.0,
-                                          horizontal: MediaQuery.of(context).size.height < 680 ? 6.0 : 10.0,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.06),
-                                          borderRadius: BorderRadius.circular(24),
-                                          border: Border.all(
-                                            color: Colors.white.withOpacity(0.08),
-                                            width: 0.5,
-                                          ),
-                                        ),
-                                        child: _lyricsSelectionMode
-                                            ? _buildSelectionActionBar(player)
-                                            : _buildMediaControlsContent(
-                                                context,
-                                                player,
-                                                track,
-                                                seekbarColor,
-                                                settings,
-                                                isSmallScreen: MediaQuery.of(context).size.height < 680,
-                                                titleFontSize: MediaQuery.of(context).size.height < 680 ? 13.0 : 17.0,
-                                                authorFontSize: MediaQuery.of(context).size.height < 680 ? 10.0 : 12.0,
-                                                playButtonCircleSize: MediaQuery.of(context).size.height < 680 ? 38.0 : 56.0,
-                                                playButtonIconSize: MediaQuery.of(context).size.height < 680 ? 20.0 : 32.0,
-                                                skipButtonSize: MediaQuery.of(context).size.height < 680 ? 18.0 : 30.0,
-                                                otherControlsIconSize: MediaQuery.of(context).size.height < 680 ? 15.0 : 22.0,
-                                                internalSpacing1: MediaQuery.of(context).size.height < 680 ? 2.0 : 8.0,
-                                                internalSpacing2: MediaQuery.of(context).size.height < 680 ? 1.0 : 4.0,
-                                                actionIconSize: MediaQuery.of(context).size.height < 680 ? 16.0 : 20.0,
-                                              ),
-                                      ),
+                    // Media controls naturally laid out at the bottom
+                    Builder(
+                      builder: (context) {
+                        final bool showBottomControls = _showControls || (_lyricsViewMode == _LyricsViewMode.fullscreen && !_karaokeMode);
+                        return AnimatedSize(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                          child: showBottomControls
+                              ? IgnorePointer(
+                                  ignoring: !showBottomControls,
+                                  child: AnimatedOpacity(
+                                    duration: const Duration(milliseconds: 300),
+                                    opacity: showBottomControls ? 1.0 : 0.0,
+                                    child: _buildMediaControls(
+                                      context,
+                                      player,
+                                      track,
+                                      seekbarColor,
+                                      settings,
                                     ),
                                   ),
                                 )
-                              : GestureDetector(
-                                  onTap: _resetLyricsExpansionTimer,
-                                  child: Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    child: Center(
-                                      child: Icon(
-                                        PhosphorIconsRegular.caretUp,
-                                        color: Colors.white.withOpacity(0.35),
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ),
-
-                    // Media controls naturally laid out at the bottom
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: _showControls
-                          ? IgnorePointer(
-                              ignoring: !_showControls,
-                              child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 300),
-                                opacity: _showControls ? 1.0 : 0.0,
-                                child: _buildMediaControls(
-                                  context,
-                                  player,
-                                  track,
-                                  seekbarColor,
-                                  settings,
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
+                              : const SizedBox.shrink(),
+                        );
+                      }
                     ),
                   ],
                 ),
@@ -588,10 +521,6 @@ class _PlayingScreenState extends State<PlayingScreen>
     Color seekbarColor,
     SettingsProvider settings,
   ) {
-    if (_lyricsViewMode == _LyricsViewMode.fullscreen) {
-      return const SizedBox.shrink();
-    }
-
     final screenHeight = MediaQuery.of(context).size.height;
     final bool isSmallScreen = screenHeight < 680;
 
@@ -610,46 +539,78 @@ class _PlayingScreenState extends State<PlayingScreen>
     final double internalSpacing2 = isSmallScreen ? 1.0 : 4.0;
     final double actionIconSize = isSmallScreen ? 16.0 : 20.0;
 
+    final bool isFullscreenLyrics = _lyricsViewMode == _LyricsViewMode.fullscreen && !_karaokeMode;
+
     return Padding(
       padding: EdgeInsets.only(
         left: cardMarginHorizontal,
         right: cardMarginHorizontal,
-        bottom: cardMarginBottom,
+        bottom: isFullscreenLyrics && _lyricsExpanded ? 4.0 : cardMarginBottom,
         top: 2.0,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              vertical: cardPaddingVertical,
-              horizontal: cardPaddingHorizontal,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06), // translucent white/grey for frosted glass look
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.08),
-                width: 0.5,
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.fastOutSlowIn,
+            child: Container(
+              width: double.infinity,
+              padding: isFullscreenLyrics && _lyricsExpanded
+                  ? EdgeInsets.zero
+                  : EdgeInsets.symmetric(
+                      vertical: cardPaddingVertical,
+                      horizontal: cardPaddingHorizontal,
+                    ),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.06), // translucent white/grey for frosted glass look
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.08),
+                  width: 0.5,
+                ),
               ),
-            ),
-            child: _buildMediaControlsContent(
-              context,
-              player,
-              track,
-              seekbarColor,
-              settings,
-              isSmallScreen: isSmallScreen,
-              titleFontSize: titleFontSize,
-              authorFontSize: authorFontSize,
-              playButtonCircleSize: playButtonCircleSize,
-              playButtonIconSize: playButtonIconSize,
-              skipButtonSize: skipButtonSize,
-              otherControlsIconSize: otherControlsIconSize,
-              internalSpacing1: internalSpacing1,
-              internalSpacing2: internalSpacing2,
-              actionIconSize: actionIconSize,
+              child: isFullscreenLyrics && _lyricsExpanded
+                  ? GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _lyricsExpanded = false;
+                          _resetLyricsExpansionTimer();
+                        });
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        color: Colors.transparent,
+                        child: Center(
+                          child: Icon(
+                            PhosphorIconsRegular.caretUp,
+                            color: Colors.white.withOpacity(0.35),
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    )
+                  : _lyricsSelectionMode
+                      ? _buildSelectionActionBar(player)
+                      : _buildMediaControlsContent(
+                          context,
+                          player,
+                          track,
+                          seekbarColor,
+                          settings,
+                          isSmallScreen: isSmallScreen,
+                          titleFontSize: titleFontSize,
+                          authorFontSize: authorFontSize,
+                          playButtonCircleSize: playButtonCircleSize,
+                          playButtonIconSize: playButtonIconSize,
+                          skipButtonSize: skipButtonSize,
+                          otherControlsIconSize: otherControlsIconSize,
+                          internalSpacing1: internalSpacing1,
+                          internalSpacing2: internalSpacing2,
+                          actionIconSize: actionIconSize,
+                        ),
             ),
           ),
         ),
@@ -850,6 +811,36 @@ class _PlayingScreenState extends State<PlayingScreen>
                               ),
                             ),
                           ),
+                  ),
+                ),
+                // Divider line separating lyrics from controls
+                Container(
+                  height: 0.5,
+                  color: Colors.white.withOpacity(0.08),
+                  margin: const EdgeInsets.only(top: 4, bottom: 4),
+                ),
+                // Bottom controls for lyrics (Scroll Play/Pause, Sync Offset, Playback Speed)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          _lyricsScrollPaused ? PhosphorIconsFill.play : PhosphorIconsFill.pause,
+                          color: Colors.white.withOpacity(0.6),
+                          size: 20,
+                        ),
+                        onPressed: _toggleLyricsScroll,
+                        tooltip: _lyricsScrollPaused ? 'Resume scrolling' : 'Pause scrolling',
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      const Expanded(
+                        child: LyricsTimingSlider(),
+                      ),
+                      PlaybackSpeedSelector(
+                        iconColor: Colors.white.withOpacity(0.6),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1662,6 +1653,9 @@ class _PlayingScreenState extends State<PlayingScreen>
                   ),
                   onTap: () {
                     player.playTrack(t);
+                  },
+                  onLongPress: () {
+                    TrackContextMenu.show(context, t);
                   },
                 ),
               );

@@ -216,30 +216,40 @@ class TrackContextMenu {
 
                   // Section 2: Navigation & Metadata
                   AppleMusicSheet.buildSection(context, [
-                    if (track.album != null && track.album!.isNotEmpty)
-                      AppleMusicSheet.buildMenuItem(
-                        context,
-                        title: 'Go to Album',
-                        icon: PhosphorIconsRegular.disc,
-                        subtitle: track.album,
-                        onTap: () async {
-                          Navigator.pop(sheetContext);
-                          final provider = context.read<PlaylistProvider>();
-                          final res = await provider.searchAlbums(track.album!);
-                          if (res.isNotEmpty && context.mounted) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AlbumScreen(albumId: res.first.id),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Album details not found')),
-                            );
-                          }
-                        },
-                      ),
+                    AppleMusicSheet.buildMenuItem(
+                      context,
+                      title: 'Go to Album',
+                      icon: PhosphorIconsRegular.disc,
+                      subtitle: (track.album != null && track.album!.isNotEmpty) ? track.album : 'Search Album',
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        final provider = context.read<PlaylistProvider>();
+                        final query = (track.album != null && track.album!.isNotEmpty)
+                            ? track.album!
+                            : "${track.title} ${track.author ?? ''}".trim();
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Searching for album...'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+
+                        final res = await provider.searchAlbums(query);
+                        if (res.isNotEmpty && context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AlbumScreen(albumId: res.first.id),
+                            ),
+                          );
+                        } else if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Album details not found')),
+                          );
+                        }
+                      },
+                    ),
                     if (track.author != null && track.author!.isNotEmpty)
                       AppleMusicSheet.buildMenuItem(
                         context,

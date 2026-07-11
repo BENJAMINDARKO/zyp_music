@@ -1,3 +1,17 @@
+## [1.3.0] - 2026-07-11
+
+### Added
+- **History Queue Context Menu**: Long-pressing a track in the recently played history list now correctly opens the options menu.
+
+### Changed
+- **Unified Media Controls Card**: Bottom player controls are now static and persistent, preventing them from reloading or flickering when toggling the lyrics view. The controls card dynamically collapses using a smooth animation.
+- **System-Wide Back Gestures & Navigation**: Back gestures and android physical buttons now correctly navigate to previous sub-pages (e.g. nested artist details or albums) instead of immediately returning to the home screen.
+- **Always-Available Album Navigation**: The context menu now always displays "Go to Album". If a track lacks explicit album metadata, it falls back to a search query based on the track title and artist.
+- **Restored Lyrics Adjustment Row**: Re-integrated scrolling controls, timing offset slider, and playback speed selector directly at the bottom of the frosted lyrics card.
+
+### Fixed
+- **AutoDJ Repeat Conflict**: Fixed a conflict between repeat modes and AutoDJ generation where repeat mode "none" or "all" would prevent AutoDJ from queueing up and playing new tracks when reaching the end of the manual queue.
+
 ## [1.2.25] - 2026-07-11
 
 ### Added

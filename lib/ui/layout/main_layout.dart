@@ -102,7 +102,7 @@ class _MainLayoutState extends State<MainLayout> {
         final activeIndex = _isSearching ? 3 : _selectedIndex;
         final navigator = _navigatorKeys[activeIndex].currentState;
         if (navigator != null && navigator.canPop()) {
-          navigator.pop();
+          navigator.maybePop();
           return false;
         }
         if (_isSearching) {

@@ -463,23 +463,11 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     // Unify next track resolution under the PlayerProvider context
     _mixer?.nextTrackResolver = (current) async {
-      if (_repeatMode == repeat.PlaybackRepeatMode.none) {
-        return null;
-      }
       // 1. If we have a next song in the manual queue, return it
       if (_currentIndex + 1 < _queue.length) {
         final nextTrack = _queue[_currentIndex + 1];
         AppLogger.log(
           'nextTrackResolver: resolved from manual queue: ${nextTrack.id} ("${nextTrack.title}")',
-          name: 'PlayerProvider',
-        );
-        return nextTrack;
-      }
-      // NEW: If repeat mode is ALL, wrap around to the first song!
-      if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
-        final nextTrack = _queue[0];
-        AppLogger.log(
-          'nextTrackResolver: resolved wrap-around for repeat all: ${nextTrack.id} ("${nextTrack.title}")',
           name: 'PlayerProvider',
         );
         return nextTrack;
@@ -494,6 +482,18 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
           );
           return nextTrack;
         }
+      }
+      // 3. If no Auto DJ, check repeat modes
+      if (_repeatMode == repeat.PlaybackRepeatMode.none) {
+        return null;
+      }
+      if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
+        final nextTrack = _queue[0];
+        AppLogger.log(
+          'nextTrackResolver: resolved wrap-around for repeat all: ${nextTrack.id} ("${nextTrack.title}")',
+          name: 'PlayerProvider',
+        );
+        return nextTrack;
       }
       return null;
     };
@@ -2322,14 +2322,14 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       if (_repeatMode == repeat.PlaybackRepeatMode.one) {
         _audioRepository.resume();
-      } else if (_repeatMode == repeat.PlaybackRepeatMode.none) {
-        _stopAfterQueue();
       } else if (_currentIndex + 1 < _queue.length) {
         await next();
+      } else if (_baseAutoDJMode != AutoDJMode.off || _smartAutoDJMode != AutoDJMode.off) {
+        await _generateAutoDJNext();
+      } else if (_repeatMode == repeat.PlaybackRepeatMode.none) {
+        _stopAfterQueue();
       } else if (_repeatMode == repeat.PlaybackRepeatMode.all) {
         await playFromQueue(0);
-      } else if (_queueManager?.isActive ?? false) {
-        await _generateAutoDJNext();
       } else {
         _stopAfterQueue();
       }
