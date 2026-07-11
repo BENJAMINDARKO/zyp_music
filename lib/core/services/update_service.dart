@@ -67,8 +67,95 @@ class UpdateService {
           name: 'UpdateService',
         );
       }
+  }
+
+  /// Check for updates manually with user feedback (SnackBar / Dialogs).
+  static Future<void> checkForUpdatesManual(BuildContext context) async {
+    // Show a SnackBar to indicate we are checking
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            SizedBox(width: 16),
+            Text('Checking for updates...'),
+          ],
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      final PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      final String currentVersion = packageInfo.version;
+
+      final response = await http.get(
+        Uri.parse(_repoUrl),
+        headers: {'Accept': 'application/vnd.github.v3+json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final String latestVersion = data['tag_name'] ?? '';
+        final List<dynamic> assets = data['assets'] ?? [];
+
+        if (latestVersion.isEmpty) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No release version found on GitHub.')),
+            );
+          }
+          return;
+        }
+
+        if (_isNewerVersion(currentVersion, latestVersion)) {
+          String? apkUrl;
+          for (final asset in assets) {
+            final String name = asset['name'] ?? '';
+            if (name.endsWith('.apk')) {
+              apkUrl = asset['browser_download_url'];
+              break;
+            }
+          }
+
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            if (apkUrl != null) {
+              _showUpdateDialog(context, latestVersion, apkUrl);
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('New version found but no APK asset is attached.')),
+              );
+            }
+          }
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('ZYPMusic is up to date (v$currentVersion).')),
+            );
+          }
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to check for updates: Server returned ${response.statusCode}')),
+          );
+        }
+      }
     } catch (e) {
-      AppLogger.log('Update check failed: $e', name: 'UpdateService');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Update check failed: $e')),
+        );
+      }
     }
   }
 

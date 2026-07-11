@@ -15,6 +15,7 @@ import '../../presentation/providers/settings_provider.dart';
 import '../../service/oauth_service.dart';
 import 'youtube_login_webview.dart';
 import '../../core/services/audio_cache_service.dart';
+import '../../core/services/update_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -384,6 +385,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               await Permission.ignoreBatteryOptimizations.request();
             }
           },
+        ),
+        ListTile(
+          title: const Text('Check for Updates'),
+          subtitle: Text('Check if a newer version of ZYPMusic is available on GitHub.', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+          trailing: Icon(PhosphorIconsRegular.downloadSimple, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
+          onTap: () => UpdateService.checkForUpdatesManual(context),
         ),
         ListTile(
           title: const Text('Clear Cache & Reset Data', style: TextStyle(color: Colors.red)),

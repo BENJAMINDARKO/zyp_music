@@ -1,3 +1,8 @@
+## [1.2.20] - 2026-07-10
+
+### Added
+- **Manual Update Check**: Added a "Check for Updates" button under Settings > System > System & Storage that checks for updates from GitHub and provides manual feedback via SnackBars and Dialogs.
+
 ## [1.2.19] - 2026-07-10
 
 ### Changed
