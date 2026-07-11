@@ -76,8 +76,16 @@ class UpdateService {
   /// E.g., '1.2.8' vs '1.2.9' -> returns true.
   static bool _isNewerVersion(String currentStr, String latestStr) {
     try {
-      final cleanCurrent = currentStr.replaceAll(RegExp(r'^[vV]'), '').split('+')[0];
-      final cleanLatest = latestStr.replaceAll(RegExp(r'^[vV]'), '').split('+')[0];
+      final cleanCurrent = currentStr.replaceAll(RegExp(r'^[vV]'), '').split('+')[0].trim();
+      final cleanLatest = latestStr.replaceAll(RegExp(r'^[vV]'), '').split('+')[0].trim();
+
+      if (cleanCurrent == cleanLatest) {
+        AppLogger.log(
+          'Versions match exactly ($cleanCurrent). No update needed.',
+          name: 'UpdateService',
+        );
+        return false;
+      }
 
       final currentParts = cleanCurrent.split('.').map((e) => int.tryParse(e) ?? 0).toList();
       final latestParts = cleanLatest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
