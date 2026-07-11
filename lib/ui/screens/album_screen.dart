@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
@@ -125,32 +126,44 @@ class _AlbumScreenState extends State<AlbumScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background cover art
-          if (_album!.thumbnailUrl != null)
-            CachedNetworkImage(
-              imageUrl: rewriteThumbnailSize(_album!.thumbnailUrl, 1200),
-              fit: BoxFit.cover,
-            ),
-          // Dark gradient overlay spanning the entire screen
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withOpacity(0.2),
-                  Colors.black.withOpacity(0.5),
-                  Colors.black.withOpacity(0.85),
-                  Colors.black.withOpacity(0.95),
-                ],
+          // Background cover art (blurred backdrop like the play queue)
+          if (_album!.thumbnailUrl != null) ...[
+            Positioned.fill(
+              child: CachedNetworkImage(
+                imageUrl: rewriteThumbnailSize(_album!.thumbnailUrl, 1200),
+                fit: BoxFit.cover,
               ),
             ),
-          ),
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+                child: const SizedBox.shrink(),
+              ),
+            ),
+            Positioned.fill(
+              child: _themeColor != null
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            _themeColor!.withOpacity(0.85),
+                            _themeColor!.withOpacity(0.4),
+                            Colors.black.withOpacity(0.85),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                    )
+                  : ColoredBox(color: Colors.black.withOpacity(0.75)),
+            ),
+          ],
           // Main scrollable content
           CustomScrollView(
             slivers: [
               SliverAppBar(
-                backgroundColor: Colors.black.withOpacity(0.85), // collapsed color
+                backgroundColor: Colors.transparent, // transparent to let the blurred gradient background show
                 elevation: 0,
                 expandedHeight: 320,
                 pinned: true,
@@ -183,6 +196,23 @@ class _AlbumScreenState extends State<AlbumScreen> {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
+                      // Full-resolution artwork (with 5% blur and 5% darkness)
+                      if (_album!.thumbnailUrl != null) ...[
+                        CachedNetworkImage(
+                          imageUrl: rewriteThumbnailSize(_album!.thumbnailUrl, 1200),
+                          fit: BoxFit.cover,
+                        ),
+                        Positioned.fill(
+                          child: ClipRect(
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
+                              child: Container(
+                                color: Colors.black.withOpacity(0.05),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       // Center play button
                       Align(
                         alignment: Alignment.center,

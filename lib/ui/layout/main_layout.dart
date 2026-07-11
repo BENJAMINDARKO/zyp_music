@@ -34,9 +34,19 @@ class _MainLayoutState extends State<MainLayout> {
     GlobalKey<NavigatorState>(), // Search navigator
   ];
 
+  late final List<NavigatorObserver> _navigatorObservers;
+
   @override
   void initState() {
     super.initState();
+    _navigatorObservers = List.generate(
+      4,
+      (index) => _TabNavigatorObserver(() {
+        if (mounted) {
+          setState(() {});
+        }
+      }),
+    );
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text;
@@ -83,6 +93,8 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
+    final activeIndex = _isSearching ? 3 : _selectedIndex;
+    final bool hasPushedRoute = _navigatorKeys[activeIndex].currentState?.canPop() ?? false;
 
 
     return WillPopScope(
@@ -108,7 +120,7 @@ class _MainLayoutState extends State<MainLayout> {
         return true;
       },
       child: Scaffold(
-      appBar: AppBar(
+      appBar: hasPushedRoute ? null : AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
         leading: Padding(
@@ -262,11 +274,42 @@ class _MainLayoutState extends State<MainLayout> {
   Widget _buildTabNavigator(int index, Widget rootScreen) {
     return Navigator(
       key: _navigatorKeys[index],
+      observers: [_navigatorObservers[index]],
       onGenerateRoute: (routeSettings) {
         return MaterialPageRoute(
           builder: (context) => rootScreen,
         );
       },
     );
+  }
+}
+
+class _TabNavigatorObserver extends NavigatorObserver {
+  final VoidCallback onStateChanged;
+
+  _TabNavigatorObserver(this.onStateChanged);
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    WidgetsBinding.instance.addPostFrameCallback((_) => onStateChanged());
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    WidgetsBinding.instance.addPostFrameCallback((_) => onStateChanged());
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didRemove(route, previousRoute);
+    WidgetsBinding.instance.addPostFrameCallback((_) => onStateChanged());
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    WidgetsBinding.instance.addPostFrameCallback((_) => onStateChanged());
   }
 }

@@ -1,3 +1,8 @@
+## [1.2.23] - 2026-07-10
+
+### Changed
+- **Album Page Header Styling & Overlap Fix**: Applied 5% blur and 5% darkness to the full-resolution header artwork to improve title readability while maintaining high resolution. Added tab-level navigation observers to dynamically hide the persistent search/settings app bar on sub-pages like the Album screen.
+
 ## [1.2.22] - 2026-07-10
 
 ### Fixed
