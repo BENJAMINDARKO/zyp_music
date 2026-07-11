@@ -1,3 +1,8 @@
+## [1.2.21] - 2026-07-10
+
+### Changed
+- **Album Page Background & Dynamic Color**: Configured the album cover image to extend as a full-page background under a dark translucent gradient, making the track list background reflect the artwork colors instead of being solid black. Wired PaletteGenerator to dynamically extract the album's dominant color to tint the centered translucent play button.
+
 ## [1.2.20] - 2026-07-10
 
 ### Added
