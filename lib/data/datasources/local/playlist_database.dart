@@ -251,7 +251,7 @@ class PlaylistDatabase {
     }
     final db = await openDatabase(
       path,
-      version: 17,
+      version: 18,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -378,7 +378,10 @@ class PlaylistDatabase {
       'primary_genre TEXT   DEFAULT \'Unknown\', '
       'bpm          REAL    DEFAULT 0.0, '
       'energy_level REAL    DEFAULT 0.5, '
-      'timestamp    INTEGER NOT NULL'
+      'timestamp    INTEGER NOT NULL, '
+      'title        TEXT    DEFAULT NULL, '
+      'author       TEXT    DEFAULT NULL, '
+      'thumbnail_url TEXT   DEFAULT NULL'
       ')'
     );
     await db.execute(
@@ -541,7 +544,10 @@ class PlaylistDatabase {
         'primary_genre TEXT   DEFAULT \'Unknown\', '
         'bpm          REAL    DEFAULT 0.0, '
         'energy_level REAL    DEFAULT 0.5, '
-        'timestamp    INTEGER NOT NULL'
+        'timestamp    INTEGER NOT NULL, '
+        'title        TEXT    DEFAULT NULL, '
+        'author       TEXT    DEFAULT NULL, '
+        'thumbnail_url TEXT   DEFAULT NULL'
         ')'
       );
       await db.execute(
@@ -681,6 +687,23 @@ class PlaylistDatabase {
       await db.execute(
         'ALTER TABLE track_metadata ADD COLUMN '
         'energy_level REAL DEFAULT NULL',
+      );
+    }
+    if (oldVersion < 18) {
+      // Home Feed metadata fix: store title/author/thumbnail_url directly
+      // in the listening-history row so the home feed SQL queries return
+      // complete metadata for streamed-only tracks (no LEFT JOIN needed).
+      await db.execute(
+        'ALTER TABLE dj_listening_history ADD COLUMN '
+        'title TEXT DEFAULT NULL',
+      );
+      await db.execute(
+        'ALTER TABLE dj_listening_history ADD COLUMN '
+        'author TEXT DEFAULT NULL',
+      );
+      await db.execute(
+        'ALTER TABLE dj_listening_history ADD COLUMN '
+        'thumbnail_url TEXT DEFAULT NULL',
       );
     }
   }
@@ -1547,10 +1570,9 @@ class PlaylistDatabase {
           h.artist_name,
           h.primary_genre,
           COUNT(*) as plays,
-          dt.title,
-          dt.thumbnailUrl
+          h.title,
+          h.thumbnail_url AS thumbnailUrl
         FROM dj_listening_history h
-        LEFT JOIN downloaded_tracks dt ON dt.id = h.track_id
         WHERE h.primary_genre = ?
         GROUP BY h.track_id
         ORDER BY plays DESC
@@ -1584,11 +1606,11 @@ class PlaylistDatabase {
         h.track_id,
         h.artist_name,
         COUNT(*) as plays,
-        dt.title,
-        dt.author,
+        COALESCE(h.title, dt.title) AS title,
+        COALESCE(h.author, dt.author) AS author,
         dt.album,
         dt.albumId,
-        dt.thumbnailUrl
+        COALESCE(h.thumbnail_url, dt.thumbnailUrl) AS thumbnailUrl
       FROM dj_listening_history h
       LEFT JOIN downloaded_tracks dt ON dt.id = h.track_id
       GROUP BY h.track_id
@@ -1751,10 +1773,9 @@ class PlaylistDatabase {
       final sampleResult = await db.rawQuery('''
         SELECT
           h.track_id,
-          dt.thumbnailUrl,
+          h.thumbnail_url AS thumbnailUrl,
           COUNT(*) as track_plays
         FROM dj_listening_history h
-        LEFT JOIN downloaded_tracks dt ON dt.id = h.track_id
         WHERE h.artist_name = ?
         GROUP BY h.track_id
         ORDER BY track_plays DESC

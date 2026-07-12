@@ -143,10 +143,11 @@ class DownloadService {
     try {
       final dir = await _exportDir;
       final filePath = p.join(dir, fileName);
-      final audioUrl = await _audioRepository.getAudioUrl(
+      final urlResult = await _audioRepository.getAudioUrl(
         track,
         quality: quality,
       );
+      final audioUrl = urlResult.url;
       final resolved = await _resolveRedirects(audioUrl);
       await _downloadFile(resolved, filePath, track, 0, 1, isExport: true);
       _exportCompletedController.add(track.id);
@@ -187,10 +188,11 @@ class DownloadService {
       final filePath = p.join(dir, fileName);
 
       try {
-        final audioUrl = await _audioRepository.getAudioUrl(
+        final urlResult = await _audioRepository.getAudioUrl(
           track,
           quality: quality,
         );
+        final audioUrl = urlResult.url;
         final resolved = await _resolveRedirects(audioUrl);
         await _downloadFile(resolved, filePath, track, i, total, isExport: true);
         _exportCompletedController.add(track.id);
@@ -232,10 +234,11 @@ class DownloadService {
     final filePath = p.join(dir, fileName);
 
     try {
-      final audioUrl = await _audioRepository.getAudioUrl(
+      final urlResult = await _audioRepository.getAudioUrl(
         track,
         quality: quality,
       );
+      final audioUrl = urlResult.url;
       final resolved = await _resolveRedirects(audioUrl);
       await _downloadFile(resolved, filePath, track, 0, 1);
       
@@ -294,10 +297,11 @@ class DownloadService {
       if (await _database.isTrackDownloaded(track.id)) continue;
 
       try {
-        final audioUrl = await _audioRepository.getAudioUrl(
+        final urlResult = await _audioRepository.getAudioUrl(
           track,
           quality: quality,
         );
+        final audioUrl = urlResult.url;
         final resolved = await _resolveRedirects(audioUrl);
         await _downloadFile(resolved, filePath, track, i, total);
         

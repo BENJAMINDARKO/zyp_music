@@ -217,7 +217,12 @@ class YoutubeRemoteDataSource {
           }
         }
 
-        if (url != null && await _verifyUrl(url)) {
+        if (url != null) {
+          unawaited(_verifyUrl(url).then((verified) {
+            if (!verified) {
+              AppLogger.log('Background verification failed for $videoId', name: 'YoutubeRemoteDataSource');
+            }
+          }));
           return url;
         }
 
@@ -436,6 +441,15 @@ class YoutubeRemoteDataSource {
 
   Future<List<ytm_types.UpNextsDetails>> getUpNexts(String videoId) async {
     return await _ytMusic.getUpNexts(videoId);
+  }
+
+  Future<List<ytm_types.HomeSection>> getHomeSections() async {
+    return await _ytMusic.getHomeSections();
+  }
+
+  void setGl(String code) {
+    _ytMusic.config['GL'] = code;
+    AppLogger.log('GL set to $code on live YTMusic instance', name: 'YoutubeRemoteDataSource');
   }
 
   void dispose() {

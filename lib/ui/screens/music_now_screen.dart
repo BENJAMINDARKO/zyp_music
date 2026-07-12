@@ -8,11 +8,14 @@ import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../data/datasources/local/playlist_database.dart';
 import '../../domain/entities/video.dart';
+import '../../domain/entities/album.dart';
+import '../../domain/entities/playlist.dart';
 import '../../domain/entities/artist.dart';
 import '../../domain/entities/auto_dj_mode.dart';
 import '../widgets/shared_cards.dart';
 import "../screens/artist_screen.dart";
 import "../screens/album_screen.dart";
+import "../screens/playlist_screen.dart";
 import "../../core/utils/thumbnail_url.dart";
 import '../widgets/playing_track_mask.dart';
 
@@ -50,6 +53,8 @@ class _MusicNowScreenState extends State<MusicNowScreen> {
               _buildStartListeningSection(context),
               _buildTopArtistsSection(context),
               _buildPopularAlbumsAndSinglesSection(context),
+              _buildYTMusicSectionsHeader(context),
+              _buildYTMusicSections(context),
               const SizedBox(height: 100),
             ],
           ),
@@ -285,6 +290,244 @@ class _MusicNowScreenState extends State<MusicNowScreen> {
         SnackBar(content: Text('Could not find artist: ${entry.artistName}')),
       );
     }
+  }
+}
+
+Widget _sectionHeader(BuildContext context, String title) {
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+    child: Text(
+      title,
+      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+Widget _buildYTMusicSectionsHeader(BuildContext context) {
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+    child: Row(
+      children: [
+        Text(
+          'Explore',
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const Spacer(),
+        Consumer<HomeFeedProvider>(
+          builder: (context, feed, _) {
+            final loading = feed.isLoadingYTMusicHome;
+            return IconButton(
+              icon: loading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    )
+                  : Icon(PhosphorIcons.arrowClockwise,
+                      color: Theme.of(context).colorScheme.onSurface),
+              onPressed:
+                  loading ? null : () => feed.refreshYTMusicHome(),
+              tooltip: 'Refresh sections',
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildYTMusicSections(BuildContext context) {
+  return Consumer<HomeFeedProvider>(
+    builder: (context, feed, _) {
+      final sections = feed.ytHomeSections;
+      if (sections == null || sections.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: sections.take(4).map((section) {
+          final renamed = section.title == 'Long listens'
+              ? 'Human DJ'
+              : section.title;
+          return _buildYTMusicSectionRow(context, YTFeedSection(renamed, section.items));
+        }).toList(),
+      );
+    },
+  );
+}
+
+Widget _buildYTMusicSectionRow(BuildContext context, YTFeedSection section) {
+  if (section.items.isEmpty) return const SizedBox.shrink();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _sectionHeader(context, section.title),
+      SizedBox(
+        height: 180,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: section.items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (context, index) {
+            final item = section.items[index];
+            return SizedBox(
+              width: 140,
+              child: _ytItemCard(item),
+            );
+          },
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _ytItemCard(YTFeedItem item) {
+  if (item.track != null) {
+    return TrackCard(track: item.track!);
+  } else if (item.album != null) {
+    return _YTAlbumCard(album: item.album!);
+  } else if (item.playlist != null) {
+    return _YTPlaylistCard(playlist: item.playlist!);
+  }
+  return const SizedBox.shrink();
+}
+
+class _YTAlbumCard extends StatelessWidget {
+  final Album album;
+  const _YTAlbumCard({required this.album});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF141414),
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AlbumScreen(albumId: album.id)),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F1F),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                  child: album.thumbnailUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: rewriteThumbnailSize(album.thumbnailUrl),
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => const Icon(PhosphorIconsRegular.discoBall, color: Colors.white24, size: 48),
+                      )
+                    : const Center(child: Icon(PhosphorIconsRegular.discoBall, color: Colors.white24, size: 48)),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    album.title,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    album.artistName ?? 'Unknown Artist',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _YTPlaylistCard extends StatelessWidget {
+  final Playlist playlist;
+  const _YTPlaylistCard({required this.playlist});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF141414),
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => PlaylistScreen(playlistId: playlist.id)),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F1F),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                  child: playlist.thumbnailUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: rewriteThumbnailSize(playlist.thumbnailUrl),
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => const Icon(PhosphorIconsRegular.playlist, color: Colors.white24, size: 48),
+                      )
+                    : const Center(child: Icon(PhosphorIconsRegular.playlist, color: Colors.white24, size: 48)),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.title,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    playlist.author ?? 'Unknown',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

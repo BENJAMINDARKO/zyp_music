@@ -417,7 +417,7 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
             duration: const Duration(milliseconds: 200),
             margin: const EdgeInsets.symmetric(vertical: 4),
             padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 12 : 0,
+              horizontal: isSelected ? 12 : 8,
               vertical: 10,
             ),
             decoration: BoxDecoration(
@@ -439,12 +439,13 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
                 color: Colors.white.withValues(alpha: alpha),
                 fontSize: 21.0,
                 fontWeight: FontWeight.w800,
-                height: 1.3,
-                letterSpacing: -1.0,
+                height: 1.4,
+                letterSpacing: -0.5,
               ),
               child: Text(
                 line.words,
                 textAlign: TextAlign.start,
+                softWrap: true,
               ),
             ),
           ),

@@ -146,9 +146,9 @@ class TrackContextMenu {
                             final isFav = provider.isFavorite(track.id);
                             return _buildQuickAction(
                               context,
-                              icon: isFav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
+                              icon: isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
                               label: 'Favourite',
-                              iconColor: isFav ? Colors.amber : null,
+                              iconColor: isFav ? Colors.redAccent : null,
                               onTap: () {
                                 provider.toggleFavorite(
                                   track,
@@ -224,9 +224,13 @@ class TrackContextMenu {
                       onTap: () async {
                         Navigator.pop(sheetContext);
                         final provider = context.read<PlaylistProvider>();
-                        final query = (track.album != null && track.album!.isNotEmpty)
+                        final albumTitle = (track.album != null && track.album!.isNotEmpty)
                             ? track.album!
-                            : "${track.title} ${track.author ?? ''}".trim();
+                            : track.title;
+                        final artistName = (track.author ?? '').trim();
+                        final query = artistName.isNotEmpty
+                            ? '$albumTitle $artistName'
+                            : albumTitle;
                         
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -237,10 +241,23 @@ class TrackContextMenu {
 
                         final res = await provider.searchAlbums(query);
                         if (res.isNotEmpty && context.mounted) {
+                          // Crosscheck: find the first album whose artist
+                          // matches the track's author (case-insensitive).
+                          final normalizedArtist = artistName.toLowerCase();
+                          final match = normalizedArtist.isNotEmpty
+                              ? res.cast<dynamic>().firstWhere(
+                                    (a) {
+                                      final albumArtist = (a.author ?? a.artist ?? '').toString().toLowerCase();
+                                      return albumArtist.contains(normalizedArtist) ||
+                                             normalizedArtist.contains(albumArtist);
+                                    },
+                                    orElse: () => res.first,
+                                  )
+                              : res.first;
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => AlbumScreen(albumId: res.first.id),
+                              builder: (_) => AlbumScreen(albumId: match.id),
                             ),
                           );
                         } else if (context.mounted) {

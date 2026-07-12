@@ -10,6 +10,158 @@ import '../../presentation/providers/player_provider.dart';
 import 'apple_music_sheet.dart';
 
 class AutoDJModePicker {
+  static void showBasePicker(BuildContext context, {Track? seedTrack}) {
+    final messenger = ScaffoldMessenger.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      builder: (sheetContext) {
+        final currentMode = sheetContext.read<PlayerProvider>().baseAutoDJMode;
+        final baseModes = [
+          AutoDJMode.off,
+          AutoDJMode.shuffleLibrary,
+          AutoDJMode.similarSongs,
+          AutoDJMode.sameGenre,
+          AutoDJMode.sameArtist,
+        ];
+        return AppleMusicSheet(
+          title: 'Autoplay Mode',
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'Current: ${currentMode.label}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24)),
+                  for (final mode in baseModes)
+                    _ModeTile(
+                      mode: mode,
+                      isCurrentMode: mode == currentMode,
+                      onPick: () async {
+                        if (mode == AutoDJMode.shuffleLibrary) {
+                          final picked = await ShuffleLibraryFilterSubMenu.show(sheetContext);
+                          if (picked == null) return;
+                          final filter = picked.isEmpty ? null : picked;
+                          
+                          Navigator.pop(sheetContext);
+                          final routing = sheetContext.read<AutoDjRoutingService?>();
+                          if (routing != null) {
+                            routing.setShuffleLibraryGenreFilter(filter);
+                          }
+                          final provider = sheetContext.read<PlayerProvider>();
+                          if (seedTrack != null) {
+                            await provider.playTrackWithNewSession(seedTrack);
+                          }
+                          await provider.setBaseAutoDJMode(AutoDJMode.shuffleLibrary);
+                          final filterName = filter ?? 'no filter';
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Shuffle Library armed — filter: $filterName'),
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.pop(sheetContext);
+                        final provider = sheetContext.read<PlayerProvider>();
+                        if (seedTrack != null && mode != AutoDJMode.off) {
+                          await provider.playTrackWithNewSession(seedTrack);
+                        }
+                        final result = await provider.setBaseAutoDJMode(mode);
+                        final message = _snackbarFor(mode, result);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(message),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static void showSmartPicker(BuildContext context, {Track? seedTrack}) {
+    final messenger = ScaffoldMessenger.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      builder: (sheetContext) {
+        final currentMode = sheetContext.read<PlayerProvider>().smartAutoDJMode;
+        final smartModes = [
+          AutoDJMode.off,
+          AutoDJMode.smartDj,
+          AutoDJMode.vibeMatch,
+        ];
+        return AppleMusicSheet(
+          title: 'Smart DJ / Vibe Mode',
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'Current: ${currentMode.label}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  Divider(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.24)),
+                  for (final mode in smartModes)
+                    _ModeTile(
+                      mode: mode,
+                      isCurrentMode: mode == currentMode,
+                      onPick: () async {
+                        Navigator.pop(sheetContext);
+                        final provider = sheetContext.read<PlayerProvider>();
+                        if (seedTrack != null && mode != AutoDJMode.off) {
+                          await provider.playTrackWithNewSession(seedTrack);
+                        }
+                        final result = await provider.setSmartAutoDJMode(mode);
+                        final message = _snackbarFor(mode, result);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(message),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   static void show(BuildContext context, {Track? seedTrack}) {
     final messenger = ScaffoldMessenger.of(context);
     showModalBottomSheet(

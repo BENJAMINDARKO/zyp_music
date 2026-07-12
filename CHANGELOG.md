@@ -1,3 +1,20 @@
+## [1.3.2] - 2026-07-12
+
+### Added
+- **Region Picker**: First-launch bottom sheet with 17 countries (frosted glass, scrollable). Region tile in Settings > Accounts with check mark on current selection.
+- **YTMusic Home Sections**: Start Listening, Popular Albums & Singles, Suggested Artists sections fetched from YTMusic API. "Groove Picks" and "Human DJ" branding.
+- **YouTube Sign-In Display**: Accounts tile dynamically shows "Connected"/"Not connected" by reading auth cookies, with DISCONNECT button.
+
+### Changed
+- **Global `gl` Wiring**: Region selection updates `gl` on the live YTMusic singleton immediately and reloads home sections.
+- **AutoDjRoutingService Simplified**: Removed per-artist geo-location lookup (MusicBrainz), `gl` is now global, set once at startup.
+- **Metadata Enrichment**: Tracks streamed through the gapless mixer now persist their title/author/thumbnail to the Hive cache tracker when the temp file is promoted at 50% playback. The `nextTrackResolver` and `buildAudioSource` methods enrich tracks from the Hive tracker when in-memory metadata is "Unknown" or empty, fixing the "Unknown" title/artist display.
+- **Proxy Server Concurrency Fix**: The `LocalHttpProxyServer` now deduplicates concurrent streaming sessions for the same trackId. When the player makes a second HTTP request while the first download is still in flight, the second request serves from the temp file being written by the first stream instead of starting a second download that corrupts the shared file. Existing `.tmp` files from incomplete streams are also served directly rather than being re-downloaded.
+
+### Fixed
+- **Unknown Track Metadata**: Cached tracks no longer show "Unknown" in the player UI or downloaded tab after playback reaches 50% (Hive metadata persisted at promotion time) and when the queue wraps around (enrichment from tracker).
+- **Audio Stopping Mid-Playback**: Non-favorited tracks no longer stop mid-playback due to cascading temp file corruption from concurrent proxy requests.
+
 ## [1.3.1] - 2026-07-11
 
 ### Added

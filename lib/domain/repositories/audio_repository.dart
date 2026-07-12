@@ -3,8 +3,8 @@ import 'package:just_audio/just_audio.dart';
 import '../entities/video.dart';
 
 abstract class AudioRepository {
-  Future<String> getAudioUrl(Track track, {String quality = 'adaptive'});
-  Future<void> playTrack(Track track, String audioUrl);
+  Future<({String url, bool fromCache})> getAudioUrl(Track track, {String quality = 'adaptive'});
+  Future<void> playTrack(Track track, String audioUrl, {bool fromCache = true});
   Future<void> play(String url);
   Future<void> pause();
   Future<void> resume();

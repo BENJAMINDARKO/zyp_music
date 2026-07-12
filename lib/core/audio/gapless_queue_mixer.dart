@@ -40,12 +40,12 @@ class GaplessQueueMixer {
 
   /// Default lookahead window from the spec: "Exactly 15 seconds
   /// before the active audio file hits its termination limit".
-  static const Duration kLookahead = Duration(seconds: 35);
+  static const Duration kLookahead = Duration(seconds: 15);
 
   /// Spec fallback for the crossfade trigger: "If the value
   /// returns null, fall back to a baseline threshold of
   /// duration - 5000ms".
-  static const Duration kCrossfadeFallback = Duration(seconds: 10);
+  static const Duration kCrossfadeFallback = Duration(seconds: 5);
 
   AudioPlayer _player;
 
@@ -101,6 +101,9 @@ class GaplessQueueMixer {
   final Map<String, int> _dynamicCrossfadeDurations = {};
 
   int _getDynamicCrossfadeMs(String trackId) {
+    if (!_attached) {
+      return kCrossfadeFallback.inMilliseconds;
+    }
     return _dynamicCrossfadeDurations.putIfAbsent(
       trackId,
       () => 15000 + _random.nextInt(15001), // 15,000 to 30,000 ms
@@ -271,7 +274,7 @@ class GaplessQueueMixer {
     // Smart DJ) is taking a long time to fetch metadata, the position stream
     // might cross the crossfade threshold before the next track is actually
     // appended. Wait until the next track arrives before consuming the flag.
-    if (queuedTracks.length < 2) return;
+    if (_attached && queuedTracks.length < 2) return;
 
     _crossfadeFiredFor.add(currentTrackId);
     AppLogger.log(
@@ -321,15 +324,13 @@ class GaplessQueueMixer {
     final fresh = ConcatenatingAudioSource(children: [source]);
     if (_attached) {
       _isPipelineRebuilding = true;
-      try {
-        await _player.setAudioSource(fresh);
-      } finally {
+      unawaited(_player.setAudioSource(fresh, initialPosition: startAt).then((_) {
         _isPipelineRebuilding = false;
-      }
-      if (startAt != null) {
-        await _player.seek(startAt);
-      }
-      unawaited(_player.play());
+        unawaited(_player.play());
+      }, onError: (e) {
+        _isPipelineRebuilding = false;
+        AppLogger.log('setAudioSource error: $e', name: _logTag);
+      }));
     }
     _concatenation = fresh;
   }
@@ -418,6 +419,35 @@ class GaplessQueueMixer {
       name: _logTag,
     );
     onTrackQueued?.call(track);
+  }
+
+  /// Truncate all preloaded tracks in the concatenating audio source
+  /// after the currently active track index.
+  Future<void> truncateQueueAfterCurrent() async {
+    if (!_attached) return;
+    final currentIndex = _player.currentIndex ?? 0;
+    if (_concatenation.length > currentIndex + 1) {
+      final start = currentIndex + 1;
+      final end = _concatenation.length;
+      AppLogger.log('Truncating tracks from mixer concatenation: $start to $end', name: _logTag);
+      try {
+        await _concatenation.removeRange(start, end);
+      } catch (e) {
+        AppLogger.warning('Failed to removeRange from concatenation: $e', name: _logTag);
+      }
+      
+      // Keep only the active playing track in our internal entries map
+      final currentTrackId = currentTrack?.id;
+      if (currentTrackId != null) {
+        final entry = _entries[currentTrackId];
+        _entries.clear();
+        if (entry != null) {
+          _entries[currentTrackId] = entry;
+        }
+      }
+      _lookaheadFiredFor.clear();
+      _crossfadeFiredFor.clear();
+    }
   }
 
   /// Race-shield recovery hook: when [queueNextTrack] short-

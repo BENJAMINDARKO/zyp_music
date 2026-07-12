@@ -60,12 +60,14 @@ class _MainLayoutState extends State<MainLayout> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         UpdateService.checkForUpdates(context);
+        UpdateService.startPeriodicCheck(context);
       }
     });
   }
 
   @override
   void dispose() {
+    UpdateService.stopPeriodicCheck();
     _debounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();

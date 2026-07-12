@@ -192,8 +192,8 @@ class _ArtistScreenState extends State<ArtistScreen> {
                   // Artist Name & Stats Overlay
                   Positioned(
                     bottom: 20,
-                    left: 16,
-                    right: 16,
+                    left: 64,
+                    right: 64,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -233,6 +233,24 @@ class _ArtistScreenState extends State<ArtistScreen> {
                           textAlign: TextAlign.center,
                         ),
                       ],
+                    ),
+                  ),
+                  // Bottom Left: Artist Favourite toggle
+                  Positioned(
+                    bottom: 12,
+                    left: 16,
+                    child: Consumer<PlaylistProvider>(
+                      builder: (context, provider, _) {
+                        final isFavorite = provider.isArtistFavorite(_artist!.id);
+                        return IconButton(
+                          icon: Icon(
+                            isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                            color: isFavorite ? Colors.red : Colors.white,
+                            size: 28,
+                          ),
+                          onPressed: () => provider.toggleFavoriteArtist(_artist!),
+                        );
+                      },
                     ),
                   ),
                 ],

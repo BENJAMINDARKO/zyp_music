@@ -18,6 +18,7 @@ import '../../core/constants/repeat_mode.dart' as repeat;
 import '../../core/services/hybrid_cache_service.dart';
 import '../../core/services/queue_manager.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/services/local_http_proxy_server.dart';
 import '../../core/constants/network_state.dart';
 import '../../data/repositories/charts_repository_impl.dart';
 import '../../core/utils/app_logger.dart';
@@ -347,6 +348,12 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool _historyLoggedForCurrentTrack = false;
   bool get historyLoggedForCurrentTrack => _historyLoggedForCurrentTrack;
 
+  /// Tracks which track IDs have had their temp cache promoted
+  /// (>50% playback). Reset per-track so the same track can be
+  /// re-promoted if replayed in a new session.
+  final Set<String> _promotedTrackIds = {};
+  bool _cachePromotedForCurrentTrack = false;
+
   /// Late-binds the AI DJ history ledger. Called once during app
   /// boot (after the [PlaylistDatabase] singleton has been
   /// initialised) so the 80% position monitor has somewhere to
@@ -462,25 +469,41 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
     };
 
     // Unify next track resolution under the PlayerProvider context
+    Track enrichFromTracker(Track track) {
+      final entry = _hybridCache.getTrackerEntry(track.id);
+      if (entry == null) return track;
+      final needsTitle = track.title == 'Unknown' || track.title == 'Unknown Track' || track.title.isEmpty;
+      final needsAuthor = track.author == null || track.author!.isEmpty || track.author == 'Unknown';
+      final needsThumbnail = track.thumbnailUrl == null || track.thumbnailUrl!.isEmpty;
+      if (!needsTitle && !needsAuthor && !needsThumbnail) return track;
+      return track.copyWith(
+        title: needsTitle && entry.title != null && entry.title!.isNotEmpty && entry.title != 'Unknown' ? entry.title : null,
+        author: needsAuthor && entry.author != null && entry.author!.isNotEmpty && entry.author != 'Unknown' ? entry.author : null,
+        thumbnailUrl: needsThumbnail && entry.thumbnailUrl != null && entry.thumbnailUrl!.isNotEmpty ? entry.thumbnailUrl : null,
+      );
+    }
+
     _mixer?.nextTrackResolver = (current) async {
       // 1. If we have a next song in the manual queue, return it
       if (_currentIndex + 1 < _queue.length) {
         final nextTrack = _queue[_currentIndex + 1];
+        final enriched = enrichFromTracker(nextTrack);
         AppLogger.log(
           'nextTrackResolver: resolved from manual queue: ${nextTrack.id} ("${nextTrack.title}")',
           name: 'PlayerProvider',
         );
-        return nextTrack;
+        return enriched;
       }
       // 2. If Auto DJ is enabled, resolve via QueueManager
       if (_baseAutoDJMode != AutoDJMode.off || _smartAutoDJMode != AutoDJMode.off) {
         final nextTrack = await _queueManager?.generateNextAutoDJTrack(current);
         if (nextTrack != null) {
+          final enriched = enrichFromTracker(nextTrack);
           AppLogger.log(
             'nextTrackResolver: resolved via Auto DJ base=${_baseAutoDJMode.name} smart=${_smartAutoDJMode.name}: ${nextTrack.id} ("${nextTrack.title}")',
             name: 'PlayerProvider',
           );
-          return nextTrack;
+          return enriched;
         }
       }
       // 3. If no Auto DJ, check repeat modes
@@ -489,11 +512,12 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
       if (_repeatMode == repeat.PlaybackRepeatMode.all && _queue.isNotEmpty) {
         final nextTrack = _queue[0];
+        final enriched = enrichFromTracker(nextTrack);
         AppLogger.log(
           'nextTrackResolver: resolved wrap-around for repeat all: ${nextTrack.id} ("${nextTrack.title}")',
           name: 'PlayerProvider',
         );
-        return nextTrack;
+        return enriched;
       }
       return null;
     };
@@ -1290,6 +1314,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         _queue.removeRange(_currentIndex + 1, _queue.length);
         notifyListeners();
       }
+      await _mixer?.truncateQueueAfterCurrent();
       unawaited(_warmUpNewMode(triggeredMode, currentTrack: _currentTrack!));
     }
     return ColdStartResult.skipped;
@@ -1334,8 +1359,8 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         // the immediate next handoff works. Delaying URI fetching for the rest
         // allows the queue to populate instantly.
         if (fetched == 0) {
-          final uri = await _audioRepository.getAudioUrl(candidate);
-          if (uri.isEmpty) continue;
+          final result = await _audioRepository.getAudioUrl(candidate);
+          if (result.url.isEmpty) continue;
         }
         
         _queue.add(candidate);
@@ -1672,11 +1697,12 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (_mixer != null) {
         await _mixer!.playTrack(_currentTrack!, startAt: effectiveStartAt);
       } else {
-        final audioUrl = await _audioRepository.getAudioUrl(
+        final urlResult = await _audioRepository.getAudioUrl(
           _currentTrack!,
           quality: qualityStr,
         );
-        await _audioRepository.playTrack(_currentTrack!, audioUrl);
+        final audioUrl = urlResult.url;
+        await _audioRepository.playTrack(_currentTrack!, audioUrl, fromCache: urlResult.fromCache);
         if (effectiveStartAt != null && effectiveStartAt > Duration.zero) {
           try {
             await _audioRepository.seek(effectiveStartAt);
@@ -1767,6 +1793,27 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// [DJHistoryLedger] — the write itself runs off the UI thread
   /// (Dart's microtask queue + the sqflite background isolate)
   /// and never blocks the position stream.
+  /// Promotes the proxy server's temp file to permanent cache
+  /// once the user has listened past 50% of the track duration.
+  void _maybePromoteCache() {
+    if (_cachePromotedForCurrentTrack) return;
+    final track = _currentTrack;
+    if (track == null) return;
+    final durMs = _duration.inMilliseconds;
+    final posMs = _position.inMilliseconds;
+    if (durMs <= 0) return;
+    if (posMs >= durMs * 0.50) {
+      _cachePromotedForCurrentTrack = true;
+      _promotedTrackIds.add(track.id);
+      unawaited(LocalHttpProxyServer.instance.promoteTempFile(track.id));
+      unawaited(_hybridCache.markSuccessAfterWrite(track.id, sourceTrack: track));
+      AppLogger.log(
+        'Track ${track.id} crossed 50% playback — promoting cache',
+        name: 'PlayerProvider',
+      );
+    }
+  }
+
   void _maybeLog80Percent() {
     if (_historyLoggedForCurrentTrack) return;
     if (!_isPlaying) return;
@@ -1827,6 +1874,9 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
           artistName: track.author ?? 'Unknown',
           primaryGenre: primaryGenre,
           timestampMs: DateTime.now().millisecondsSinceEpoch,
+          title: track.title,
+          author: track.author,
+          thumbnailUrl: track.thumbnailUrl,
         ),
       );
       // Smart-DJ bootstrap fusion: the row just committed
@@ -2103,7 +2153,14 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
         'queueIndex=$newIndex',
         name: 'PlayerProvider',
       );
+      // Discard previous track's temp file if it was not promoted
+      final prevTrack = _currentTrack;
+      if (prevTrack != null && !_promotedTrackIds.contains(prevTrack.id)) {
+        unawaited(LocalHttpProxyServer.instance.discardTempFile(prevTrack.id));
+      }
       _currentTrack = resolved;
+      unawaited(_addToRecentlyPlayed(resolved));
+      _cachePromotedForCurrentTrack = false;
       if (newIndex != null) _currentIndex = newIndex;
       // [UI-Sync] Always refresh duration from the incoming MediaItem
       // on a gapless boundary. The duration stream may not update
@@ -2157,6 +2214,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       if (resolved != null) {
         _currentTrack = resolved;
+        unawaited(_addToRecentlyPlayed(resolved));
         if (newIndex != null) _currentIndex = newIndex;
         if (resolved.duration != null && resolved.duration != Duration.zero) {
           _duration = resolved.duration!;
@@ -2202,6 +2260,7 @@ class PlayerProvider extends ChangeNotifier with WidgetsBindingObserver {
       // most once per (session, track) pair; the actual write is
       // fire-and-forget on the Dart event loop's microtask queue,
       // so it never blocks the position stream.
+      _maybePromoteCache();
       _maybeLog80Percent();
       // Phase 3: 15-second-lookahead queue trigger + crossfade
       // trigger. Both are mixer methods that are themselves

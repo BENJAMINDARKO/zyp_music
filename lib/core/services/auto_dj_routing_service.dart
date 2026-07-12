@@ -560,14 +560,29 @@ class AutoDjRoutingService {
   /// routing service does not mutate it).
   Future<Track?> resolveNext({
     required Track current,
-    required AutoDJMode baseMode,
-    required AutoDJMode smartMode,
+    AutoDJMode? baseMode,
+    AutoDJMode? smartMode,
+    AutoDJMode? mode,
     required Set<String> recentIds,
     List<Track> history = const <Track>[],
   }) async {
+    final actualBaseMode = baseMode ??
+        (mode != null &&
+                (mode == AutoDJMode.shuffleLibrary ||
+                    mode == AutoDJMode.similarSongs ||
+                    mode == AutoDJMode.sameGenre ||
+                    mode == AutoDJMode.sameArtist)
+            ? mode
+            : AutoDJMode.off);
+    final actualSmartMode = smartMode ??
+        (mode != null &&
+                (mode == AutoDJMode.smartDj || mode == AutoDJMode.vibeMatch)
+            ? mode
+            : AutoDJMode.off);
+
     final exclude = <String>{...recentIds, current.id};
     AppLogger.log(
-      'resolveNext baseMode=${baseMode.name} smartMode=${smartMode.name} current=${current.id} '
+      'resolveNext baseMode=${actualBaseMode.name} smartMode=${actualSmartMode.name} current=${current.id} '
       'exclude.size=${exclude.length} history.size=${history.length}',
       name: _logTag,
     );
@@ -589,7 +604,7 @@ class AutoDjRoutingService {
     try {
       // If smartMode is active, we route to smart logic, but tell it to filter its
       // candidate pool based on the baseMode.
-      final activeMode = smartMode != AutoDJMode.off ? smartMode : baseMode;
+      final activeMode = actualSmartMode != AutoDJMode.off ? actualSmartMode : actualBaseMode;
 
       switch (activeMode) {
         case AutoDJMode.off:
@@ -608,10 +623,10 @@ class AutoDjRoutingService {
           return await _sameArtist(current, exclude, history);
 
         case AutoDJMode.smartDj:
-          return await _smartDj(current, exclude, history, baseMode);
+          return await _smartDj(current, exclude, history, actualBaseMode);
 
         case AutoDJMode.vibeMatch:
-          return await _vibeMatch(current, exclude, history, baseMode);
+          return await _vibeMatch(current, exclude, history, actualBaseMode);
       }
     } catch (e, st) {
       AppLogger.log('[AutoDJEngine] Strategy error: $e', name: _logTag);
@@ -877,16 +892,6 @@ class AutoDjRoutingService {
     final isOnline = fetcher != null && _connectivityProbe() == NetworkAvailability.online;
     AppLogger.log('Similar Songs: isOnline=$isOnline, seed=${current.title} (${current.id}), genre=${current.genre}', name: _logTag);
 
-    if (current.genre == null) {
-      AppLogger.warning(
-        '[Similar Songs] Seed track ${current.id} has no genre metadata; '
-        'bypassing similarity path and engaging Shuffle Library safety '
-        'fallback tracker.',
-        name: _logTag,
-      );
-      return _shuffleLibrary(current, exclude);
-    }
-
     if (isOnline) {
       try {
         final online = await fetcher(current);
@@ -901,34 +906,14 @@ class AutoDjRoutingService {
         final candidates = online.where((t) => !exclude.contains(t.id)).toList();
         AppLogger.log('Similar Songs: Fetched ${online.length} online recommendations, ${candidates.length} unique candidates', name: _logTag);
         if (candidates.isNotEmpty) {
-          final exactGenreMatch = candidates.firstWhere(
-            (t) => t.genre != null && t.genre == current.genre,
-            orElse: () => const _SentinelTrack(),
+          // Skip same-artist for variety; YouTube's gl parameter
+          // already biases results toward the right country
+          final picked = candidates.firstWhere(
+            (t) => !_artistMatches(t.author, current.author ?? ''),
+            orElse: () => candidates.first,
           );
-          if (exactGenreMatch is! _SentinelTrack) {
-            AppLogger.log('Similar Songs: Exact genre match found online: ${exactGenreMatch.title} (${exactGenreMatch.id})', name: _logTag);
-            return exactGenreMatch;
-          }
-
-          final neighbors = _graph.neighborsOf(current.genre);
-          final neighborMatch = candidates.firstWhere(
-            (t) => t.genre != null && neighbors.containsKey(t.genre),
-            orElse: () => const _SentinelTrack(),
-          );
-          if (neighborMatch is! _SentinelTrack) {
-            AppLogger.log('Similar Songs: Neighboring genre match found online: ${neighborMatch.title} (${neighborMatch.id})', name: _logTag);
-            return neighborMatch;
-          }
-
-          final artistMatch = candidates.firstWhere(
-            (t) => _artistMatches(t.author, current.author ?? ''),
-            orElse: () => const _SentinelTrack(),
-          );
-          if (artistMatch is! _SentinelTrack) {
-            AppLogger.log('Similar Songs: No genre/neighbor match online, selecting artist match: ${artistMatch.title} (${artistMatch.id})', name: _logTag);
-            return artistMatch;
-          }
-          AppLogger.log('Similar Songs: No genre/neighbor/artist match online. Falling through to local intersection.', name: _logTag);
+          AppLogger.log('Similar Songs: Picked: ${picked.title} (${picked.id})', name: _logTag);
+          return picked;
         }
       } catch (e) {
         AppLogger.warning(
@@ -940,6 +925,15 @@ class AutoDjRoutingService {
       }
     }
     AppLogger.log('Similar Songs: Falling back to local attribute intersection.', name: _logTag);
+    if (current.genre == null) {
+      AppLogger.warning(
+        '[Similar Songs] Seed track ${current.id} has no genre metadata; '
+        'bypassing similarity path and engaging Shuffle Library safety '
+        'fallback tracker.',
+        name: _logTag,
+      );
+      return _shuffleLibrary(current, exclude);
+    }
     final track = await _attributeIntersection(current, exclude);
     if (track != null) {
       AppLogger.log('Similar Songs: Picked local match: ${track.title} (${track.id}), genre=${track.genre}', name: _logTag);

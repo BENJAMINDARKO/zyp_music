@@ -16,6 +16,7 @@ import '../../core/services/audio_cache_service.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/hybrid_cache_service.dart';
 import '../../core/services/lyrics_chain_service.dart';
+import '../../core/services/local_http_proxy_server.dart';
 
 /// Public top-level entry point for the Track-ID prefix
 /// stripper. The function lives at file scope (not on a
@@ -140,7 +141,7 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
   }
 
   @override
-  Future<String> getAudioUrl(
+  Future<({String url, bool fromCache})> getAudioUrl(
     Track track, {
     String quality = 'adaptive',
   }) async {
@@ -150,7 +151,7 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
         // Wait, for local tracks, we can retrieve the path from SQLite. The original path was saved to SQLite downloaded_tracks.
         final localPath = await _database.getDownloadedFilePath(track.id);
         if (localPath != null && File(localPath).existsSync()) {
-          return localPath;
+          return (url: localPath, fromCache: true);
         } else {
           throw Exception('Local file not found for \${track.id}');
         }
@@ -159,7 +160,7 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
       // 1. Local downloaded file takes priority over everything
       final localPath = await _database.getDownloadedFilePath(track.id);
       if (localPath != null && File(localPath).existsSync()) {
-        return localPath;
+        return (url: localPath, fromCache: true);
       }
 
       // 2. LRU cache (skip obviously broken paths)
@@ -169,12 +170,13 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
           AppLogger.log('Invalid cache path detected: $cachedUri. Skipping.', name: 'AudioRepository');
         } else {
           AppLogger.log('Playing from cache: $cachedUri', name: 'AudioRepository');
-          return cachedUri;
+          return (url: cachedUri, fromCache: true);
         }
       }
 
       // 3. YouTube-only stream retrieval (hardcoded).
-      return await _getYouTubeUrl(track, quality);
+      final youtubeUrl = await _getYouTubeUrl(track, quality);
+      return (url: youtubeUrl, fromCache: false);
     } catch (e) {
       throw Exception('YouTube stream failed: $e');
     }
@@ -206,11 +208,14 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
   }
 
   @override
-  Future<void> playTrack(Track track, String audioUrl) async {
+  Future<void> playTrack(Track track, String audioUrl, {bool fromCache = true}) async {
     String finalUrl = audioUrl;
 
-    // YouTube Stream URL Expiry Fix: Always re-fetch a fresh stream URL immediately before playback
-    if ((track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) &&
+    // YouTube Stream URL Expiry Fix: only re-fetch when the URL came from
+    // cache (potentially stale). URLs from a live YouTube resolution are
+    // still fresh and don't need a second extractor call.
+    if (fromCache &&
+        (track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) &&
         finalUrl.contains('googlevideo.com')) {
       try {
         AppLogger.log('Fetching fresh YouTube stream URL at play time', name: 'AudioRepository');
@@ -275,8 +280,8 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
         }
 
         try {
-          final networkUrl = await getAudioUrl(track, quality: 'adaptive');
-          if (networkUrl.startsWith('http')) {
+          final networkResult = await getAudioUrl(track, quality: 'adaptive');
+          if (networkResult.url.startsWith('http')) {
             final newItem = MediaItem(
               id: track.id,
               title: track.title,
@@ -291,7 +296,7 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
                 'source': 'youtube',
               },
             );
-            await executePlay(networkUrl, newItem);
+            await executePlay(networkResult.url, newItem);
             return;
           }
         } catch (retryError) {
@@ -719,15 +724,11 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
   @override
   Future<void> preloadTrack(Track track) async {
     try {
-      final audioUrl = await getAudioUrl(track);
-      if (audioUrl.startsWith('http')) {
-        await _cacheService.cacheStream(track.id, audioUrl, track: track);
-        AppLogger.log('Successfully preloaded track: ${track.id}', name: 'AudioRepository');
+      final result = await getAudioUrl(track);
+      if (result.url.startsWith('http')) {
+        unawaited(LocalHttpProxyServer.instance.prefetchTrack(track.id, result.url));
+        AppLogger.log('Successfully preloaded track segments: ${track.id}', name: 'AudioRepository');
       }
-      // Spec §1: when a track is cached via the background look-ahead
-      // prebuffer the caching service must also run the structural
-      // lyrics validation. Fire-and-forget — a failed lyrics fetch
-      // never aborts the audio cache write.
       unawaited(preloadTrackLyrics(track));
     } catch (e) {
       AppLogger.log('Failed to preload next track: $e', name: 'AudioRepository');
@@ -736,61 +737,104 @@ class AudioRepositoryImpl implements AudioRepository, LyricsCacheReader {
 
   @override
   Future<AudioSource> buildAudioSource(Track track) async {
-    final url = await getAudioUrl(track);
-    var finalUrl = url;
+    // Enrich track metadata from the Hive cache tracker if the track
+    // arrived with placeholder values (Unknown / empty). This ensures
+    // the MediaItem passed to ExoPlayer carries accurate title, author,
+    // and artwork even when the in-memory queue track was reconstructed
+    // from a metadata-poor source (shuffle toggle, DJ mode switch, etc.).
+    final effectiveTrack = _enrichTrackFromCache(track);
 
-    // YouTube Stream URL Expiry Fix: Always re-fetch a fresh stream URL immediately before playback
-    if ((track.source == TrackSource.youtube || track.source == TrackSource.youtube_music) &&
-        finalUrl.contains('googlevideo.com')) {
-      try {
-        AppLogger.log('Fetching fresh YouTube stream URL at build time', name: 'AudioRepository');
-        final rawId = stripTrackIdPrefixes(track.id);
-        final freshUrl = await remoteDataSource.getAudioUrl(rawId, quality: 'adaptive');
-        if (freshUrl.isNotEmpty) {
-          finalUrl = freshUrl;
-        }
-      } catch (e) {
-        AppLogger.log('Fresh fetch failed: $e, falling back to original URL', name: 'AudioRepository');
-      }
+    // Check downloaded_tracks database first (favorited/downloaded tracks)
+    final dbPath = await _database.getDownloadedFilePath(track.id);
+    if (dbPath != null && File(dbPath).existsSync()) {
+      AppLogger.log('Using downloaded track file for buildAudioSource: $dbPath', name: 'AudioRepository');
+      final uri = Uri.file(dbPath);
+      final item = MediaItem(
+        id: effectiveTrack.id,
+        title: effectiveTrack.title,
+        artist: effectiveTrack.author ?? '',
+        album: effectiveTrack.album,
+        artUri: effectiveTrack.thumbnailUrl != null ? Uri.tryParse(effectiveTrack.thumbnailUrl!) : null,
+        duration: effectiveTrack.duration,
+        extras: {
+          'year': effectiveTrack.year,
+          'source': 'youtube',
+        },
+      );
+      return AudioSource.uri(uri, tag: item);
     }
 
-    if (finalUrl.startsWith('http')) {
-      // Start caching the stream in the background
-      _cacheService.cacheStream(track.id, finalUrl, track: track);
+    final localPath = await _resolveFullyCachedPath(track.id);
+    if (localPath != null) {
+      AppLogger.log('Using fully cached local file for buildAudioSource: $localPath', name: 'AudioRepository');
+      final uri = Uri.file(localPath);
+      final item = MediaItem(
+        id: effectiveTrack.id,
+        title: effectiveTrack.title,
+        artist: effectiveTrack.author ?? '',
+        album: effectiveTrack.album,
+        artUri: effectiveTrack.thumbnailUrl != null ? Uri.tryParse(effectiveTrack.thumbnailUrl!) : null,
+        duration: effectiveTrack.duration,
+        extras: {
+          'year': effectiveTrack.year,
+          'source': 'youtube',
+        },
+      );
+      return AudioSource.uri(uri, tag: item);
     }
 
+    final proxyUrl = '${LocalHttpProxyServer.instance.baseUrl}/stream?id=${track.id}';
+    final uri = Uri.parse(proxyUrl);
     final headers = await _handler.getHeaders();
-    final uri = finalUrl.startsWith('file://') || !finalUrl.startsWith('http')
-        ? (finalUrl.startsWith('file://') ? Uri.parse(finalUrl) : Uri.file(finalUrl))
-        : Uri.parse(finalUrl);
-
     final item = MediaItem(
-      id: track.id,
-      title: track.title,
-      artist: track.author ?? '',
-      album: track.album,
-      artUri: track.thumbnailUrl != null
-          ? Uri.tryParse(track.thumbnailUrl!)
-          : null,
-      duration: track.duration,
+      id: effectiveTrack.id,
+      title: effectiveTrack.title,
+      artist: effectiveTrack.author ?? '',
+      album: effectiveTrack.album,
+      artUri: effectiveTrack.thumbnailUrl != null ? Uri.tryParse(effectiveTrack.thumbnailUrl!) : null,
+      duration: effectiveTrack.duration,
       extras: {
-        'year': track.year,
+        'year': effectiveTrack.year,
         'source': 'youtube',
       },
     );
-
-    if (finalUrl.startsWith('http')) {
-      return LockCachingAudioSource(
-        uri,
-        headers: headers,
-        tag: item,
-      );
-    }
 
     return AudioSource.uri(
       uri,
       headers: headers,
       tag: item,
     );
+  }
+
+  Track _enrichTrackFromCache(Track track) {
+    final cache = _hybridCache;
+    if (cache == null) return track;
+    final entry = cache.getTrackerEntry(track.id);
+    if (entry == null) return track;
+    final needsTitle = track.title == 'Unknown' || track.title == 'Unknown Track' || track.title.isEmpty;
+    final needsAuthor = track.author == null || track.author!.isEmpty || track.author == 'Unknown';
+    final needsThumbnail = track.thumbnailUrl == null || track.thumbnailUrl!.isEmpty;
+    if (!needsTitle && !needsAuthor && !needsThumbnail) return track;
+    return track.copyWith(
+      title: needsTitle && entry.title != null && entry.title!.isNotEmpty && entry.title != 'Unknown' ? entry.title : null,
+      author: needsAuthor && entry.author != null && entry.author!.isNotEmpty && entry.author != 'Unknown' ? entry.author : null,
+      thumbnailUrl: needsThumbnail && entry.thumbnailUrl != null && entry.thumbnailUrl!.isNotEmpty ? entry.thumbnailUrl : null,
+    );
+  }
+
+  Future<String?> _resolveFullyCachedPath(String trackId) async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${docs.path}/audio_cache');
+      if (await cacheDir.exists()) {
+        for (final f in cacheDir.listSync().whereType<File>()) {
+          final name = f.path.split('/').last;
+          if (name.startsWith('$trackId.') && !name.endsWith('.tmp')) {
+            return f.path;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 }

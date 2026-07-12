@@ -1406,8 +1406,8 @@ class _PlayingScreenState extends State<PlayingScreen>
         ),
         IconButton(
           icon: Icon(
-            isFav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
-            color: isFav ? Colors.white : Colors.white.withOpacity(0.7),
+            isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+            color: isFav ? Colors.redAccent : Colors.white.withOpacity(0.7),
             size: 22,
           ),
           onPressed: () {
@@ -1558,8 +1558,12 @@ class _PlayingScreenState extends State<PlayingScreen>
 
     final onSurface = Theme.of(context).colorScheme.onSurface;
 
+    final screenHeight = MediaQuery.of(context).size.height;
+    final bool isSmallScreen = screenHeight < 680;
+    final double cardMarginHorizontal = isSmallScreen ? 12.0 : 16.0;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: cardMarginHorizontal),
       child: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
@@ -1707,8 +1711,8 @@ class _PlayingScreenState extends State<PlayingScreen>
                       final isFav = pp.isFavorite(currentTrack.id);
                       return IconButton(
                         icon: Icon(
-                          isFav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
-                          color: isFav ? Colors.white : onSurface.withOpacity(0.5),
+                          isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                          color: isFav ? Colors.redAccent : onSurface.withOpacity(0.5),
                         ),
                         onPressed: () => pp.toggleFavorite(
                           currentTrack,
@@ -1727,115 +1731,159 @@ class _PlayingScreenState extends State<PlayingScreen>
           ),
           const SizedBox(height: 16),
 
-          // 3. Action Buttons Row (Shuffle, Repeat, Autoplay [Infinity], CD [Auto DJ mode picker])
+          // 3. Action Buttons Row (Shuffle, Repeat, Autoplay, Smart DJ)
           _buildQueueActionsRow(context, player),
           const SizedBox(height: 24),
 
-          // 4. Continue Playing Header
-          Text(
-            'Continue Playing',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: onSurface,
+          // 4. Continue Playing in a frosted glass container
+          ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.06), // translucent white/grey for frosted glass look
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.08),
+                    width: 0.5,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Continue Playing',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: onSurface,
+                      ),
+                    ),
+                    if (player.activeAutoDJMode != AutoDJMode.off) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _getAutoplaySubtext(player.activeAutoDJMode),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    // Upcoming Tracks list using ReorderableListView
+                    if (upcoming.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24.0),
+                        child: Center(
+                          child: Text(
+                            'End of Queue',
+                            style: TextStyle(color: onSurface.withOpacity(0.4)),
+                          ),
+                        ),
+                      )
+                    else
+                      ReorderableListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        buildDefaultDragHandles: false, // Disable default drag handles
+                        itemCount: upcoming.length,
+                        onReorder: (oldIdx, newIdx) {
+                          if (oldIdx < newIdx) {
+                            newIdx -= 1;
+                          }
+                          final oldQueueIdx = currentIndex + 1 + oldIdx;
+                          final newQueueIdx = currentIndex + 1 + newIdx;
+                          player.reorderQueue(oldQueueIdx, newQueueIdx);
+                        },
+                        itemBuilder: (context, index) {
+                          final t = upcoming[index];
+                          final queueIdx = currentIndex + 1 + index;
+                          return Dismissible(
+                            key: ValueKey('upcoming_${t.id}_$queueIdx'),
+                            direction: DismissDirection.startToEnd,
+                            background: Container(
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.only(left: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(PhosphorIconsRegular.trash, color: Colors.white),
+                            ),
+                            onDismissed: (_) {
+                              player.removeFromQueue(queueIdx);
+                            },
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: (t.thumbnailUrl?.isNotEmpty ?? false)
+                                    ? CachedNetworkImage(
+                                        imageUrl: rewriteThumbnailSize(t.thumbnailUrl, 100),
+                                        width: 40,
+                                        height: 40,
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                                      )
+                                    : Container(
+                                        width: 40,
+                                        height: 40,
+                                        color: Colors.white10,
+                                        child: const Icon(PhosphorIconsRegular.musicNote),
+                                      ),
+                              ),
+                              title: Text(
+                                t.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              subtitle: Text(
+                                t.author ?? 'Unknown',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13),
+                              ),
+                              trailing: ReorderableDelayedDragStartListener(
+                                index: index,
+                                child: const Padding(
+                                  padding: EdgeInsets.only(right: 8.0, left: 16.0, top: 8.0, bottom: 8.0),
+                                  child: Icon(PhosphorIconsRegular.equals, size: 20),
+                                ),
+                              ),
+                              onTap: () {
+                                player.playFromQueue(queueIdx);
+                              },
+                              onLongPress: () {
+                                TrackContextMenu.show(context, t);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
-          if (player.activeAutoDJMode != AutoDJMode.off)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                'AutoPlaying similar music',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
-                ),
-              ),
-            ),
-          const SizedBox(height: 8),
-
-          // 5. Upcoming Tracks list
-          if (upcoming.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24.0),
-              child: Center(
-                child: Text(
-                  'End of Queue',
-                  style: TextStyle(color: onSurface.withOpacity(0.4)),
-                ),
-              ),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.zero,
-              itemCount: upcoming.length,
-              itemBuilder: (context, index) {
-                final t = upcoming[index];
-                final queueIdx = currentIndex + 1 + index;
-                return Dismissible(
-                  key: ValueKey('upcoming_${t.id}_$queueIdx'),
-                  direction: DismissDirection.startToEnd,
-                  background: Container(
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.only(left: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(PhosphorIconsRegular.trash, color: Colors.white),
-                  ),
-                  onDismissed: (_) {
-                    player.removeFromQueue(queueIdx);
-                  },
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: (t.thumbnailUrl?.isNotEmpty ?? false)
-                          ? CachedNetworkImage(
-                              imageUrl: rewriteThumbnailSize(t.thumbnailUrl, 100),
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => Container(color: Colors.white10),
-                            )
-                          : Container(
-                              width: 40,
-                              height: 40,
-                              color: Colors.white10,
-                              child: const Icon(PhosphorIconsRegular.musicNote),
-                            ),
-                    ),
-                    title: Text(
-                      t.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    subtitle: Text(
-                      t.author ?? 'Unknown',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: onSurface.withOpacity(0.6), fontSize: 13),
-                    ),
-                    trailing: const Padding(
-                      padding: EdgeInsets.only(right: 8.0),
-                      child: Icon(PhosphorIconsRegular.equals, size: 20),
-                    ),
-                    onTap: () {
-                      player.playFromQueue(queueIdx);
-                    },
-                  ),
-                );
-              },
-            ),
         ],
       ),
     );
   }
 
   Widget _buildQueueActionsRow(BuildContext context, PlayerProvider player) {
+    final baseMode = player.baseAutoDJMode;
+    final smartMode = player.smartAutoDJMode;
+    
+    final baseIcon = _getBaseModeIcon(baseMode);
+    final isBaseActive = baseMode != AutoDJMode.off;
+    
+    final smartIcon = _getSmartModeIcon(smartMode);
+    final isSmartActive = smartMode != AutoDJMode.off;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
@@ -1855,17 +1903,17 @@ class _PlayingScreenState extends State<PlayingScreen>
           isActive: player.repeatMode != repeat.PlaybackRepeatMode.none,
           onTap: () => player.cycleRepeatMode(),
         ),
-        // Infinity (Autoplay): pill
+        // Base Autoplay Mode Button: pill
         _buildQueuePillButton(
-          icon: PhosphorIconsRegular.infinity,
-          isActive: player.isAutoDJEnabled,
-          onTap: () => player.toggleAutoDJ(),
+          icon: baseIcon,
+          isActive: isBaseActive,
+          onTap: () => AutoDJModePicker.showBasePicker(context),
         ),
-        // CD (Auto DJ picker): pill
+        // Smart DJ / Vibe Mode Button: pill
         _buildQueuePillButton(
-          icon: PhosphorIconsRegular.disc,
-          isActive: false,
-          onTap: () => AutoDJModePicker.show(context),
+          icon: smartIcon,
+          isActive: isSmartActive,
+          onTap: () => AutoDJModePicker.showSmartPicker(context),
         ),
       ],
     );
@@ -1915,6 +1963,51 @@ class _PlayingScreenState extends State<PlayingScreen>
         ),
       ),
     );
+  }
+
+  IconData _getBaseModeIcon(AutoDJMode mode) {
+    switch (mode) {
+      case AutoDJMode.shuffleLibrary:
+        return PhosphorIconsRegular.shuffle;
+      case AutoDJMode.similarSongs:
+        return PhosphorIconsRegular.waveform;
+      case AutoDJMode.sameGenre:
+        return PhosphorIconsRegular.musicNotes;
+      case AutoDJMode.sameArtist:
+        return PhosphorIconsRegular.user;
+      default:
+        return PhosphorIconsRegular.infinity;
+    }
+  }
+
+  IconData _getSmartModeIcon(AutoDJMode mode) {
+    switch (mode) {
+      case AutoDJMode.smartDj:
+        return PhosphorIconsRegular.sparkle;
+      case AutoDJMode.vibeMatch:
+        return PhosphorIconsRegular.activity;
+      default:
+        return PhosphorIconsRegular.disc;
+    }
+  }
+
+  String _getAutoplaySubtext(AutoDJMode mode) {
+    switch (mode) {
+      case AutoDJMode.shuffleLibrary:
+        return 'AutoPlaying from library';
+      case AutoDJMode.similarSongs:
+        return 'AutoPlaying similar music';
+      case AutoDJMode.sameGenre:
+        return 'AutoPlaying same genre';
+      case AutoDJMode.sameArtist:
+        return 'AutoPlaying same artist';
+      case AutoDJMode.smartDj:
+        return 'AutoPlaying Smart DJ mix';
+      case AutoDJMode.vibeMatch:
+        return 'AutoPlaying Vibe Match mix';
+      default:
+        return '';
+    }
   }
 
 }

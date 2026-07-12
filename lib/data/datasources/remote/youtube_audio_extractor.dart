@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_explode;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/utils/app_logger.dart';
 
 /// Lightweight, Dart port of PlayTorrio TV's `YouTubeExtractor` + `MusicAudioExtractor`.
 ///
@@ -200,6 +202,10 @@ class YoutubeAudioExtractor {
     final cached = _streamCache[videoId];
     if (cached != null && !cached.isExpired) return cached.url;
 
+    final prefs = await SharedPreferences.getInstance();
+    final formatPref = prefs.getString('youtubeMusicFormat') ?? 'Any';
+    final qualityPref = prefs.getString('youtubeMusicQuality') ?? 'adaptive';
+
     final config = await _ensureConfig();
     for (final client in _clients) {
       if (client.requiresVisitorData &&
@@ -216,7 +222,7 @@ class YoutubeAudioExtractor {
         final streamingData = _map(player['streamingData']);
         if (streamingData == null) continue;
 
-        final best = _pickBestAudio(streamingData);
+        final best = _pickBestAudio(streamingData, formatPref, qualityPref);
         if (best != null) {
           _streamCache[videoId] = _CachedStream(best.url, best.expiresAt);
           return best.url;
@@ -286,6 +292,10 @@ class YoutubeAudioExtractor {
 
   Future<String?> _getAudioUrlForceRefresh(String videoId) async {
     final config = await _ensureConfig(forceRefresh: true);
+    final prefs = await SharedPreferences.getInstance();
+    final formatPref = prefs.getString('youtubeMusicFormat') ?? 'Any';
+    final qualityPref = prefs.getString('youtubeMusicQuality') ?? 'adaptive';
+
     for (final client in _clients) {
       if (client.requiresVisitorData &&
           (config.visitorData == null || config.visitorData!.isEmpty)) {
@@ -295,7 +305,7 @@ class YoutubeAudioExtractor {
         final player = await _fetchPlayer(config, videoId, client);
         final streamingData = _map(player['streamingData']);
         if (streamingData == null) continue;
-        final best = _pickBestAudio(streamingData);
+        final best = _pickBestAudio(streamingData, formatPref, qualityPref);
         if (best != null) {
           _streamCache[videoId] = _CachedStream(best.url, best.expiresAt);
           return best.url;
@@ -398,38 +408,66 @@ class YoutubeAudioExtractor {
     return <String, dynamic>{};
   }
 
-  _AudioCandidate? _pickBestAudio(Map<String, dynamic> streamingData) {
+  _AudioCandidate? _pickBestAudio(
+    Map<String, dynamic> streamingData,
+    String formatPref,
+    String qualityPref,
+  ) {
     final adaptive = _listOfMaps(streamingData['adaptiveFormats']);
     final progressive = _listOfMaps(streamingData['formats']);
 
-    _AudioCandidate? best;
-    // Prefer adaptive audio-only streams (smaller, higher quality per byte).
+    List<_AudioCandidate> candidates = [];
     for (final f in adaptive) {
       final mime = _str(f, 'mimeType') ?? '';
       if (!mime.contains('audio/')) continue;
       final url = _str(f, 'url');
       if (url == null || url.isEmpty) continue;
-      final bitrate =
-          (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0).toDouble();
-          
-      // Prefer MP4 audio to allow ID3/MP4 tag writing during export
-      final adjustedBitrate = mime.contains('mp4') ? bitrate * 2.0 : bitrate;
-      
-      final cand = _AudioCandidate(url, adjustedBitrate, _expiresAt(url));
-      if (best == null || cand.bitrate > best.bitrate) best = cand;
-    }
-    if (best != null) return best;
 
-    // Fallback: progressive (video+audio muxed) — last resort for audio-only.
-    for (final f in progressive) {
-      final url = _str(f, 'url');
-      if (url == null || url.isEmpty) continue;
+      if (formatPref.toLowerCase() == 'm4a' && !mime.contains('mp4')) continue;
+      if (formatPref.toLowerCase() == 'webm' && !mime.contains('webm')) continue;
+
       final bitrate =
           (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0).toDouble();
-      final cand = _AudioCandidate(url, bitrate, _expiresAt(url));
-      if (best == null || cand.bitrate > best.bitrate) best = cand;
+
+      candidates.add(_AudioCandidate(url, bitrate, _expiresAt(url)));
     }
-    return best;
+
+    if (candidates.isEmpty && formatPref.toLowerCase() != 'any') {
+      for (final f in adaptive) {
+        final mime = _str(f, 'mimeType') ?? '';
+        if (!mime.contains('audio/')) continue;
+        final url = _str(f, 'url');
+        if (url == null || url.isEmpty) continue;
+
+        final bitrate =
+            (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0).toDouble();
+
+        candidates.add(_AudioCandidate(url, bitrate, _expiresAt(url)));
+      }
+    }
+
+    if (candidates.isEmpty) {
+      for (final f in progressive) {
+        final url = _str(f, 'url');
+        if (url == null || url.isEmpty) continue;
+        final bitrate =
+            (_num(f, 'bitrate') ?? _num(f, 'averageBitrate') ?? 0).toDouble();
+        candidates.add(_AudioCandidate(url, bitrate, _expiresAt(url)));
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    if (qualityPref == 'yt48') {
+      candidates.sort((a, b) => (a.bitrate - 48000).abs().compareTo((b.bitrate - 48000).abs()));
+      return candidates.first;
+    } else if (qualityPref == 'yt128') {
+      candidates.sort((a, b) => (a.bitrate - 128000).abs().compareTo((b.bitrate - 128000).abs()));
+      return candidates.first;
+    } else {
+      candidates.sort((a, b) => b.bitrate.compareTo(a.bitrate));
+      return candidates.first;
+    }
   }
 
   DateTime? _expiresAt(String url) {
@@ -464,11 +502,7 @@ class YoutubeAudioExtractor {
 
   static void _log(String msg) {
     debugPrint('[$_tag] $msg');
-    // Also use AppLogger so we can see it in user logs
-    try {
-      // Import not needed if we just print, but AppLogger requires import.
-      // Wait, AppLogger is in lib/core/utils/app_logger.dart
-    } catch (_) {}
+    AppLogger.log(msg, name: _tag);
   }
 }
 

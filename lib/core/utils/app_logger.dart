@@ -40,10 +40,8 @@ class AppLogger {
   }
 
   static void _write(String message, {required String name, int level = 700}) {
-    if (kDebugMode) {
-      developer.log(message, name: name, level: level);
-      print('[$name] $message');
-    }
+    developer.log(message, name: name, level: level);
+    print('[$name] $message');
     if (_logFile != null) {
       try {
         final timestamp = DateTime.now().toIso8601String();

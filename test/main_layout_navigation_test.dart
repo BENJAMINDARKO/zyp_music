@@ -33,8 +33,8 @@ class _MockAudioRepository implements AudioRepository {
   final _skipPrevCtrl = StreamController<void>.broadcast();
   @override Stream<void> get onSkipNextRequested => _skipNextCtrl.stream;
   @override Stream<void> get onSkipPreviousRequested => _skipPrevCtrl.stream;
-  @override Future<String> getAudioUrl(Track track, {String quality = 'adaptive'}) => throw UnimplementedError();
-  @override Future<void> playTrack(Track track, String audioUrl) => throw UnimplementedError();
+  @override Future<({String url, bool fromCache})> getAudioUrl(Track track, {String quality = 'adaptive'}) => throw UnimplementedError();
+  @override Future<void> playTrack(Track track, String audioUrl, {bool fromCache = true}) => throw UnimplementedError();
   @override Future<void> play(String url) => throw UnimplementedError();
   @override Future<void> pause() async {}
   @override Future<void> resume() async {}
@@ -132,6 +132,18 @@ class _MockDownloadProvider extends ChangeNotifier implements DownloadProvider {
   @override bool isAlbumCached(Album album) => false;
   @override Future<int> getTotalCacheSize() async => 0;
   @override Future<int> getPlaylistCacheSize(String playlistId) async => 0;
+
+  // Export methods
+  @override Map<String, DownloadProgress> get activeExports => {};
+  @override Set<String> get exportedTrackIds => {};
+  @override Future<void> exportAlbum(Album album) async {}
+  @override Future<void> exportTrack(Track track, {String quality = 'medium'}) async {}
+  @override bool isAlbumExported(Album album) => false;
+  @override bool isAlbumExporting(Album album) => false;
+  @override Future<bool> isExported(Track track) async => false;
+  @override Future<void> unexportAlbum(Album album) async {}
+  @override Future<void> unexportTrack(Track track) async {}
+
   @override void dispose() { super.dispose(); }
 }
 

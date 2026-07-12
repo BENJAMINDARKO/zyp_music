@@ -27,8 +27,8 @@ class _MockAudioRepository implements AudioRepository {
   final _skipPrevCtrl = StreamController<void>.broadcast();
   @override Stream<void> get onSkipNextRequested => _skipNextCtrl.stream;
   @override Stream<void> get onSkipPreviousRequested => _skipPrevCtrl.stream;
-  @override Future<String> getAudioUrl(Track track, {String quality = 'adaptive'}) async => '';
-  @override Future<void> playTrack(Track track, String audioUrl) async {}
+  @override Future<({String url, bool fromCache})> getAudioUrl(Track track, {String quality = 'adaptive'}) async => (url: '', fromCache: false);
+  @override Future<void> playTrack(Track track, String audioUrl, {bool fromCache = true}) async {}
   @override Future<void> play(String url) async {}
   @override Future<void> pause() async {}
   @override Future<void> resume() async {}

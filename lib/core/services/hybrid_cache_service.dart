@@ -339,6 +339,28 @@ class HybridCacheService extends ChangeNotifier {
   /// The migration hook calls this immediately after writing the
   /// SQLite row, so we also keep the [_sqliteDownloadedIds] mirror
   /// in sync — the spec §5 dual-source checkmark check depends on it.
+  /// Backfills display metadata on a Hive-only cache entry that was
+  /// written before the Phase 6 metadata fields existed. Reads from
+  /// audio-file tags and persists so future loads skip the tag scan.
+  Future<void> backfillMetadata(
+    String trackId,
+    String title, {
+    String? author,
+    String? thumbnailUrl,
+  }) async {
+    final box = _box;
+    if (box == null) return;
+    final existing = box.get(trackId);
+    if (existing == null) return;
+    if (existing.title != null && existing.title!.isNotEmpty) return;
+    final updated = existing.copyWith(
+      title: title,
+      author: author,
+      thumbnailUrl: thumbnailUrl,
+    );
+    await box.put(trackId, updated);
+  }
+
   Future<void> evictFromTracker(String trackId) async {
     final box = _box;
     if (box == null) return;

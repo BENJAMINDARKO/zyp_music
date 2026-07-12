@@ -31,6 +31,7 @@ class SettingsProvider extends ChangeNotifier {
 
   // Audio
   static const _keyYoutubeMusicQuality = 'youtubeMusicQuality';
+  static const _keyYoutubeMusicFormat = 'youtubeMusicFormat';
 
   // Search Sources
   static const _keySearchSourceYoutube = 'searchSourceYoutube';
@@ -46,6 +47,28 @@ class SettingsProvider extends ChangeNotifier {
   // Spotify API Integration
   static const _keySpotifyClientId = 'spotifyClientId';
   static const _keySpotifyClientSecret = 'spotifyClientSecret';
+
+  // Region
+  static const _keyPreferredGl = 'preferredGl';
+  static const List<Map<String, String>> countryOptions = [
+    {'code': 'GH', 'name': 'Ghana'},
+    {'code': 'NG', 'name': 'Nigeria'},
+    {'code': 'KE', 'name': 'Kenya'},
+    {'code': 'ZA', 'name': 'South Africa'},
+    {'code': 'TZ', 'name': 'Tanzania'},
+    {'code': 'UG', 'name': 'Uganda'},
+    {'code': 'ZM', 'name': 'Zambia'},
+    {'code': 'ZW', 'name': 'Zimbabwe'},
+    {'code': 'US', 'name': 'United States'},
+    {'code': 'GB', 'name': 'United Kingdom'},
+    {'code': 'DE', 'name': 'Germany'},
+    {'code': 'FR', 'name': 'France'},
+    {'code': 'BR', 'name': 'Brazil'},
+    {'code': 'IN', 'name': 'India'},
+    {'code': 'JP', 'name': 'Japan'},
+    {'code': 'AU', 'name': 'Australia'},
+    {'code': 'CA', 'name': 'Canada'},
+  ];
 
   int _prebufferCount = 3;
   AudioQuality _audioQuality = AudioQuality.adaptive;
@@ -78,6 +101,7 @@ class SettingsProvider extends ChangeNotifier {
   int _scrobbleThreshold = 75;
 
   String _youtubeMusicQuality = 'adaptive';
+  String _youtubeMusicFormat = 'Any';
 
   String _downloadQuality = 'AAC 320kbps';
   String _androidDownloadFolder = '/storage/emulated/0/Music/ZYPMusic';
@@ -91,11 +115,15 @@ class SettingsProvider extends ChangeNotifier {
   String _spotifyClientId = '';
   String _spotifyClientSecret = '';
 
+  String? _preferredGl;
+
   int get prebufferCount => _prebufferCount;
   AudioQuality get audioQuality => _audioQuality;
 
   String get spotifyClientId => _spotifyClientId;
   String get spotifyClientSecret => _spotifyClientSecret;
+
+  String? get preferredGl => _preferredGl;
 
   /// Returns the prebuffer count clamped to the supported 1..5 range.
   int get prebufferCountClamped =>
@@ -128,6 +156,7 @@ class SettingsProvider extends ChangeNotifier {
   int get scrobbleThreshold => _scrobbleThreshold;
 
   String get youtubeMusicQuality => _youtubeMusicQuality;
+  String get youtubeMusicFormat => _youtubeMusicFormat;
 
   String get downloadQuality => _downloadQuality;
   String get androidDownloadFolder => _androidDownloadFolder;
@@ -176,6 +205,7 @@ class SettingsProvider extends ChangeNotifier {
     _scrobbleThreshold = prefs.getInt(_keyScrobbleThreshold) ?? 75;
 
     _youtubeMusicQuality = prefs.getString(_keyYoutubeMusicQuality) ?? 'adaptive';
+    _youtubeMusicFormat = prefs.getString(_keyYoutubeMusicFormat) ?? 'Any';
 
     _downloadQuality = prefs.getString(_keyDownloadQuality) ?? 'AAC 320kbps';
     _androidDownloadFolder = prefs.getString(_keyAndroidDownloadFolder) ?? '/storage/emulated/0/Music/ZYPMusic';
@@ -184,6 +214,9 @@ class SettingsProvider extends ChangeNotifier {
         
     _spotifyClientId = prefs.getString(_keySpotifyClientId) ?? '';
     _spotifyClientSecret = prefs.getString(_keySpotifyClientSecret) ?? '';
+
+    final gl = prefs.getString(_keyPreferredGl);
+    _preferredGl = (gl != null && gl.isNotEmpty) ? gl : null;
 
     notifyListeners();
   }
@@ -199,6 +232,13 @@ class SettingsProvider extends ChangeNotifier {
     _spotifyClientSecret = secret.trim();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keySpotifyClientSecret, _spotifyClientSecret);
+    notifyListeners();
+  }
+
+  Future<void> setPreferredGl(String code) async {
+    _preferredGl = code;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyPreferredGl, code);
     notifyListeners();
   }
 
@@ -264,6 +304,7 @@ class SettingsProvider extends ChangeNotifier {
     await prefs.setString(key, value);
     switch (key) {
       case _keyYoutubeMusicQuality: _youtubeMusicQuality = value; break;
+      case _keyYoutubeMusicFormat: _youtubeMusicFormat = value; break;
       case _keyDownloadQuality: _downloadQuality = value; break;
       case _keyAndroidDownloadFolder: _androidDownloadFolder = value; break;
       case _keyBulkDownloadMethod: _bulkDownloadMethod = value; break;

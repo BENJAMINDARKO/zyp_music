@@ -19,6 +19,9 @@ class DJHistoryEntry {
   final double bpm;
   final double energyLevel;
   final int timestampMs;
+  final String? title;
+  final String? author;
+  final String? thumbnailUrl;
 
   /// Spec 2C: `primaryGenre` is now required. The previous default
   /// of `'Unknown'` masked the data-pipeline bug at audit §9.1, §9.2
@@ -38,6 +41,9 @@ class DJHistoryEntry {
     this.bpm = 0.0,
     this.energyLevel = 0.5,
     required this.timestampMs,
+    this.title,
+    this.author,
+    this.thumbnailUrl,
   });
 
   Map<String, Object?> toMap() => {
@@ -48,6 +54,9 @@ class DJHistoryEntry {
         'bpm': bpm,
         'energy_level': energyLevel,
         'timestamp': timestampMs,
+        if (title != null) 'title': title,
+        if (author != null) 'author': author,
+        if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
       };
 
   factory DJHistoryEntry.fromMap(Map<String, Object?> m) => DJHistoryEntry(
@@ -58,6 +67,9 @@ class DJHistoryEntry {
         bpm: (m['bpm'] as num?)?.toDouble() ?? 0.0,
         energyLevel: (m['energy_level'] as num?)?.toDouble() ?? 0.5,
         timestampMs: m['timestamp'] as int,
+        title: m['title'] as String?,
+        author: m['author'] as String?,
+        thumbnailUrl: m['thumbnail_url'] as String?,
       );
 }
 

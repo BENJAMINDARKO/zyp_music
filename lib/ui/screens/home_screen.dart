@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../presentation/providers/download_provider.dart';
+import '../../presentation/providers/home_feed_provider.dart';
+import '../../presentation/providers/settings_provider.dart';
 import '../widgets/track_download_icon.dart';
 import '../widgets/album_download_icon.dart';
 import '../widgets/track_export_icon.dart';
@@ -12,6 +14,7 @@ import '../../presentation/providers/player_provider.dart';
 import '../../presentation/providers/charts_provider.dart';
 import '../../domain/entities/video.dart';
 import '../../domain/entities/album.dart';
+import '../../domain/entities/playlist.dart';
 import '../../domain/entities/artist.dart';
 import '../../presentation/providers/settings_provider.dart';
 import '../../data/models/video_model.dart';
@@ -19,14 +22,51 @@ import '../widgets/track_context_menu.dart';
 import '../widgets/album_context_menu.dart';
 import 'album_screen.dart';
 import 'artist_screen.dart';
+import 'playlist_screen.dart';
 import "../../core/utils/thumbnail_url.dart";
 import '../widgets/playing_track_mask.dart';
 import '../widgets/explicit_icon.dart';
 
+import 'dart:ui';
 import '../widgets/global_top_bar.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _countryPickerShown = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_countryPickerShown) {
+      final settings = context.read<SettingsProvider>();
+      if (settings.preferredGl == null) {
+        _countryPickerShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _showCountryPicker(context));
+      }
+    }
+  }
+
+  Future<void> _showCountryPicker(BuildContext context) async {
+    final code = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _CountryPickerSheet(),
+    );
+    if (code != null && mounted) {
+      final settings = context.read<SettingsProvider>();
+      await settings.setPreferredGl(code);
+      final feed = context.read<HomeFeedProvider>();
+      feed.setGl(code);
+      feed.refreshYTMusicHome();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -308,6 +348,105 @@ Widget _buildGlobalHot(BuildContext context) {
       );
     },
   );
+}
+
+Widget _buildGroovePicks(BuildContext context) {
+  return Consumer<HomeFeedProvider>(
+    builder: (context, feed, _) {
+      final sections = feed.ytHomeSections;
+      if (sections == null || sections.isEmpty) return const SizedBox.shrink();
+      final groove = sections.where((s) => s.title.toLowerCase() == 'quick picks').firstOrNull;
+      if (groove == null) return const SizedBox.shrink();
+      if (groove.items.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(context, 'Groove Picks'),
+          SizedBox(
+            height: 180,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: groove.items.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                return SizedBox(
+                  width: 140,
+                  child: _ytItemCard(groove.items[index]),
+                );
+              },
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+Widget _buildYTMusicSections(BuildContext context) {
+  return Consumer<HomeFeedProvider>(
+    builder: (context, feed, _) {
+      final sections = feed.ytHomeSections;
+      if (sections == null || sections.isEmpty) return const SizedBox.shrink();
+      final filtered = sections.where((s) {
+        final t = s.title;
+        return t != 'Quick picks' &&
+            t != 'All hits' &&
+            t != 'New releases' &&
+            t != "Today's biggest hits" &&
+            t != 'Indian Music' &&
+            t != 'Take it easy';
+      }).take(4).toList();
+      if (filtered.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: filtered.map((section) {
+          final displayTitle = section.title == 'Long listens'
+              ? 'Human DJ'
+              : section.title;
+          return _buildYTMusicSectionRow(
+              context, YTFeedSection(displayTitle, section.items));
+        }).toList(),
+      );
+    },
+  );
+}
+
+Widget _buildYTMusicSectionRow(BuildContext context, YTFeedSection section) {
+  if (section.items.isEmpty) return const SizedBox.shrink();
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _buildSectionHeader(context, section.title),
+      SizedBox(
+        height: 180,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: section.items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (context, index) {
+            final item = section.items[index];
+            return SizedBox(
+              width: 140,
+              child: _ytItemCard(item),
+            );
+          },
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _ytItemCard(YTFeedItem item) {
+  if (item.track != null) {
+    return _TrackCard(track: item.track!);
+  } else if (item.album != null) {
+    return _AlbumCard(album: item.album!);
+  } else if (item.playlist != null) {
+    return _PlaylistCard(playlist: item.playlist!);
+  }
+  return const SizedBox.shrink();
 }
 
 // Reusable track tile for compact list
@@ -619,10 +758,10 @@ class _AlbumCard extends StatelessWidget {
                               child: CachedNetworkImage(
                                 imageUrl: rewriteThumbnailSize(album.thumbnailUrl),
                                 fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => _fallbackIcon(),
+                                errorWidget: (_, __, ___) => _cardFallback(),
                               ),
                             )
-                          : _fallbackIcon(),
+                          : _cardFallback(),
                       ),
                       Positioned(
                         top: 6,
@@ -705,5 +844,158 @@ class _AlbumCard extends StatelessWidget {
     );
   }
 
-  Widget _fallbackIcon() => const Center(child: Icon(PhosphorIconsRegular.discoBall, color: Colors.white24, size: 48));
+}
+
+Widget _cardFallback() => const Center(child: Icon(PhosphorIconsRegular.discoBall, color: Colors.white24, size: 48));
+
+class _PlaylistCard extends StatelessWidget {
+  final Playlist playlist;
+  const _PlaylistCard({required this.playlist});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PlaylistScreen(playlistId: playlist.id),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF141414),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1F1F1F),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned.fill(
+                        child: playlist.thumbnailUrl != null
+                          ? ClipRRect(
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                              child: CachedNetworkImage(
+                                imageUrl: rewriteThumbnailSize(playlist.thumbnailUrl),
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _cardFallback(),
+                              ),
+                            )
+                          : _cardFallback(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      playlist.title,
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      playlist.author ?? 'Unknown',
+                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CountryPickerSheet extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.85),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).padding.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Select Your Region',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Personalised recommendations for your region',
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...SettingsProvider.countryOptions.map((c) => ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: const Icon(PhosphorIconsRegular.globeHemisphereWest,
+                      color: Colors.white70),
+                  title: Text(c['name']!, style: const TextStyle(color: Colors.white)),
+                  trailing: Text(c['code']!,
+                      style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  onTap: () => Navigator.pop(context, c['code']),
+                )),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

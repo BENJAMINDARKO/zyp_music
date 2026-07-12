@@ -227,7 +227,8 @@ class AudioCacheService {
       //    getAudioUrl() consults the local download table and the
       //    LRU cache before falling through to the YouTube extractor,
       //    so a previously-cached file never re-downloads.
-      final streamUrl = await repo.getAudioUrl(track);
+      final urlResult = await repo.getAudioUrl(track);
+      final streamUrl = urlResult.url;
       // If the resolved URL is a local file (e.g. the
       // track is already permanently downloaded) just register it in
       // the Hive box and exit — no network call is made.
@@ -488,7 +489,9 @@ class AudioCacheService {
         playlistId ?? 'background',
         filePath,
         title: track.title,
+        thumbnailUrl: track.thumbnailUrl,
         durationSeconds: track.duration?.inSeconds,
+        author: track.author,
         album: track.album,
         year: track.year,
       );

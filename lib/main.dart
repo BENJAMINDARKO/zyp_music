@@ -28,6 +28,7 @@ import 'core/services/hybrid_cache_service.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/local_crate_miner.dart';
 import 'core/services/lyrics_chain_service.dart';
+import 'core/services/local_http_proxy_server.dart';
 import 'core/services/queue_manager.dart';
 import 'core/migrations/cache_metadata_backfill.dart';
 import 'core/constants/network_state.dart';
@@ -173,6 +174,9 @@ Future<void> main() async {
     );
     audioRepository.setLyricsChainService(lyricsChain);
 
+    LocalHttpProxyServer.instance.attachRepository(audioRepository);
+    await LocalHttpProxyServer.instance.start();
+
     // Construct the global connectivity listener after every collaborator
     // it needs to wake up is alive. `initialize` runs the synchronous
     // initial probe (so the system is locked to `offline` or `online`
@@ -227,8 +231,26 @@ Future<void> main() async {
 
     final homeFeedProvider = HomeFeedProvider(
       database: localDatabase,
+      dataSource: remoteDataSource,
       cacheService: hybridCache,
     );
+
+    // Set global geolocation on YTMusic from persisted preference.
+    // All subsequent API calls (home sections, getUpNexts, search, etc.)
+    // will be biased toward the user's chosen region.
+    if (settingsProvider.preferredGl case final gl?) {
+      remoteDataSource.setGl(gl);
+    }
+
+    // Listen for region changes at runtime — update YTMusic's gl
+    // and refresh the home feed whenever the user picks a new country.
+    settingsProvider.addListener(() {
+      final gl = settingsProvider.preferredGl;
+      if (gl != null) {
+        remoteDataSource.setGl(gl);
+        homeFeedProvider.refreshYTMusicHome();
+      }
+    });
 
     // QueueManager coordinates the manual playback queue and the explicit
     // Auto DJ engine. It listens to the connectivity service so the offline

@@ -9,10 +9,18 @@ class AuthService {
   AuthService._() : _storage = const FlutterSecureStorage();
   factory AuthService() => _instance ??= AuthService._();
 
+  String? _cachedCookies;
+  bool _isCookiesCached = false;
+
   Future<String?> getCookies() async {
+    if (_isCookiesCached) {
+      return _cachedCookies;
+    }
     try {
       final raw = await _storage.read(key: _cookiesKey);
-      return raw?.isEmpty == true ? null : raw;
+      _cachedCookies = raw?.isEmpty == true ? null : raw;
+      _isCookiesCached = true;
+      return _cachedCookies;
     } catch (e) {
       AppLogger.log('Failed to read cookies: $e', name: 'AuthService');
       return null;
@@ -22,6 +30,8 @@ class AuthService {
   Future<void> setCookies(String cookies) async {
     try {
       await _storage.write(key: _cookiesKey, value: cookies);
+      _cachedCookies = cookies.isEmpty ? null : cookies;
+      _isCookiesCached = true;
     } catch (e) {
       AppLogger.log('Failed to save cookies: $e', name: 'AuthService');
     }
@@ -30,6 +40,8 @@ class AuthService {
   Future<void> clearCookies() async {
     try {
       await _storage.delete(key: _cookiesKey);
+      _cachedCookies = null;
+      _isCookiesCached = true;
     } catch (e) {
       AppLogger.log('Failed to clear cookies: $e', name: 'AuthService');
     }

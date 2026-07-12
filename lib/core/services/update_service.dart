@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -10,6 +12,28 @@ import '../utils/app_logger.dart';
 class UpdateService {
   static const String _repoUrl =
       'https://api.github.com/repos/BENJAMINDARKO/zyp_music/releases/latest';
+
+  static Timer? _periodicTimer;
+
+  /// Start a background timer that checks for updates every 8 hours.
+  /// The context must remain valid (use the root navigator context).
+  static void startPeriodicCheck(BuildContext context) {
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer.periodic(
+      const Duration(hours: 8),
+      (_) {
+        if (context.mounted) {
+          checkForUpdates(context);
+        }
+      },
+    );
+    AppLogger.log('Periodic update check started (every 8 hours)', name: 'UpdateService');
+  }
+
+  static void stopPeriodicCheck() {
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
 
   /// Check for updates and show dialog if a newer version is available.
   static Future<void> checkForUpdates(BuildContext context) async {
@@ -220,104 +244,107 @@ class UpdateService {
   ) {
     showDialog(
       context: context,
-      barrierDismissible: false, // Force choice
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.5),
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Text(
-            'Update Available ($latestVersion)',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'A new version of Zyp Music is available. Would you like to download and install it now?',
-                  style: TextStyle(fontSize: 14),
-                ),
-                if (changelog != null && changelog.trim().isNotEmpty) ...[
-                  const SizedBox(height: 16),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: Colors.white.withOpacity(0.08), width: 0.5),
+            ),
+            backgroundColor: const Color(0xFF161616).withOpacity(0.85),
+            title: Text(
+              'Update Available ($latestVersion)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   const Text(
-                    'What\'s New:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                    'A new version of Zyp Music is available. Would you like to download and install it now?',
+                    style: TextStyle(fontSize: 14),
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.maxFinite,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.08),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: Text(
-                      changelog,
+                  if (changelog != null && changelog.trim().isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'What\'s New:',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.85),
-                        height: 1.4,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.maxFinite,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.08),
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Text(
+                        changelog,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.85),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text(
-                'Later',
-                style: TextStyle(color: Colors.white60),
               ),
             ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext); // Close prompt
-                
-                // Request install packages permission first on Android
-                final status = await Permission.requestInstallPackages.status;
-                if (!status.isGranted) {
-                  final reqStatus = await Permission.requestInstallPackages.request();
-                  if (!reqStatus.isGranted) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Please enable "Install unknown apps" permission for Zyp Music in system settings to perform the update.',
-                          ),
-                          duration: Duration(seconds: 5),
-                        ),
-                      );
-                    }
-                    return;
-                  }
-                }
-
-                if (context.mounted) {
-                  _showDownloadProgressDialog(context, downloadUrl);
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text(
+                  'Later',
+                  style: TextStyle(color: Colors.white60),
                 ),
               ),
-              child: const Text('Update Now'),
-            ),
-          ],
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(dialogContext);
+                  final status = await Permission.requestInstallPackages.status;
+                  if (!status.isGranted) {
+                    final reqStatus = await Permission.requestInstallPackages.request();
+                    if (!reqStatus.isGranted) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Please enable "Install unknown apps" permission for Zyp Music in system settings to perform the update.',
+                            ),
+                            duration: Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                  }
+                  if (context.mounted) {
+                    _showDownloadProgressDialog(context, downloadUrl);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Update Now'),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -332,46 +359,52 @@ class UpdateService {
     showDialog(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.5),
       builder: (BuildContext progressContext) {
-        return PopScope(
-          canPop: false, // Disable back button during update
-          child: AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: const Text(
-              'Downloading Update',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            content: ValueListenableBuilder2<double, String>(
-              first: progressNotifier,
-              second: statusNotifier,
-              builder: (context, progress, status, _) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(status),
-                    const SizedBox(height: 16),
-                    LinearProgressIndicator(
-                      value: progress >= 0 ? progress / 100.0 : null,
-                      backgroundColor: Colors.white10,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (progress >= 0)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          '${progress.toStringAsFixed(0)}%',
-                          style: const TextStyle(fontSize: 12, color: Colors.white54),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: PopScope(
+            canPop: false,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.white.withOpacity(0.08), width: 0.5),
+              ),
+              backgroundColor: const Color(0xFF161616).withOpacity(0.85),
+              title: const Text(
+                'Downloading Update',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              content: ValueListenableBuilder2<double, String>(
+                first: progressNotifier,
+                second: statusNotifier,
+                builder: (context, progress, status, _) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(status),
+                      const SizedBox(height: 16),
+                      LinearProgressIndicator(
+                        value: progress >= 0 ? progress / 100.0 : null,
+                        backgroundColor: Colors.white10,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Theme.of(context).colorScheme.primary,
                         ),
                       ),
-                  ],
-                );
-              },
+                      const SizedBox(height: 8),
+                      if (progress >= 0)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            '${progress.toStringAsFixed(0)}%',
+                            style: const TextStyle(fontSize: 12, color: Colors.white54),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         );

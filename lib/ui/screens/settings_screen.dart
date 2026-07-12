@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../presentation/providers/settings_provider.dart';
+import '../../service/auth_service.dart';
 import '../../service/oauth_service.dart';
 import 'youtube_login_webview.dart';
 import '../../core/services/audio_cache_service.dart';
@@ -206,17 +208,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         _buildSectionHeader('Streaming Quality'),
         _buildDropdownSetting<String>(
-          title: 'YouTube Music Quality',
-          subtitle: 'Quality for YouTube streaming.',
+          title: 'YouTube Music Quality / Bitrate',
+          subtitle: 'Bitrate quality for YouTube streaming.',
           value: provider.youtubeMusicQuality,
           items: [
-            const DropdownMenuItem(value: 'adaptive', child: Text('Adaptive (Auto)')),
-            const DropdownMenuItem(value: 'yt48', child: Text('48 kbps Opus — data-saver')),
-            const DropdownMenuItem(value: 'yt128', child: Text('128 kbps AAC — normal')),
-            const DropdownMenuItem(value: 'yt256', child: Text('256 kbps AAC — high')),
+            const DropdownMenuItem(value: 'adaptive', child: Text('Adaptive (Auto-switching)')),
+            const DropdownMenuItem(value: 'yt48', child: Text('Low (~48-50 kbps)')),
+            const DropdownMenuItem(value: 'yt128', child: Text('Medium (~128 kbps)')),
+            const DropdownMenuItem(value: 'yt256', child: Text('High (~160-256 kbps)')),
           ],
           onChanged: (val) {
             if (val != null) provider.setStringSetting('youtubeMusicQuality', val);
+          },
+        ),
+        _buildDropdownSetting<String>(
+          title: 'Audio Streaming Format',
+          subtitle: 'Preferred audio container format for streaming.',
+          value: provider.youtubeMusicFormat,
+          items: [
+            const DropdownMenuItem(value: 'Any', child: Text('Any (Best Compatible)')),
+            const DropdownMenuItem(value: 'm4a', child: Text('M4A (AAC)')),
+            const DropdownMenuItem(value: 'webm', child: Text('WebM (Opus)')),
+          ],
+          onChanged: (val) {
+            if (val != null) provider.setStringSetting('youtubeMusicFormat', val);
           },
         ),
         _buildDropdownSetting<String>(
@@ -248,18 +263,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 24),
         _buildSectionHeader('Accounts'),
-        ListTile(
-          title: const Text('YouTube'),
-          subtitle: Text('Not connected', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
-          trailing: ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YoutubeLoginWebview()));
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1F1F1F)),
-            child: const Text('CONNECT', style: TextStyle(color: Colors.white)),
-          ),
+        FutureBuilder<bool>(
+          future: AuthService().hasCookies(),
+          initialData: false,
+          builder: (ctx, snap) {
+            final connected = snap.data ?? false;
+            return ListTile(
+              title: const Text('YouTube'),
+              subtitle: Text(connected ? 'Connected' : 'Not connected',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+              trailing: connected
+                  ? TextButton(
+                      onPressed: () async {
+                        await AuthService().clearCookies();
+                        setState(() {});
+                      },
+                      child: const Text('DISCONNECT', style: TextStyle(color: Colors.redAccent)),
+                    )
+                  : ElevatedButton(
+                      onPressed: () async {
+                        final result = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(builder: (_) => const YoutubeLoginWebview()),
+                        );
+                        if (result == true) setState(() {});
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1F1F1F)),
+                      child: const Text('CONNECT', style: TextStyle(color: Colors.white)),
+                    ),
+            );
+          },
         ),
+        const SizedBox(height: 24),
+        _buildSectionHeader('Region'),
+        _buildRegionTile(provider, context),
       ],
+    );
+  }
+
+  Widget _buildRegionTile(SettingsProvider provider, BuildContext context) {
+    final currentCode = provider.preferredGl;
+    final currentName = currentCode != null
+        ? SettingsProvider.countryOptions.firstWhere(
+            (c) => c['code'] == currentCode,
+            orElse: () => {'name': currentCode},
+          )['name']!
+        : 'Not set';
+    return ListTile(
+      title: const Text('Music Region'),
+      subtitle: Text(currentName,
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54))),
+      trailing: const Icon(PhosphorIconsRegular.globeHemisphereWest, color: Colors.white54),
+      onTap: () async {
+        final code = await showModalBottomSheet<String>(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder: (ctx) => _SettingsCountryPicker(provider: provider),
+        );
+        if (code != null && mounted) {
+          await provider.setPreferredGl(code);
+        }
+      },
     );
   }
 
@@ -402,20 +466,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () async {
             final confirm = await showDialog<bool>(
               context: context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: const Color(0xFF1F1F1F),
-                title: const Text('Clear Cache?', style: TextStyle(color: Colors.white)),
-                content: const Text('This will delete all cached audio and reset settings. This action cannot be undone.', style: TextStyle(color: Colors.white70)),
-                actions: [
-                  TextButton(
-                    child: const Text('CANCEL', style: TextStyle(color: Colors.white54)),
-                    onPressed: () => Navigator.pop(ctx, false),
+              barrierColor: Colors.black.withOpacity(0.5),
+              builder: (ctx) => BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: AlertDialog(
+                  backgroundColor: const Color(0xFF161616).withOpacity(0.85),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(color: Colors.white.withOpacity(0.08), width: 0.5),
                   ),
-                  TextButton(
-                    child: const Text('CLEAR', style: TextStyle(color: Colors.red)),
-                    onPressed: () => Navigator.pop(ctx, true),
-                  ),
-                ],
+                  title: const Text('Clear Cache?', style: TextStyle(color: Colors.white)),
+                  content: const Text('This will delete all cached audio and reset settings. This action cannot be undone.', style: TextStyle(color: Colors.white70)),
+                  actions: [
+                    TextButton(
+                      child: const Text('CANCEL', style: TextStyle(color: Colors.white54)),
+                      onPressed: () => Navigator.pop(ctx, false),
+                    ),
+                    TextButton(
+                      child: const Text('CLEAR', style: TextStyle(color: Colors.red)),
+                      onPressed: () => Navigator.pop(ctx, true),
+                    ),
+                  ],
+                ),
               ),
             );
             if (confirm == true) {
@@ -570,23 +642,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             children: [
               const SizedBox(height: 16),
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 2,
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    PhosphorIconsRegular.musicNotes,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Image.asset(
+                  'assets/icon.png',
+                  width: 96,
+                  height: 96,
+                  fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(height: 20),
@@ -624,6 +686,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 24),
+        _buildSectionHeader('Creator'),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          leading: CircleAvatar(
+            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            child: Icon(PhosphorIconsRegular.user, color: Theme.of(context).colorScheme.primary),
+          ),
+          title: const Text(
+            'Benjamin Akuffo Darko',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          subtitle: Text(
+            'Lead Developer & Creator',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+            ),
+          ),
+        ),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          leading: CircleAvatar(
+            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            child: Icon(PhosphorIconsRegular.users, color: Theme.of(context).colorScheme.primary),
+          ),
+          title: const Text(
+            'Antwi Isaac Benoah',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          subtitle: Text(
+            'Co-Creator',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+            ),
+          ),
+          trailing: Icon(PhosphorIconsRegular.arrowSquareOut, color: Theme.of(context).colorScheme.primary.withOpacity(0.7), size: 20),
+          onTap: () async {
+            final uri = Uri.parse('https://github.com/iykex');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+        ),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          leading: CircleAvatar(
+            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            child: Icon(PhosphorIconsRegular.users, color: Theme.of(context).colorScheme.primary),
+          ),
+          title: const Text(
+            'NiiAbe',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          subtitle: Text(
+            'Co-Creator',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+            ),
+          ),
+          trailing: Icon(PhosphorIconsRegular.arrowSquareOut, color: Theme.of(context).colorScheme.primary.withOpacity(0.7), size: 20),
+          onTap: () async {
+            final uri = Uri.parse('https://github.com/niiabe');
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+        ),
+        const SizedBox(height: 24),
+        _buildSectionHeader('Special Thanks'),
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          leading: CircleAvatar(
+            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            child: Icon(PhosphorIconsRegular.usersThree, color: Theme.of(context).colorScheme.primary),
+          ),
+          title: const Text(
+            'Tips & Tricks Group',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          subtitle: Text(
+            'Special Contributors & Testers',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
         _buildSectionHeader('Links'),
         ListTile(
           title: const Text('GitHub Repository'),
@@ -647,6 +815,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         ),
       ],
+    );
+  }
+}
+
+class _SettingsCountryPicker extends StatelessWidget {
+  final SettingsProvider provider;
+  const _SettingsCountryPicker({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.85),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).padding.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Select Region',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Personalised music recommendations for your region',
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...SettingsProvider.countryOptions.map((c) => ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: const Icon(PhosphorIconsRegular.globeHemisphereWest,
+                      color: Colors.white70),
+                  title: Text(c['name']!, style: const TextStyle(color: Colors.white)),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (provider.preferredGl == c['code'])
+                        const Icon(PhosphorIconsFill.checkCircle,
+                            color: Color(0xFFEAB308), size: 20),
+                      const SizedBox(width: 8),
+                      Text(c['code']!,
+                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    ],
+                  ),
+                  onTap: () => Navigator.pop(context, c['code']),
+                )),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
