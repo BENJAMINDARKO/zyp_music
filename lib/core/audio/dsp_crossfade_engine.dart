@@ -7,6 +7,7 @@ import '../utils/app_logger.dart';
 import '../../domain/entities/video.dart';
 import '../../data/datasources/local/playlist_database.dart';
 import '../../service/audio_handler.dart';
+import '../../service/equalizer_service.dart';
 import 'gapless_queue_mixer.dart';
 
 /// Phase 4 — Smart DJ DSP engine.
@@ -215,7 +216,7 @@ class DspCrossfadeEngine {
     // AudioPlayer for the overlap window. After the crossfade
     // finishes, the engine hands playerB back to the audio
     // handler / mixer as the new primary.
-    final playerB = AudioPlayer();
+    final playerB = EqualizerService.createPlayer();
     try {
       final source = await _mixer.buildSourceFor(incoming);
       final concatenationB = ConcatenatingAudioSource(children: [source]);
@@ -311,6 +312,7 @@ class DspCrossfadeEngine {
       await playerB.setAudioSource(
         ConcatenatingAudioSource(children: []),
       );
+      EqualizerService.removePlayer(playerB);
       await playerB.dispose();
       rethrow;
     }

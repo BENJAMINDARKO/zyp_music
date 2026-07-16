@@ -90,14 +90,27 @@ class DownloadService {
     return dir.path;
   }
 
+  Future<void> requestPermissionsIfNeeded() async {
+    if (Platform.isAndroid) {
+      if (await Permission.manageExternalStorage.isDenied) {
+        await Permission.manageExternalStorage.request();
+      }
+      if (await Permission.storage.isDenied) {
+        await Permission.storage.request();
+      }
+    }
+  }
+
   Future<String> get _exportDir async {
     if (_settingsProvider != null && _settingsProvider!.androidDownloadFolder.isNotEmpty) {
       if (Platform.isAndroid) {
-        if (await Permission.manageExternalStorage.isDenied) {
-          await Permission.manageExternalStorage.request();
-        }
-        if (await Permission.storage.isDenied) {
-          await Permission.storage.request();
+        final hasManage = await Permission.manageExternalStorage.isGranted;
+        final hasStorage = await Permission.storage.isGranted;
+        if (!hasManage && !hasStorage) {
+          final appDir = await getApplicationDocumentsDirectory();
+          final dir = Directory(p.join(appDir.path, 'exports'));
+          if (!dir.existsSync()) dir.createSync(recursive: true);
+          return dir.path;
         }
       }
       final folderPath = _settingsProvider!.androidDownloadFolder;
@@ -141,6 +154,7 @@ class DownloadService {
     final fileName = '$safeTitle$ext';
 
     try {
+      await requestPermissionsIfNeeded();
       final dir = await _exportDir;
       final filePath = p.join(dir, fileName);
       final urlResult = await _audioRepository.getAudioUrl(
@@ -168,6 +182,7 @@ class DownloadService {
     _cancelled = false;
     String dir;
     try {
+      await requestPermissionsIfNeeded();
       dir = await _exportDir;
     } catch (e) {
       _exportErrorController.add('Failed to export playlist: $e');

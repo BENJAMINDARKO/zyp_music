@@ -11,6 +11,7 @@ import 'presentation/providers/download_provider.dart';
 import 'presentation/providers/home_feed_provider.dart';
 import 'presentation/providers/settings_provider.dart';
 import 'presentation/providers/miniplayer_visibility_provider.dart';
+import 'presentation/providers/equalizer_provider.dart';
 import 'presentation/providers/charts_provider.dart';
 import 'data/repositories/charts_repository_impl.dart';
 import 'ui/layout/main_layout.dart';
@@ -147,6 +148,9 @@ class ZYPMusic extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => MiniplayerVisibilityProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => EqualizerProvider()..load(),
         ),
       ],
       child: MaterialApp(

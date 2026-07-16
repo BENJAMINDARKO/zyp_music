@@ -1,6 +1,73 @@
+import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import '../../core/theme/app_theme.dart';
 import '../../domain/entities/lyric_line.dart';
+
+class KaraokeLineSet {
+  final LyricLine? previous;
+  final LyricLine active;
+  final LyricLine? next;
+
+  const KaraokeLineSet({
+    required this.previous,
+    required this.active,
+    required this.next,
+  });
+}
+
+KaraokeLineSet getKaraokeLines({
+  required List<LyricLine> lines,
+  required int activeIndex,
+}) {
+  return KaraokeLineSet(
+    previous: activeIndex > 0 ? lines[activeIndex - 1] : null,
+    active: lines[activeIndex],
+    next: activeIndex < lines.length - 1 ? lines[activeIndex + 1] : null,
+  );
+}
+
+enum LyricLineVisualState { played, active, next, upcoming }
+
+class BreathingActiveLyric extends StatefulWidget {
+  final Widget child;
+  const BreathingActiveLyric({super.key, required this.child});
+
+  @override
+  State<BreathingActiveLyric> createState() => _BreathingActiveLyricState();
+}
+
+class _BreathingActiveLyricState extends State<BreathingActiveLyric>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 1.0, end: 1.012).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    if (reduceMotion) return widget.child;
+    return ScaleTransition(scale: _scale, child: widget.child);
+  }
+}
 
 class SyncedLyricsWidget extends StatefulWidget {
   final String lyricsText;
@@ -383,6 +450,133 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
     );
   }
 
+  LyricLineVisualState _visualState(int index) {
+    if (index == _currentIndex) return LyricLineVisualState.active;
+    if (index < _currentIndex) return LyricLineVisualState.played;
+    if (index == _currentIndex + 1) return LyricLineVisualState.next;
+    return LyricLineVisualState.upcoming;
+  }
+
+  TextStyle _lyricTextStyle(LyricLineVisualState state) {
+    switch (state) {
+      case LyricLineVisualState.played:
+        return TextStyle(
+          color: Colors.white.withOpacity(0.22),
+          fontSize: 24,
+          fontWeight: FontWeight.w900,
+          height: 1.12,
+          letterSpacing: -0.8,
+        );
+      case LyricLineVisualState.active:
+        return TextStyle(
+          color: Colors.white,
+          fontSize: 28,
+          fontWeight: FontWeight.w900,
+          height: 1.12,
+          letterSpacing: -0.9,
+          shadows: const [
+            Shadow(
+              color: ZypAuroraColors.cyan,
+              blurRadius: 26,
+            ),
+            Shadow(
+              color: Colors.black54,
+              blurRadius: 34,
+              offset: Offset(0, 8),
+            ),
+          ],
+        );
+      case LyricLineVisualState.next:
+        return TextStyle(
+          color: Colors.white.withOpacity(0.50),
+          fontSize: 24,
+          fontWeight: FontWeight.w900,
+          height: 1.12,
+          letterSpacing: -0.8,
+        );
+      case LyricLineVisualState.upcoming:
+        return TextStyle(
+          color: Colors.white.withOpacity(0.30),
+          fontSize: 24,
+          fontWeight: FontWeight.w900,
+          height: 1.12,
+          letterSpacing: -0.8,
+        );
+    }
+  }
+
+  Widget _buildLyricLine(int index) {
+    final line = _lyrics[index];
+    final state = _visualState(index);
+    final isSelected = widget.selectedIndices.contains(index);
+
+    if (line.words.isEmpty) return const SizedBox(height: 24);
+
+    final selectionAlpha = isSelected ? 1.0 : 0.35;
+
+    Widget textWidget = AnimatedDefaultTextStyle(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      style: widget.selectionMode
+          ? TextStyle(
+              color: Colors.white.withOpacity(selectionAlpha),
+              fontSize: 21,
+              fontWeight: FontWeight.w800,
+              height: 1.4,
+              letterSpacing: -0.5,
+            )
+          : _lyricTextStyle(state),
+      child: Text(
+        line.words,
+        textAlign: TextAlign.start,
+        softWrap: true,
+      ),
+    );
+
+    if (state == LyricLineVisualState.active && !widget.selectionMode) {
+      textWidget = BreathingActiveLyric(child: textWidget);
+    }
+
+    if (state == LyricLineVisualState.played && !widget.selectionMode) {
+      textWidget = Opacity(
+        opacity: 0.22,
+        child: ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 0.15, sigmaY: 0.15),
+          child: textWidget,
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (widget.selectionMode) {
+          widget.onLineToggled?.call(index);
+        } else {
+          widget.onSeek?.call(line.time);
+        }
+      },
+      onLongPress: () => widget.onLineLongPressed?.call(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSelected ? 12 : 8,
+          vertical: 10,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withOpacity(0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: isSelected
+              ? Border.all(color: Colors.white.withOpacity(0.25), width: 1)
+              : null,
+        ),
+        child: textWidget,
+      ),
+    );
+  }
+
   Widget _buildLyricsList() {
     return ScrollablePositionedList.builder(
       itemCount: _lyrics.length,
@@ -390,96 +584,145 @@ class _SyncedLyricsWidgetState extends State<SyncedLyricsWidget> with TickerProv
       scrollOffsetController: _scrollOffsetController,
       itemPositionsListener: _itemPositionsListener,
       padding: EdgeInsets.only(bottom: widget.bottomPadding, top: widget.topPadding),
-      itemBuilder: (context, index) {
-        final line = _lyrics[index];
-        final isActive = index == _currentIndex;
-        final isPassed = index < _currentIndex;
-        final isSelected = widget.selectedIndices.contains(index);
-
-        if (line.words.isEmpty) {
-          return const SizedBox(height: 24);
-        }
-
-        final double alpha = widget.selectionMode
-            ? (isSelected ? 1.0 : 0.35)
-            : (isActive ? 1.0 : (isPassed ? 0.3 : 0.4));
-
-        return GestureDetector(
-          onTap: () {
-            if (widget.selectionMode) {
-              widget.onLineToggled?.call(index);
-            } else {
-              widget.onSeek?.call(line.time);
-            }
-          },
-          onLongPress: () => widget.onLineLongPressed?.call(index),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 12 : 8,
-              vertical: 10,
-            ),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: isSelected
-                  ? Border.all(
-                      color: Colors.white.withOpacity(0.25),
-                      width: 1,
-                    )
-                  : null,
-            ),
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: alpha),
-                fontSize: 21.0,
-                fontWeight: FontWeight.w800,
-                height: 1.4,
-                letterSpacing: -0.5,
-              ),
-              child: Text(
-                line.words,
-                textAlign: TextAlign.start,
-                softWrap: true,
-              ),
-            ),
-          ),
-        );
-      },
+      itemBuilder: (context, index) => _buildLyricLine(index),
     );
   }
 
   Widget _buildKaraoke() {
-    final currentLine = _currentIndex >= 0 && _currentIndex < _lyrics.length
-        ? _lyrics[_currentIndex].words
-        : '';
+    final lineSet = getKaraokeLines(lines: _lyrics, activeIndex: _currentIndex);
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          transitionBuilder: (child, anim) => FadeTransition(
-            opacity: anim,
-            child: ScaleTransition(scale: Tween(begin: 0.92, end: 1.0).animate(anim), child: child),
-          ),
-          child: Text(
-            currentLine,
-            key: ValueKey(currentLine),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              height: 1.4,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (lineSet.previous != null)
+              Text(
+                lineSet.previous!.words,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 21,
+                  height: 1.15,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            if (lineSet.previous != null) const SizedBox(height: 32),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.08),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+              child: BreathingKaraokeLine(
+                key: ValueKey('karaoke-active-${lineSet.active.time.inMilliseconds}'),
+                child: Text(
+                  lineSet.active.words,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 34,
+                    height: 1.12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -1.0,
+                    shadows: [
+                      Shadow(
+                        color: ZypAuroraColors.cyan,
+                        blurRadius: 32,
+                      ),
+                      Shadow(
+                        color: ZypAuroraColors.pink,
+                        blurRadius: 18,
+                      ),
+                      Shadow(
+                        color: Colors.black,
+                        blurRadius: 34,
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
+            if (lineSet.next != null) const SizedBox(height: 32),
+            if (lineSet.next != null)
+              Text(
+                lineSet.next!.words,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  height: 1.15,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
+              ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class BreathingKaraokeLine extends StatefulWidget {
+  final Widget child;
+  const BreathingKaraokeLine({super.key, required this.child});
+
+  @override
+  State<BreathingKaraokeLine> createState() => _BreathingKaraokeLineState();
+}
+
+class _BreathingKaraokeLineState extends State<BreathingKaraokeLine>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    if (reduceMotion) return widget.child;
+
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, _) {
+        final t = _animation.value;
+        return Transform.translate(
+          offset: Offset(0, -2 * t),
+          child: Transform.scale(
+            scale: 1.0 + (0.018 * t),
+            child: widget.child,
+          ),
+        );
+      },
     );
   }
 }

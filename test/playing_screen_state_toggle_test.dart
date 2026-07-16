@@ -104,6 +104,7 @@ class _MockDownloadProvider extends ChangeNotifier implements DownloadProvider {
   @override Future<int> getTotalCacheSize() async => 0;
   @override Future<int> getPlaylistCacheSize(String playlistId) async => 0;
   @override void dispose() { super.dispose(); }
+  @override dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
 void main() {

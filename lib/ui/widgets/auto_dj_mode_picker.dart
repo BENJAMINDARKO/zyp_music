@@ -15,6 +15,7 @@ class AutoDJModePicker {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
       builder: (sheetContext) {
@@ -104,6 +105,7 @@ class AutoDJModePicker {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
       builder: (sheetContext) {
@@ -167,6 +169,7 @@ class AutoDJModePicker {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
       builder: (sheetContext) {

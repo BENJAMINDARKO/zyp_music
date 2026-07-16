@@ -1,17 +1,25 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
+import '../../presentation/providers/download_provider.dart';
 import '../../domain/entities/playlist.dart';
 import '../../core/utils/format_duration.dart';
+import '../../core/utils/thumbnail_url.dart';
+import '../../core/theme/app_theme.dart';
+
+import '../widgets/global_background.dart';
+import '../widgets/aurora_glass.dart';
+import '../widgets/prism_loader.dart';
+import '../widgets/library/detail_track_row.dart';
+import '../widgets/library/playlist_hero.dart';
 import '../widgets/track_context_menu.dart';
-import '../widgets/bottom_player.dart';
 import '../widgets/track_download_icon.dart';
 import '../widgets/track_export_icon.dart';
-import '../../presentation/providers/download_provider.dart';
-import "../../core/utils/thumbnail_url.dart";
 import '../widgets/playing_track_mask.dart';
 import '../widgets/explicit_icon.dart';
 
@@ -67,273 +75,258 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     _playTrack(0);
   }
 
+  void _showPlaylistOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: ZypAuroraColors.glass,
+      barrierColor: Colors.black26,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => AuroraGlass(
+        borderRadius: 28,
+        padding: const EdgeInsets.all(16),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(PhosphorIconsRegular.textT, color: Colors.white),
+                title: const Text('Rename Playlist', style: TextStyle(color: Colors.white)),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  final controller = TextEditingController(text: _playlist!.title);
+                  final newName = await showDialog<String>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      backgroundColor: const Color(0xFF111129),
+                      title: const Text('Rename Playlist', style: TextStyle(color: Colors.white)),
+                      content: TextField(
+                        controller: controller,
+                        style: const TextStyle(color: Colors.white),
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: 'Playlist Name',
+                          hintStyle: TextStyle(color: Colors.white54),
+                        ),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                        TextButton(onPressed: () => Navigator.pop(c, controller.text), child: const Text('Save', style: TextStyle(color: ZypAuroraColors.cyan))),
+                      ],
+                    ),
+                  );
+                  if (newName != null && newName.isNotEmpty && mounted) {
+                    await context.read<PlaylistProvider>().renamePlaylist(_playlist!.id, newName);
+                    _loadPlaylist();
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(PhosphorIconsRegular.copy, color: Colors.white),
+                title: const Text('Duplicate Playlist', style: TextStyle(color: Colors.white)),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  final newPlaylist = await context.read<PlaylistProvider>().duplicatePlaylist(_playlist!.id);
+                  if (newPlaylist != null && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Duplicated to ${newPlaylist.title}')));
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(PhosphorIconsRegular.queue, color: Colors.white),
+                title: const Text('Add to Queue', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  context.read<PlayerProvider>().appendToQueue(_playlist!.tracks);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${_playlist!.tracks.length} tracks to queue')));
+                },
+              ),
+              ListTile(
+                leading: const Icon(PhosphorIconsRegular.trash, color: Colors.red),
+                title: const Text('Delete Playlist', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  await context.read<PlaylistProvider>().deletePlaylist(_playlist!.id);
+                  if (mounted) Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFEAB308))),
-        extendBody: true,
+        backgroundColor: ZypAuroraColors.ink,
+        body: Stack(
+          children: [
+            GlobalBackground(),
+            PrismLoader(
+              title: 'Syncing Playlist',
+              subtitle: 'Fetching tracks, album covers, and local files...',
+            ),
+          ],
+        ),
       );
     }
 
     if (_error != null || _playlist == null) {
       return Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+        backgroundColor: ZypAuroraColors.ink,
+        body: Stack(
+          children: [
+            const GlobalBackground(),
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  IconButton(
+                    icon: const Icon(PhosphorIconsRegular.caretLeft, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        _error ?? "Playlist not found.",
+                        style: const TextStyle(color: Colors.red, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        body: Center(
-          child: Text(
-            _error ?? "Playlist not found.",
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-        extendBody: true,
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            backgroundColor: Colors.black,
-            expandedHeight: 300,
-            pinned: true,
-            actions: [
-              PopupMenuButton<String>(
-                icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Theme.of(context).colorScheme.onSurface),
-                onSelected: (value) async {
-                  final provider = context.read<PlaylistProvider>();
-                  if (value == 'rename') {
-                    final controller = TextEditingController(text: _playlist!.title);
-                    final newName = await showDialog<String>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Rename Playlist'),
-                        content: TextField(
-                          controller: controller,
-                          autofocus: true,
-                          decoration: const InputDecoration(hintText: 'Playlist Name'),
-                        ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                          TextButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('Save')),
-                        ],
-                      ),
-                    );
-                    if (newName != null && newName.isNotEmpty && mounted) {
-                      await provider.renamePlaylist(_playlist!.id, newName);
-                      _loadPlaylist();
-                    }
-                  } else if (value == 'duplicate') {
-                    final newPlaylist = await provider.duplicatePlaylist(_playlist!.id);
-                    if (newPlaylist != null && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Duplicated to ${newPlaylist.title}')));
-                    }
-                  } else if (value == 'delete') {
-                    await provider.deletePlaylist(_playlist!.id);
-                    if (mounted) Navigator.pop(context);
-                  } else if (value == 'queue') {
-                    final player = context.read<PlayerProvider>();
-                    player.appendToQueue(_playlist!.tracks);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added ${_playlist!.tracks.length} tracks to queue')));
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'rename', child: Text('Rename Playlist')),
-                  const PopupMenuItem(value: 'duplicate', child: Text('Duplicate Playlist')),
-                  const PopupMenuItem(value: 'queue', child: Text('Add to Queue')),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Text('Delete Playlist', style: TextStyle(color: Colors.red)),
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Global Background
+          const GlobalBackground(),
+          
+          // Main Scrollable Area
+          SafeArea(
+            bottom: false,
+            child: CustomScrollView(
+              slivers: [
+                // Playlist Header Hero Card
+                SliverToBoxAdapter(
+                  child: PlaylistHero(
+                    playlist: _playlist!,
+                    onPlayAll: _playAll,
+                    onBack: () => Navigator.of(context).pop(),
+                    onMore: () => _showPlaylistOptions(context),
                   ),
-                ],
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (_playlist!.thumbnailUrl != null)
-                    CachedNetworkImage(
-                      imageUrl: rewriteThumbnailSize(_playlist!.thumbnailUrl, 1200),
-                      fit: BoxFit.cover,
-                    ),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.5),
-                          Colors.black,
-                        ],
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 24,
-                    left: 24,
-                    right: 24,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _playlist!.title,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _playlist!.author ?? 'Unknown Author',
-                          style: const TextStyle(
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _playAll,
-                          icon: const Icon(PhosphorIconsFill.play, color: Colors.black),
-                          label: const Text("Play", style: TextStyle(color: Colors.black)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFEAB308),
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            leading: IconButton(
-              icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.only(bottom: 120),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final track = _playlist!.tracks[index];
-                  return PlayingTrackMask(
-                    track: track,
-                    child: Dismissible(
-                      key: ValueKey('${track.id}_$index'),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20),
-                        color: Colors.red,
-                        child: const Icon(PhosphorIconsRegular.trash, color: Colors.white),
-                      ),
-                      onDismissed: (_) async {
-                        await context.read<PlaylistProvider>().removeTrackFromPlaylist(_playlist!.id, track.id);
-                        _loadPlaylist();
-                      },
-                      child: ListTile(
-                        leading: SizedBox(
-                          width: 40,
-                          child: Center(
-                            child: Text(
-                              '${index + 1}',
-                              style: const TextStyle(fontSize: 16),
+                ),
+                
+                // Tracks list
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final track = _playlist!.tracks[index];
+                        final displayIndex = index + 1;
+                        
+                        return PlayingTrackMask(
+                          track: track,
+                          child: Dismissible(
+                            key: ValueKey('${track.id}_$index'),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: const Icon(PhosphorIconsRegular.trash, color: Colors.white),
                             ),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                track.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            onDismissed: (_) async {
+                              await context.read<PlaylistProvider>().removeTrackFromPlaylist(_playlist!.id, track.id);
+                              _loadPlaylist();
+                            },
+                            child: DetailTrackRow(
+                              index: displayIndex,
+                              track: track,
+                              onTap: () => _playTrack(index),
+                              trailingActions: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Consumer<PlaylistProvider>(
+                                    builder: (context, playlistProvider, _) {
+                                      final isFav = playlistProvider.isFavorite(track.id);
+                                      return IconButton(
+                                        icon: Icon(
+                                          isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                                          color: isFav ? ZypAuroraColors.pink : Colors.white.withOpacity(0.54),
+                                          size: 20,
+                                        ),
+                                        onPressed: () {
+                                          playlistProvider.toggleFavorite(
+                                            track,
+                                            downloadProvider: context.read<DownloadProvider>(),
+                                          );
+                                        },
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  TrackExportIcon(track: track, size: 20),
+                                  const SizedBox(width: 8),
+                                  TrackDownloadIcon(track: track, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    formatDuration(track.duration),
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.48),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  PopupMenuButton<String>(
+                                    icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Colors.white.withOpacity(0.54)),
+                                    color: const Color(0xFF111129),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    onSelected: (value) async {
+                                      if (value == 'remove') {
+                                        await context.read<PlaylistProvider>().removeTrackFromPlaylist(_playlist!.id, track.id);
+                                        _loadPlaylist();
+                                      }
+                                    },
+                                    itemBuilder: (context) => [
+                                      const PopupMenuItem(
+                                        value: 'remove',
+                                        child: Text('Remove from playlist', style: TextStyle(color: Colors.red)),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
                             ),
-                            if (track.isExplicit) const ExplicitIcon(),
-                          ],
-                        ),
-                        subtitle: Text(
-                          track.author ?? 'Unknown Artist',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Consumer<PlaylistProvider>(
-                              builder: (context, playlistProvider, _) {
-                                final isFav = playlistProvider.isFavorite(track.id);
-                                return IconButton(
-                                  icon: Icon(
-                                    isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                                    color: isFav ? const Color(0xFFEAB308) : Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    playlistProvider.toggleFavorite(
-                                      track,
-                                      downloadProvider: context.read<DownloadProvider>(),
-                                    );
-                                  },
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                );
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            TrackExportIcon(track: track, size: 20),
-                            const SizedBox(width: 8),
-                            TrackDownloadIcon(track: track, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              formatDuration(track.duration),
-                            ),
-                            PopupMenuButton<String>(
-                              icon: Icon(PhosphorIconsRegular.dotsThreeVertical, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54)),
-                              onSelected: (value) async {
-                                if (value == 'remove') {
-                                  await context.read<PlaylistProvider>().removeTrackFromPlaylist(_playlist!.id, track.id);
-                                  _loadPlaylist();
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'remove',
-                                  child: Text('Remove from playlist', style: TextStyle(color: Colors.red)),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        onTap: () => _playTrack(index),
-                        onLongPress: () => TrackContextMenu.show(context, track),
-                      ),
+                          ),
+                        );
+                      },
+                      childCount: _playlist!.tracks.length,
                     ),
-                  );
-                },
-                childCount: _playlist!.tracks.length,
-              ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
-      extendBody: true,
     );
   }
 }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'dart:math';
+import 'dart:ui';
+import 'package:zyp_music/core/theme/app_theme.dart';
 
-enum SeekbarStyle { gradient, waveform, minimal, wavy, segmented }
+enum SeekbarStyle { gradient, waveform, minimal, wavy, segmented, prism }
 
 class CustomAudioSeekbar extends StatefulWidget {
   final double value;
@@ -27,7 +29,7 @@ class CustomAudioSeekbar extends StatefulWidget {
     this.onChangeEnd,
     this.activeColor = Colors.white,
     this.inactiveColor = Colors.white24,
-    this.style = SeekbarStyle.minimal,
+    this.style = SeekbarStyle.prism,
     this.invertColor = false,
     this.isPlaying = false,
   });
@@ -220,6 +222,9 @@ class _SeekbarPainter extends CustomPainter {
       case SeekbarStyle.segmented:
         _paintSegmented(canvas, size);
         break;
+      case SeekbarStyle.prism:
+        _paintPrism(canvas, size);
+        break;
     }
   }
 
@@ -383,6 +388,80 @@ class _SeekbarPainter extends CustomPainter {
 
       canvas.drawLine(Offset(x + 1, cy), Offset(x + segWidth - 2, cy), p);
     }
+  }
+
+  void _paintPrism(Canvas canvas, Size size) {
+    final cy = size.height / 2;
+    final activeWidth = size.width * value;
+
+    // 1. Inactive track: slightly thicker, round caps
+    final trackPaint = Paint()
+      ..color = inactiveColor
+      ..strokeWidth = 8
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(4, cy), Offset(size.width - 4, cy), trackPaint);
+
+    // 2. Faint internal tick texture inside the track
+    final tickPaint = Paint()
+      ..color = Colors.white.withOpacity(0.10)
+      ..strokeWidth = 2;
+    for (double x = 4; x < size.width - 4; x += 11) {
+      canvas.drawLine(Offset(x, cy - 4), Offset(x, cy + 4), tickPaint);
+    }
+
+    // 3. Active progress track: gradient cyan -> pink -> peach
+    if (activeWidth > 0) {
+      final rect = Rect.fromLTWH(0, cy - 4, activeWidth, 8);
+
+      // Draw shadow/blur effect by drawing with high opacity + blur
+      canvas.saveLayer(null, Paint());
+      final glowPaintWithBlur = Paint()
+        ..shader = const LinearGradient(
+          colors: [
+            ZypAuroraColors.cyan,
+            ZypAuroraColors.pink,
+            ZypAuroraColors.peach,
+          ],
+        ).createShader(rect)
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round;
+      glowPaintWithBlur.imageFilter = ImageFilter.blur(
+        sigmaX: 6.0,
+        sigmaY: 6.0,
+      );
+      canvas.drawLine(Offset(4, cy), Offset(activeWidth.clamp(4.0, size.width - 4), cy), glowPaintWithBlur);
+      canvas.restore();
+
+      // Draw the main active gradient line
+      final activePaint = Paint()
+        ..shader = const LinearGradient(
+          colors: [
+            ZypAuroraColors.cyan,
+            ZypAuroraColors.pink,
+            ZypAuroraColors.peach,
+          ],
+        ).createShader(rect)
+        ..strokeWidth = 8
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(Offset(4, cy), Offset(activeWidth.clamp(4.0, size.width - 4), cy), activePaint);
+    }
+
+    // 4. White/cyan thumb
+    // Outer shadow circle
+    final thumbShadow = Paint()
+      ..color = ZypAuroraColors.cyan.withOpacity(0.16)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(activeWidth, cy), 13, thumbShadow);
+
+    // Main thumb circle
+    final thumbPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Colors.white, ZypAuroraColors.cyan],
+      ).createShader(Rect.fromCircle(center: Offset(activeWidth, cy), radius: 9))
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(activeWidth, cy), 9, thumbPaint);
   }
 
   @override

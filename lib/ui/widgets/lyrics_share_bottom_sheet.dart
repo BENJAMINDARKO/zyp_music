@@ -1,19 +1,10 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/theme/app_theme.dart';
 import 'lyrics_share_card.dart';
-
-/// The six palette swatches offered to the user.
-/// The first slot is always the album-art dominant colour (passed in).
-List<Color> _buildSwatches(Color dominant) => [
-      dominant, // default: album art colour
-      const Color(0xFF0A0A0A), // near-black
-      const Color(0xFF0D1B2A), // deep navy
-      const Color(0xFF1A0A2E), // deep purple
-      const Color(0xFF0F2318), // forest green
-      const Color(0xFF2A0A0A), // deep crimson
-    ];
 
 class LyricsShareBottomSheet extends StatefulWidget {
   final List<String> selectedLines;
@@ -54,38 +45,39 @@ class LyricsShareBottomSheet extends StatefulWidget {
   }
 
   @override
-  State<LyricsShareBottomSheet> createState() =>
-      _LyricsShareBottomSheetState();
+  State<LyricsShareBottomSheet> createState() => _LyricsShareBottomSheetState();
 }
 
 class _LyricsShareBottomSheetState extends State<LyricsShareBottomSheet> {
   final _repaintKey = GlobalKey();
-  late Color _selectedColor;
+  String _selectedTheme = 'aurora'; // 'aurora', 'obsidian', 'emerald', 'lavender', 'sunrise'
   bool _isSharing = false;
-  late List<Color> _swatches;
 
-  @override
-  void initState() {
-    super.initState();
-    _selectedColor = widget.dominantColor;
-    _swatches = _buildSwatches(widget.dominantColor);
-  }
-
-  Future<void> _share() async {
+  Future<void> _share(String targetPlatform) async {
     setState(() => _isSharing = true);
     try {
       // Give Flutter one frame to settle the repaint boundary at full size
-      await Future.delayed(const Duration(milliseconds: 80));
+      await Future.delayed(const Duration(milliseconds: 100));
       final bytes = await LyricsShareCard.capture(_repaintKey);
       if (bytes == null || !mounted) return;
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/zyp_lyrics_share.png');
       await file.writeAsBytes(bytes);
+
+      // Show toast or share
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Sharing to $targetPlatform...'),
+          backgroundColor: ZypAuroraColors.ink2,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path, mimeType: 'image/png')],
           text: '${widget.title} — ${widget.artist}\n\n'
-              '${widget.selectedLines.join('\n')}\n\nvia Zyp Music',
+              '"${widget.selectedLines.join('\n')}"\n\nvia Zyp Music',
         ),
       );
     } finally {
@@ -95,128 +87,207 @@ class _LyricsShareBottomSheetState extends State<LyricsShareBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final sheetBg = darkenColor(_selectedColor, maxLightness: 0.12);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: sheetBg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        top: 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: textColorFor(sheetBg).withOpacity(0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
-          // Live card preview — scrollable if tall
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: LyricsShareCard(
-                repaintKey: _repaintKey,
-                selectedLines: widget.selectedLines,
-                title: widget.title,
-                artist: widget.artist,
-                thumbnailUrl: widget.thumbnailUrl,
-                baseColor: _selectedColor,
+    return SafeArea(
+      bottom: true,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12, top: 20),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(30),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              decoration: BoxDecoration(
+                color: ZypAuroraColors.glass,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: ZypAuroraColors.stroke, width: 1),
               ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Colour swatches
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: _swatches.asMap().entries.map((e) {
-                final i = e.key;
-                final color = e.value;
-                final darkened = darkenColor(color);
-                final isSelected = darkened == darkenColor(_selectedColor) ||
-                    (i == 0 && _selectedColor == widget.dominantColor);
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedColor = color),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      height: 36,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Handle
+                    Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: darkened,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isSelected
-                              ? Colors.white
-                              : Colors.white.withOpacity(0.15),
-                          width: isSelected ? 2.5 : 1,
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+
+                    const Text(
+                      'Lyric Share Studio',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Card Preview
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: LyricsShareCard(
+                          repaintKey: _repaintKey,
+                          selectedLines: widget.selectedLines,
+                          title: widget.title,
+                          artist: widget.artist,
+                          thumbnailUrl: widget.thumbnailUrl,
+                          themeName: _selectedTheme,
                         ),
                       ),
-                      child: isSelected
-                          ? Icon(Icons.check,
-                              size: 16,
-                              color: textColorFor(darkened).withOpacity(0.8))
-                          : null,
                     ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
 
-          const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-          // Share button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor:
-                      textColorFor(sheetBg).withOpacity(0.12),
-                  foregroundColor: textColorFor(sheetBg),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(
-                      color: textColorFor(sheetBg).withOpacity(0.25),
-                    ),
-                  ),
-                ),
-                onPressed: _isSharing ? null : _share,
-                icon: _isSharing
-                    ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: textColorFor(sheetBg),
-                        ),
-                      )
-                    : const Icon(Icons.share_rounded, size: 20),
-                label: Text(
-                  _isSharing ? 'Preparing…' : 'Share',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
+                    // Theme selector row
+                    _buildThemeRow(),
+
+                    const SizedBox(height: 20),
+
+                    // Action buttons grid
+                    _buildActionGrid(),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeRow() {
+    final themes = [
+      {
+        'id': 'aurora',
+        'title': 'Aurora',
+        'grad': const LinearGradient(colors: [ZypAuroraColors.cyan, ZypAuroraColors.pink, ZypAuroraColors.peach]),
+      },
+      {
+        'id': 'obsidian',
+        'title': 'Obsidian',
+        'color': ZypAuroraColors.ink2,
+        'border': Border.all(color: Colors.white.withOpacity(0.4), width: 1),
+      },
+      {
+        'id': 'emerald',
+        'title': 'Emerald',
+        'grad': const LinearGradient(colors: [Color(0xFF059669), Color(0xFF10B981)]),
+      },
+      {
+        'id': 'lavender',
+        'title': 'Lavender',
+        'grad': const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA78BFA)]),
+      },
+      {
+        'id': 'sunrise',
+        'title': 'Sunrise',
+        'grad': const LinearGradient(colors: [Color(0xFFEA580C), Color(0xFFF97316)]),
+      },
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: themes.map((t) {
+        final id = t['id'] as String;
+        final isSelected = _selectedTheme == id;
+        final grad = t['grad'] as LinearGradient?;
+        final color = t['color'] as Color?;
+        final border = t['border'] as BoxBorder?;
+
+        return GestureDetector(
+          onTap: () => setState(() => _selectedTheme = id),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: grad,
+              color: color,
+              border: isSelected
+                  ? Border.all(color: Colors.white, width: 3)
+                  : (border ?? Border.all(color: Colors.white.withOpacity(0.12), width: 1)),
+            ),
+            child: isSelected
+                ? Center(
+                    child: Icon(
+                      Icons.check,
+                      color: id == 'aurora' ? Colors.black : Colors.white,
+                      size: 16,
+                    ),
+                  )
+                : null,
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildActionGrid() {
+    final actions = [
+      {'label': 'Instagram Stories', 'icon': '📸', 'platform': 'Instagram'},
+      {'label': 'WhatsApp Status', 'icon': '💬', 'platform': 'WhatsApp'},
+      {'label': 'Save to Gallery', 'icon': '📥', 'platform': 'Gallery'},
+      {'label': 'More Sharing', 'icon': '🔗', 'platform': 'System Share'},
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 2.3,
+        children: actions.map((act) {
+          return GestureDetector(
+            onTap: _isSharing ? null : () => _share(act['platform']!),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.065),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.09)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(13),
+                      color: Colors.white.withOpacity(0.08),
+                    ),
+                    child: Center(
+                      child: Text(
+                        act['icon']!,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      act['label']!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

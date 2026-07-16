@@ -9,10 +9,11 @@ import 'package:http/http.dart' as http;
 import 'package:rxdart/rxdart.dart';
 import '../core/utils/network_utils.dart';
 import 'auth_service.dart';
+import 'equalizer_service.dart';
 
 class MusicAudioHandler extends BaseAudioHandler {
   final int _instanceId = DateTime.now().microsecondsSinceEpoch;
-  AudioPlayer _player = AudioPlayer();
+  AudioPlayer _player = EqualizerService.createPlayer();
   final AuthService _authService = AuthService();
 
   /// Exposed for the gapless queue mixer (Phase 3) so it can
@@ -110,6 +111,7 @@ class MusicAudioHandler extends BaseAudioHandler {
       }
     }
 
+    EqualizerService.removePlayer(oldPlayer);
     await oldPlayer.dispose();
   }
 

@@ -21,6 +21,7 @@ class AddToPlaylistModal extends StatelessWidget {
   static void show(BuildContext context, Track track) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       barrierColor: Colors.black54,

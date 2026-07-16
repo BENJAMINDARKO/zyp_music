@@ -14,6 +14,7 @@ class AlbumContextMenu {
   static void show(BuildContext context, Album album) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       barrierColor: Colors.black54,

@@ -66,10 +66,12 @@ class _MockDownloadProvider extends ChangeNotifier implements DownloadProvider {
   @override bool isAlbumCached(Album album) => false;
   @override Future<int> getTotalCacheSize() async => 0;
   @override Future<int> getPlaylistCacheSize(String playlistId) async => 0;
-  @override void dispose() { super.dispose(); }
+  @override dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
 class _MockPlayerProvider extends ChangeNotifier implements PlayerProvider {
+  @override Track? get currentTrack => null;
+  @override bool get isPlaying => false;
   @override void setQueue(List<Track> tracks, {int startIndex = 0, String? playlistId}) {}
   @override Future<void> playFromQueue(int index, {AudioQuality quality = AudioQuality.adaptive}) async {}
   @override dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);

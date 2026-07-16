@@ -96,7 +96,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _dynamicAccentColor = true;
   String _visualizerStyle = 'Bars';
   bool _invertSeekbarColor = false;
-  String _seekbarStyle = 'Minimal';
+  String _seekbarStyle = 'Prism';
 
   int _scrobbleThreshold = 75;
 
@@ -147,8 +147,8 @@ class SettingsProvider extends ChangeNotifier {
   String get visualizerStyle => _visualizerStyle;
   bool get invertSeekbarColor => _invertSeekbarColor;
   String get seekbarStyle {
-    if (!['Gradient', 'Minimal', 'Wavy', 'Segmented'].contains(_seekbarStyle)) {
-      return 'Minimal';
+    if (!['Gradient', 'Minimal', 'Wavy', 'Segmented', 'Prism'].contains(_seekbarStyle)) {
+      return 'Prism';
     }
     return _seekbarStyle;
   }
@@ -196,7 +196,7 @@ class SettingsProvider extends ChangeNotifier {
     _dynamicAccentColor = prefs.getBool(_keyDynamicAccentColor) ?? true;
     _visualizerStyle = prefs.getString(_keyVisualizerStyle) ?? 'Bars';
     _invertSeekbarColor = prefs.getBool(_keyInvertSeekbarColor) ?? false;
-    _seekbarStyle = prefs.getString(_keySeekbarStyle) ?? 'Minimal';
+    _seekbarStyle = prefs.getString(_keySeekbarStyle) ?? 'Prism';
 
     _searchSourceYoutube = prefs.getBool(_keySearchSourceYoutube) ?? true;
     _searchSourceYTMusic = prefs.getBool(_keySearchSourceYTMusic) ?? true;

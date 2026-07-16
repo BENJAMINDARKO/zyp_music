@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/services/update_service.dart';
 import '../widgets/glass_sidebar.dart';
 import '../screens/home_screen.dart';
@@ -19,19 +21,11 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _selectedIndex = 0;
-  bool _isSearching = false;
-  String _searchQuery = '';
-  String _submittedQuery = '';
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  final ValueNotifier<String> _searchNotifier = ValueNotifier<String>('');
-  Timer? _debounce;
-
   final List<GlobalKey<NavigatorState>> _navigatorKeys = [
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
-    GlobalKey<NavigatorState>(), // Search navigator
+    GlobalKey<NavigatorState>(),
   ];
 
   late final List<NavigatorObserver> _navigatorObservers;
@@ -47,16 +41,6 @@ class _MainLayoutState extends State<MainLayout> {
         }
       }),
     );
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text;
-      });
-    });
-    _searchFocusNode.addListener(() {
-      if (_searchFocusNode.hasFocus) {
-        setState(() => _isSearching = true);
-      }
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         UpdateService.checkForUpdates(context);
@@ -68,23 +52,10 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void dispose() {
     UpdateService.stopPeriodicCheck();
-    _debounce?.cancel();
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _searchNotifier.dispose();
     super.dispose();
   }
 
   void _selectTab(int index) {
-    if (_isSearching) {
-      setState(() {
-        _isSearching = false;
-        _searchController.clear();
-        _searchFocusNode.unfocus();
-        _selectedIndex = index;
-      });
-      return;
-    }
     if (_selectedIndex == index) {
       _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
     } else {
@@ -92,27 +63,31 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
+  String _getTabTitle(int index) {
+    switch (index) {
+      case 0:
+        return 'Home';
+      case 1:
+        return 'Echo Search';
+      case 2:
+        return 'Mood Orbit';
+      case 3:
+        return 'Wave Library';
+      default:
+        return 'Home';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
-    final activeIndex = _isSearching ? 3 : _selectedIndex;
-    final bool hasPushedRoute = _navigatorKeys[activeIndex].currentState?.canPop() ?? false;
-
+    final bool hasPushedRoute = _navigatorKeys[_selectedIndex].currentState?.canPop() ?? false;
 
     return WillPopScope(
       onWillPop: () async {
-        final activeIndex = _isSearching ? 3 : _selectedIndex;
-        final navigator = _navigatorKeys[activeIndex].currentState;
+        final navigator = _navigatorKeys[_selectedIndex].currentState;
         if (navigator != null && navigator.canPop()) {
           navigator.maybePop();
-          return false;
-        }
-        if (_isSearching) {
-          setState(() {
-            _isSearching = false;
-            _searchController.clear();
-            _searchFocusNode.unfocus();
-          });
           return false;
         }
         if (_selectedIndex != 0) {
@@ -122,153 +97,206 @@ class _MainLayoutState extends State<MainLayout> {
         return true;
       },
       child: Scaffold(
-      appBar: hasPushedRoute ? null : AppBar(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Image.asset('assets/logo.png', height: 36),
-        ),
-        leadingWidth: 52,
-        title: Container(
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white10,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            children: [
-              Icon(PhosphorIconsRegular.magnifyingGlass, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54), size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  style: const TextStyle(fontSize: 14, color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'Search for tracks, artists...',
-                    hintStyle: TextStyle(fontSize: 14, color: Colors.white54),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  textInputAction: TextInputAction.search,
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
-                  },
-                  onSubmitted: (value) {
-                    setState(() {
-                      _submittedQuery = value;
-                    });
-                    _searchNotifier.value = value;
-                  },
+        appBar: hasPushedRoute ? null : AppBar(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          leading: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Container(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: SweepGradient(
+                  colors: [
+                    ZypAuroraColors.cyan,
+                    ZypAuroraColors.violet,
+                    ZypAuroraColors.pink,
+                    ZypAuroraColors.peach,
+                    ZypAuroraColors.cyan,
+                  ],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x599F7AEA),
+                    blurRadius: 34,
+                    offset: Offset(0, 14),
+                  )
+                ],
               ),
-              if (_searchQuery.isNotEmpty)
-                IconButton(
-                  icon: const Icon(PhosphorIconsRegular.x, color: Colors.white54, size: 20),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() {
-                      _searchQuery = '';
-                      _submittedQuery = '';
-                    });
-                    _searchNotifier.value = '';
-                  },
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(PhosphorIconsRegular.gear),
-            onPressed: () {
-              final activeIndex = _isSearching ? 3 : _selectedIndex;
-              _navigatorKeys[activeIndex].currentState?.push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen())
-              );
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                if (isDesktop)
-                  GlassSidebar(
-                    selectedIndex: _selectedIndex,
-                    onItemSelected: _selectTab,
-                    onSettingsTap: () {
-                      final activeIndex = _isSearching ? 3 : _selectedIndex;
-                      _navigatorKeys[activeIndex].currentState?.push(
-                        MaterialPageRoute(builder: (_) => const SettingsScreen())
-                      );
-                    },
-                  ),
-                Expanded(
-                  child: IndexedStack(
-                    index: _isSearching ? 3 : _selectedIndex,
-                    children: [
-                      _buildTabNavigator(0, const HomeScreen()),
-                      _buildTabNavigator(1, const MusicNowScreen()),
-                      _buildTabNavigator(2, const LibraryScreen()),
-                      _buildTabNavigator(3, SearchScreen(
-                        initialQuery: _submittedQuery,
-                        searchNotifier: _searchNotifier,
-                      )),
-                    ],
-                  ),
-                ),
-              ],
+              child: Center(
+                child: Image.asset('assets/logo.png', height: 26, width: 26, errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white)),
+              ),
             ),
           ),
-          const BottomPlayer(),
-          if (!isDesktop)
-            Container(
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.12),
-                    width: 0.5,
-                  ),
+          leadingWidth: 52,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'ZYP GLASSSTREAM',
+                style: TextStyle(
+                  color: ZypAuroraColors.cyan,
+                  fontSize: 10,
+                  letterSpacing: 1.8,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-              child: BottomNavigationBar(
-                currentIndex: _isSearching ? 0 : _selectedIndex,
-                onTap: _selectTab,
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                selectedItemColor: _isSearching ? Theme.of(context).colorScheme.onSurface.withOpacity(0.54) : Theme.of(context).colorScheme.onSurface,
-                unselectedItemColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(PhosphorIconsRegular.house),
-                    activeIcon: Icon(PhosphorIconsFill.house),
-                    label: 'Home',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(PhosphorIconsRegular.musicNotesSimple),
-                    activeIcon: Icon(PhosphorIconsFill.musicNotesSimple),
-                    label: 'Music Now',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(PhosphorIconsRegular.bookOpen),
-                    activeIcon: Icon(PhosphorIconsFill.bookOpen),
-                    label: 'Library',
+              const SizedBox(height: 2),
+              Text(
+                _getTabTitle(_selectedIndex),
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.6,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(PhosphorIconsRegular.gear),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen())
+                );
+              },
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Row(
+                children: [
+                  if (isDesktop)
+                    GlassSidebar(
+                      selectedIndex: _selectedIndex,
+                      onItemSelected: _selectTab,
+                      onSettingsTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const SettingsScreen())
+                        );
+                      },
+                    ),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _selectedIndex,
+                      children: [
+                        _buildTabNavigator(0, const HomeScreen()),
+                        _buildTabNavigator(1, const SearchScreen()),
+                        _buildTabNavigator(2, const MusicNowScreen()),
+                        _buildTabNavigator(3, const LibraryScreen()),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-        ],
+            if (!isDesktop)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BottomPlayer(),
+                      const SizedBox(height: 10),
+                      _buildFloatingBottomNav(),
+                      const SizedBox(height: 10),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildFloatingBottomNav() {
+    final navItems = [
+      {'icon': '✦', 'label': 'Home'},
+      {'icon': '⌕', 'label': 'Search'},
+      {'icon': '◒', 'label': 'Music'},
+      {'icon': '≋', 'label': 'Library'},
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+          child: Container(
+            height: 64,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: ZypAuroraColors.glassSoft,
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(
+                color: ZypAuroraColors.stroke,
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: List.generate(4, (index) {
+                final item = navItems[index];
+                final isSelected = _selectedIndex == index;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => _selectTab(index),
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      decoration: isSelected
+                          ? BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              gradient: RadialGradient(
+                                center: const Alignment(0.0, -1.0),
+                                radius: 0.58,
+                                colors: [
+                                  ZypAuroraColors.cyan.withOpacity(0.22),
+                                  Colors.transparent,
+                                ],
+                              ),
+                              color: Colors.white.withOpacity(0.10),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.09),
+                                width: 1,
+                              ),
+                            )
+                          : null,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            item['icon']!,
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.54),
+                              height: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            item['label']!,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.54),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
       ),
     );
   }

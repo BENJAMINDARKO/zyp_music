@@ -1,5 +1,23 @@
 import 'package:flutter/material.dart';
 
+class ZypAuroraColors {
+  static const ink = Color(0xFF05040B);
+  static const ink2 = Color(0xFF111129);
+
+  static const cyan = Color(0xFF5EEAD4);
+  static const violet = Color(0xFF9F7AEA);
+  static const pink = Color(0xFFFF5CC8);
+  static const peach = Color(0xFFF6B17A);
+  static const lime = Color(0xFFE0FD7D);
+
+  static const success = Color(0xFF20D676);
+  static const error = Color(0xFFFF4F4F);
+
+  static const glass = Color(0x8512142C);
+  static const glassSoft = Color(0x12FFFFFF);
+  static const stroke = Color(0x26FFFFFF);
+}
+
 class AppTheme {
   // Dark mode constants — UNCHANGED
   static const _primaryColor = Color(0xFF1DB954);
@@ -13,15 +31,17 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
-      primaryColor: _primaryColor,
+      primaryColor: ZypAuroraColors.cyan,
       scaffoldBackgroundColor: Colors.transparent,
+      fontFamily: 'Inter',
       colorScheme: const ColorScheme.dark(
-        primary: _primaryColor,
-        secondary: _primaryColor,
-        surface: _darkSurface,
+        primary: ZypAuroraColors.cyan,
+        secondary: ZypAuroraColors.violet,
+        surface: ZypAuroraColors.ink,
         onPrimary: Colors.black,
         onSecondary: Colors.black,
         onSurface: Colors.white,
+        error: ZypAuroraColors.error,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -29,7 +49,7 @@ class AppTheme {
         centerTitle: true,
       ),
       cardTheme: const CardThemeData(
-        color: _darkCard,
+        color: ZypAuroraColors.glass,
         elevation: 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -52,7 +72,7 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: _primaryColor,
+          backgroundColor: ZypAuroraColors.cyan,
           foregroundColor: Colors.black,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
@@ -62,7 +82,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: _darkCard,
+        fillColor: ZypAuroraColors.glassSoft,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -72,5 +92,4 @@ class AppTheme {
       ),
     );
   }
-
 }

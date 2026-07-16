@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/theme/app_theme.dart';
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
 import '../../domain/entities/video.dart';
@@ -460,41 +461,160 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Column(
-        children: [
-          TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            indicatorColor: const Color(0xFFEAB308),
-            labelColor: Theme.of(context).colorScheme.onSurface,
-            unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
-            dividerColor: const Color(0xFF2A2A2A),
-            tabs: const [
-              Tab(text: "Tracks"),
-              Tab(text: "Albums"),
-              Tab(text: "Artists"),
-              Tab(text: "Playlists"),
-              Tab(text: "Other"),
-            ],
-          ),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFFEAB308)))
-                : _error != null
-                    ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-                    : TabBarView(
-                        controller: _tabController,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: ZypAuroraColors.glass,
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: ZypAuroraColors.stroke),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: Colors.white.withOpacity(0.17)),
+                            color: Colors.white.withOpacity(0.095),
+                          ),
+                          child: const Text(
+                            'SEARCH MOVED',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white70),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: Colors.white.withOpacity(0.17)),
+                            color: Colors.white.withOpacity(0.095),
+                          ),
+                          child: const Text(
+                            'BOTTOM NAV',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white70),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Text.rich(
+                      TextSpan(
+                        text: 'Find your next ',
+                        style: TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.bold,
+                          height: 0.95,
+                          letterSpacing: -0.75,
+                          color: Colors.white,
+                        ),
                         children: [
-                          _buildTrackList(_trackResults),
-                          _buildAlbumList(),
-                          _buildArtistList(),
-                          _buildPlaylistList(),
-                          _buildTrackList(_otherResults),
+                          TextSpan(
+                            text: 'audio weather.',
+                            style: TextStyle(
+                              color: ZypAuroraColors.cyan,
+                            ),
+                          ),
                         ],
                       ),
-          ),
-        ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      height: 58,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(PhosphorIconsRegular.magnifyingGlass, color: Colors.white54, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              style: const TextStyle(color: Colors.white, fontSize: 18),
+                              decoration: const InputDecoration(
+                                hintText: 'Search...',
+                                hintStyle: TextStyle(color: Colors.white38),
+                                border: InputBorder.none,
+                                filled: false,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                              textInputAction: TextInputAction.search,
+                              onSubmitted: (value) {
+                                _performSearch(value);
+                              },
+                            ),
+                          ),
+                          if (_searchController.text.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(PhosphorIconsRegular.x, color: Colors.white54),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _currentQuery = '';
+                                  _trackResults.clear();
+                                  _albumResults.clear();
+                                  _artistResults.clear();
+                                  _playlistResults.clear();
+                                  _otherResults.clear();
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              indicatorColor: ZypAuroraColors.cyan,
+              labelColor: Theme.of(context).colorScheme.onSurface,
+              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+              dividerColor: Colors.transparent,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w900),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w900),
+              tabs: const [
+                Tab(text: "Tracks"),
+                Tab(text: "Albums"),
+                Tab(text: "Artists"),
+                Tab(text: "Playlists"),
+                Tab(text: "Other"),
+              ],
+            ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: ZypAuroraColors.cyan))
+                  : _error != null
+                      ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
+                      : TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _buildTrackList(_trackResults),
+                            _buildAlbumList(),
+                            _buildArtistList(),
+                            _buildPlaylistList(),
+                            _buildTrackList(_otherResults),
+                          ],
+                        ),
+            ),
+          ],
+        ),
       ),
       extendBody: true,
     );

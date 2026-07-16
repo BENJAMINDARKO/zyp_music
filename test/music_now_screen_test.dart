@@ -11,6 +11,7 @@ import 'package:zyp_music/data/datasources/local/playlist_database.dart';
 import 'package:zyp_music/domain/entities/video.dart';
 import 'package:zyp_music/domain/entities/album.dart';
 import 'package:zyp_music/domain/entities/artist.dart';
+import 'package:zyp_music/presentation/providers/player_provider.dart';
 import 'package:zyp_music/ui/screens/music_now_screen.dart';
 
 class _MockChartsProvider extends ChangeNotifier implements ChartsProvider {
@@ -146,12 +147,19 @@ Widget _buildTestApp({
         ChangeNotifierProvider<ChartsProvider>.value(value: chartsProvider),
         ChangeNotifierProvider<HomeFeedProvider>.value(value: homeFeedProvider),
         ChangeNotifierProvider<PlaylistProvider>.value(value: playlistProvider),
+        ChangeNotifierProvider<PlayerProvider>.value(value: _MockPlayerProvider()),
         ChangeNotifierProvider<DownloadProvider>.value(value: _MockDownloadProvider()),
         ChangeNotifierProvider<HybridCacheService>.value(value: _MockHybridCacheService()),
       ],
       child: const MusicNowScreen(),
     ),
   );
+}
+
+class _MockPlayerProvider extends ChangeNotifier implements PlayerProvider {
+  @override Track? get currentTrack => null;
+  @override ValueNotifier<Duration> get positionNotifier => ValueNotifier(Duration.zero);
+  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _MockDownloadProvider extends ChangeNotifier implements DownloadProvider {

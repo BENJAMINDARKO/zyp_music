@@ -1,3 +1,30 @@
+## [1.3.3] - 2026-07-16
+
+### Added
+- **16-Band Equalizer**: Full-page Aurora Glass EQ dashboard with 8 presets + Custom, 16 vertical sliders (31Hz–16kHz, -12dB to +12dB), preamp/bass boost/virtualizer/limiter/per-device toggles. Wired to `just_audio` native DSP with band interpolation.
+- **Rich Listening Stats Dashboard**: Prism Counter hero card, range filter chips, 6 core counters, weekly activity chart, top artists, genre mix, heatmap, habits & quality, source split, smart insights.
+- **Mini-player Prism Progress Ring**: `PrismCapsuleProgressPainter` (cyan→pink→peach gradient ring with glow) wrapping mobile mini-player via `CustomPaint` + `ValueListenableBuilder`.
+- **AnimatedEqMiniCurve Widget**: 16-bar gradient mini-curve with sine-based staggered breathing animation (1.4s period). Replaces static EQ bars in player drawer and equalizer screen.
+- **AnimatedDailyPrismStack Widget**: Three stacked cards with floating/breathing/rotating motion (4.8s period, staggered delay). Replaces static stacked artwork in Daily Prism home card.
+- **Lyrics Visual States**: `LyricLineVisualState` enum (played/active/next/upcoming) with distinct styling. Played lines dimmed and softened, active line bright/large with cyan glow and breathing animation (scale 1.0→1.012, 2.8s), next/upcoming at graduated opacity.
+- **Karaoke Text Mode**: Centered previous/active/next lines with proper visual hierarchy. Active line at 34px with triple glow shadow (cyan + pink + black) and gentle float animation (translateY -2px, scale 1.018, 2.2s). `AnimatedSwitcher` with fade + slide-up for line transitions.
+- **`KaraokeLineSet` Model & `getKaraokeLines` Helper**: Clean data model for karaoke lyric view state management.
+- **Reduced Motion Support**: All decorative animations (lyric breathing, karaoke float, EQ bar dance, Daily Prism stack) respect `MediaQuery.disableAnimations`.
+
+### Changed
+- **Song Options Redesigned**: Replaced old context menu with Aurora Glass bottom sheet: song header (72×72 artwork, title, artist, album pill), primary actions (Add to Queue gradient card, Favourite pink card), grouped glass option rows, danger zone.
+- **EQ Integrated Inline Drawer**: Replaced "Sound Tools" modal with EQ toggle + More overflow in full-screen player action row. EQ opens as animated inline drawer inside control deck with ON/OFF badge, 5 preset chips, 16-band mini curve, Open full/Pre-amp/Bands. Old `_showToolsSheet`/`_buildProminentEqualizerTile` removed.
+- **Unified Settings Redesign**: ZYP Control Deck hero card, sticky category chips, glass setting groups, Aurora switches, selection pills, prism sliders. Audio group has inline expandable EQ.
+- **Settings Hides Miniplayer**: `SettingsScreen` calls `MiniplayerVisibilityProvider.hide()`/`show()` with post-frame callbacks.
+- **All Modals use Root Navigator**: Miniplayer overlays fixed by using `useRootNavigator: true` and `Navigator.of(context).push()` for Settings screen.
+- **Library FAB Margins**: FAB bottom margin set to 165, scroll padding 165, miniplayer sheet width reduced 15% and centered.
+- **Synced Lyrics Widget Restructured**: `_buildLyricsList` refactored into `_buildLyricLine()` helper with dedicated `_lyricTextStyle()` method per visual state.
+- **Karaoke Mode Unified**: Both normal and karaoke modes now go through the same `SyncedLyricsWidget` with `karaokeMode` flag, replacing a separate inline karaoke implementation in `PlayingScreen`.
+
+### Fixed
+- **Download Permission Crash**: `_exportDir` getter only checks `.isGranted` instead of calling `.request()` on access.
+- **Miniplayer Overlay in Settings**: Settings page no longer renders behind the miniplayer.
+
 ## [1.3.2] - 2026-07-12
 
 ### Added

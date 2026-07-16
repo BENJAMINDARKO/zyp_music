@@ -3,16 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../presentation/providers/playlist_provider.dart';
 import '../../presentation/providers/player_provider.dart';
-import '../../domain/entities/artist.dart';
-import '../widgets/track_context_menu.dart';
-import 'album_screen.dart';
-import '../widgets/track_download_icon.dart';
 import '../../presentation/providers/download_provider.dart';
-import "../../core/utils/thumbnail_url.dart";
+import '../../domain/entities/artist.dart';
+import '../../core/utils/thumbnail_url.dart';
+import '../../core/theme/app_theme.dart';
+
+import '../widgets/global_background.dart';
+import '../widgets/aurora_glass.dart';
+import '../widgets/prism_loader.dart';
+import '../widgets/library/detail_track_row.dart';
+import '../widgets/library/artist_hero.dart';
+import '../widgets/track_context_menu.dart';
+import '../widgets/track_download_icon.dart';
 import '../widgets/playing_track_mask.dart';
 import '../widgets/explicit_icon.dart';
+import 'album_screen.dart';
 
 enum _ArtistViewMode {
   dashboard,
@@ -69,424 +77,225 @@ class _ArtistScreenState extends State<ArtistScreen> {
     player.playTrackWithNewSession(track);
   }
 
-  Widget _buildBlurredBackground() {
-    final hasImage = _artist?.thumbnailUrl != null;
-    final baseColor = const Color(0xFF0A0A0A);
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Container(color: baseColor),
-        if (hasImage) ...[
-          CachedNetworkImage(
-            imageUrl: rewriteThumbnailSize(_artist!.thumbnailUrl, 800),
-            fit: BoxFit.cover,
-            errorWidget: (_, __, ___) => Container(color: baseColor),
-          ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.85),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
+  void _playAll() {
+    if (_artist == null || _artist!.topTracks.isEmpty) return;
+    final player = context.read<PlayerProvider>();
+    player.playQueueWithNewSession(_artist!.topTracks, startIndex: 0, playlistId: _artist!.id);
   }
 
   Widget _buildPersistentHeader() {
-    final hasImage = _artist!.thumbnailUrl != null;
-    final stats = "${_artist!.albums.length} Album${_artist!.albums.length == 1 ? '' : 's'}";
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Title Bar
-        SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    PhosphorIconsRegular.arrowLeft,
-                    color: Theme.of(context).colorScheme.onSurface,
-                    size: 24,
-                  ),
-                  onPressed: () {
-                    if (_viewMode != _ArtistViewMode.dashboard) {
-                      setState(() {
-                        _viewMode = _ArtistViewMode.dashboard;
-                      });
-                    } else {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                ),
-                Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 48.0),
-                      child: Text(
-                        "Artist's Profile",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Artist Card
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: AspectRatio(
-              aspectRatio: 16 / 10,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (hasImage)
-                    CachedNetworkImage(
-                      imageUrl: rewriteThumbnailSize(_artist!.thumbnailUrl, 1200),
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: Colors.grey[900],
-                        child: const Center(
-                          child: CircularProgressIndicator(color: Color(0xFFEAB308)),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        color: Colors.grey[900],
-                        child: const Icon(PhosphorIconsRegular.user, size: 64, color: Colors.white24),
-                      ),
-                    )
-                  else
-                    Container(
-                      color: Colors.grey[900],
-                      child: const Icon(PhosphorIconsRegular.user, size: 64, color: Colors.white24),
-                    ),
-                  // Dark translucent gradient overlay
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.3),
-                          Colors.black.withValues(alpha: 0.8),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Artist Name & Stats Overlay
-                  Positioned(
-                    bottom: 20,
-                    left: 64,
-                    right: 64,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _artist!.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(
-                                offset: Offset(0, 2),
-                                blurRadius: 4,
-                                color: Colors.black54,
-                              ),
-                            ],
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          stats,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            shadows: const [
-                              Shadow(
-                                offset: Offset(0, 1),
-                                blurRadius: 2,
-                                color: Colors.black54,
-                              ),
-                            ],
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Bottom Left: Artist Favourite toggle
-                  Positioned(
-                    bottom: 12,
-                    left: 16,
-                    child: Consumer<PlaylistProvider>(
-                      builder: (context, provider, _) {
-                        final isFavorite = provider.isArtistFavorite(_artist!.id);
-                        return IconButton(
-                          icon: Icon(
-                            isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                            color: isFavorite ? Colors.red : Colors.white,
-                            size: 28,
-                          ),
-                          onPressed: () => provider.toggleFavoriteArtist(_artist!),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+    if (_viewMode != _ArtistViewMode.dashboard) {
+      // Small simple header when viewing all songs or all albums
+      return SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(PhosphorIconsRegular.caretLeft, color: Colors.white, size: 24),
+                onPressed: () {
+                  setState(() {
+                    _viewMode = _ArtistViewMode.dashboard;
+                  });
+                },
               ),
-            ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 48.0),
+                  child: Text(
+                    _viewMode == _ArtistViewMode.allSongs ? 'All Songs' : 'All Albums',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      );
+    }
+
+    // Otherwise, render our beautiful ArtistHero
+    return ArtistHero(
+      artist: _artist!,
+      onPlayAll: _playAll,
+      onBack: () => Navigator.of(context).pop(),
+      onMore: () {
+        // Toggle follow
+        context.read<PlaylistProvider>().toggleFavoriteArtist(_artist!);
+      },
     );
   }
 
   List<Widget> _buildDashboardSlivers() {
-    final topTracks = _artist!.topTracks.take(3).toList();
+    final topTracks = _artist!.topTracks.take(5).toList();
     final albums = _artist!.albums;
 
     return [
-      if (topTracks.isNotEmpty) ...[
-        // Top Songs Header Row
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Top Songs",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
+      // 1. Top Songs Header
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Top Songs",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
+              ),
+              if (_artist!.topTracks.length > 5)
                 GestureDetector(
                   onTap: () {
                     setState(() {
                       _viewMode = _ArtistViewMode.allSongs;
                     });
                   },
-                  child: Text(
+                  child: const Text(
                     "See All",
                     style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      color: ZypAuroraColors.cyan,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
-        // Top Songs List (3 tracks)
-        SliverList(
+      ),
+      // Top Songs List (glass rows)
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        sliver: SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               final track = topTracks[index];
-              return PlayingTrackMask(
+              return DetailTrackRow(
+                index: index + 1,
                 track: track,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  leading: ClipOval(
-                    child: (track.thumbnailUrl?.isNotEmpty ?? false)
-                        ? CachedNetworkImage(
-                            imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 200),
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => Container(
-                              width: 48,
-                              height: 48,
-                              color: Colors.grey[850],
-                              child: const Icon(PhosphorIconsRegular.musicNote, size: 20, color: Colors.white30),
-                            ),
-                          )
-                        : Container(
-                            width: 48,
-                            height: 48,
-                            color: Colors.grey[850],
-                            child: const Icon(PhosphorIconsRegular.musicNote, size: 20, color: Colors.white30),
-                          ),
-                  ),
-                  title: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          track.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Colors.white,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (track.isExplicit) const ExplicitIcon(),
-                    ],
-                  ),
-                  subtitle: Text(
-                    '${track.title} - ${track.author ?? _artist!.name}',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TrackDownloadIcon(track: track, size: 20),
-                      const SizedBox(width: 16),
-                      Consumer<PlaylistProvider>(
-                        builder: (context, playlistProvider, _) {
-                          final isFav = playlistProvider.isFavorite(track.id);
-                          return IconButton(
-                            icon: Icon(
-                              isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                              color: isFav ? const Color(0xFF22C55E) : Colors.white.withValues(alpha: 0.5),
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              playlistProvider.toggleFavorite(
-                                track,
-                                downloadProvider: context.read<DownloadProvider>(),
-                              );
-                            },
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  onTap: () => _playTrack(index),
-                  onLongPress: () => TrackContextMenu.show(context, track),
-                ),
+                onTap: () => _playTrack(index),
               );
             },
             childCount: topTracks.length,
           ),
         ),
-      ],
-      if (albums.isNotEmpty) ...[
-        // Top Albums Header Row
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 32, 20, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Top Albums",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
+      ),
+
+      // 2. Top Albums Header
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Top Albums",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70),
+              ),
+              if (albums.length > 3)
                 GestureDetector(
                   onTap: () {
                     setState(() {
                       _viewMode = _ArtistViewMode.allAlbums;
                     });
                   },
-                  child: Text(
+                  child: const Text(
                     "See All",
                     style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      color: ZypAuroraColors.cyan,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
-        // Horizontal Albums list (using circular artwork)
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 145,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: albums.length,
-              itemBuilder: (context, index) {
-                final album = albums[index];
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => AlbumScreen(albumId: album.id),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    width: 100,
-                    margin: const EdgeInsets.only(right: 20),
-                    child: Column(
-                      children: [
-                        ClipOval(
+      ),
+      // Horizontal circular album rail
+      SliverToBoxAdapter(
+        child: SizedBox(
+          height: 155,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: albums.length,
+            itemBuilder: (context, index) {
+              final album = albums[index];
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AlbumScreen(albumId: album.id),
+                    ),
+                  );
+                },
+                child: Container(
+                  width: 96,
+                  margin: const EdgeInsets.only(right: 14),
+                  child: Column(
+                    children: [
+                      // Circular album cover with soft shadows and glow
+                      Container(
+                        width: 90,
+                        height: 90,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: ZypAuroraColors.cyan.withOpacity(0.2),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
                           child: (album.thumbnailUrl?.isNotEmpty ?? false)
                               ? CachedNetworkImage(
                                   imageUrl: rewriteThumbnailSize(album.thumbnailUrl, 200),
-                                  width: 100,
-                                  height: 100,
+                                  width: 90,
+                                  height: 90,
                                   fit: BoxFit.cover,
-                                  errorWidget: (context, url, error) => Container(
-                                    width: 100,
-                                    height: 100,
-                                    color: Colors.grey[850],
-                                    child: const Icon(PhosphorIconsRegular.discoBall, size: 28, color: Colors.white30),
-                                  ),
+                                  errorWidget: (_, __, ___) => _fallbackAlbumCoverCircular(),
                                 )
-                              : Container(
-                                  width: 100,
-                                  height: 100,
-                                  color: Colors.grey[850],
-                                  child: const Icon(PhosphorIconsRegular.discoBall, size: 28, color: Colors.white30),
-                                ),
+                              : _fallbackAlbumCoverCircular(),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          album.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                            color: Colors.white,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        album.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Colors.white,
                         ),
-                      ],
-                    ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        album.year ?? '',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          color: Colors.white.withOpacity(0.48),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
         ),
-      ],
+      ),
     ];
   }
 
@@ -494,119 +303,20 @@ class _ArtistScreenState extends State<ArtistScreen> {
     final topTracks = _artist!.topTracks;
 
     return [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-          child: Row(
-            children: [
-              Text(
-                "All Songs",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                "(${topTracks.length})",
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final track = topTracks[index];
-            return PlayingTrackMask(
-              track: track,
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                leading: ClipOval(
-                  child: (track.thumbnailUrl?.isNotEmpty ?? false)
-                      ? CachedNetworkImage(
-                          imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 200),
-                          width: 40,
-                          height: 40,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(
-                            width: 40,
-                            height: 40,
-                            color: Colors.grey[850],
-                            child: const Icon(PhosphorIconsRegular.musicNote, size: 20, color: Colors.white30),
-                          ),
-                        )
-                      : Container(
-                          width: 40,
-                          height: 40,
-                          color: Colors.grey[850],
-                          child: const Icon(PhosphorIconsRegular.musicNote, size: 20, color: Colors.white30),
-                        ),
-                ),
-                title: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        track.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.white,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (track.isExplicit) const ExplicitIcon(),
-                  ],
-                ),
-                subtitle: Text(
-                  '${track.author ?? _artist!.name} - ${track.album ?? ""}',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 12,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TrackDownloadIcon(track: track, size: 20),
-                    const SizedBox(width: 12),
-                    Consumer<PlaylistProvider>(
-                      builder: (context, playlistProvider, _) {
-                        final isFav = playlistProvider.isFavorite(track.id);
-                        return IconButton(
-                          icon: Icon(
-                            isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                            color: isFav ? const Color(0xFF22C55E) : Colors.white.withValues(alpha: 0.5),
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            playlistProvider.toggleFavorite(
-                              track,
-                              downloadProvider: context.read<DownloadProvider>(),
-                            );
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final track = topTracks[index];
+              return DetailTrackRow(
+                index: index + 1,
+                track: track,
                 onTap: () => _playTrack(index),
-                onLongPress: () => TrackContextMenu.show(context, track),
-              ),
-            );
-          },
-          childCount: topTracks.length,
+              );
+            },
+            childCount: topTracks.length,
+          ),
         ),
       ),
     ];
@@ -616,91 +326,70 @@ class _ArtistScreenState extends State<ArtistScreen> {
     final albums = _artist!.albums;
 
     return [
-      SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-          child: Row(
-            children: [
-              Text(
-                "All Albums",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                "(${albums.length})",
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final album = albums[index];
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              leading: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: (album.thumbnailUrl?.isNotEmpty ?? false)
-                    ? CachedNetworkImage(
-                        imageUrl: rewriteThumbnailSize(album.thumbnailUrl, 200),
-                        width: 56,
-                        height: 56,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Container(
-                          width: 56,
-                          height: 56,
-                          color: Colors.grey[850],
-                          child: const Icon(PhosphorIconsRegular.discoBall, size: 24, color: Colors.white30),
-                        ),
-                      )
-                    : Container(
-                        width: 56,
-                        height: 56,
-                        color: Colors.grey[850],
-                        child: const Icon(PhosphorIconsRegular.discoBall, size: 24, color: Colors.white30),
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final album = albums[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AlbumScreen(albumId: album.id),
                       ),
-              ),
-              title: Text(
-                album.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Colors.white,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                album.year ?? 'Unknown Year',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 12,
-                ),
-              ),
-              trailing: Icon(
-                PhosphorIconsRegular.caretRight,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AlbumScreen(albumId: album.id),
+                    );
+                  },
+                  child: AuroraGlass(
+                    borderRadius: 20,
+                    padding: const EdgeInsets.all(9),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: (album.thumbnailUrl?.isNotEmpty ?? false)
+                              ? CachedNetworkImage(
+                                  imageUrl: rewriteThumbnailSize(album.thumbnailUrl, 150),
+                                  width: 50,
+                                  height: 50,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => _fallbackAlbumCoverSquare(),
+                                )
+                              : _fallbackAlbumCoverSquare(),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                album.title,
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                album.year ?? 'Unknown Year',
+                                style: TextStyle(color: Colors.white.withOpacity(0.58), fontSize: 11),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(PhosphorIconsRegular.caretRight, color: Colors.white30),
+                      ],
+                    ),
                   ),
-                );
-              },
-            );
-          },
-          childCount: albums.length,
+                ),
+              );
+            },
+            childCount: albums.length,
+          ),
         ),
       ),
     ];
@@ -710,30 +399,46 @@ class _ArtistScreenState extends State<ArtistScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFEAB308))),
-        extendBody: true,
+        backgroundColor: ZypAuroraColors.ink,
+        body: Stack(
+          children: [
+            GlobalBackground(),
+            PrismLoader(
+              title: 'Loading Profile',
+              subtitle: 'Analyzing artist signals and top tracks...',
+            ),
+          ],
+        ),
       );
     }
 
     if (_error != null || _artist == null) {
       return Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(PhosphorIconsRegular.caretLeft, color: Theme.of(context).colorScheme.onSurface),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+        backgroundColor: ZypAuroraColors.ink,
+        body: Stack(
+          children: [
+            const GlobalBackground(),
+            SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  IconButton(
+                    icon: const Icon(PhosphorIconsRegular.caretLeft, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        _error ?? "Artist not found.",
+                        style: const TextStyle(color: Colors.red, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        body: Center(
-          child: Text(
-            _error ?? "Artist not found.",
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-        extendBody: true,
       );
     }
 
@@ -759,26 +464,45 @@ class _ArtistScreenState extends State<ArtistScreen> {
         });
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
         body: Stack(
           fit: StackFit.expand,
           children: [
-            _buildBlurredBackground(),
-            CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _buildPersistentHeader(),
-                ),
-                ...dynamicSlivers,
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 120), // Bottom padding for player
-                ),
-              ],
+            const GlobalBackground(),
+            SafeArea(
+              bottom: false,
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: _buildPersistentHeader(),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                  ...dynamicSlivers,
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: 120), // Bottom padding for player
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        extendBody: true,
       ),
+    );
+  }
+
+  Widget _fallbackAlbumCoverCircular() {
+    return Container(
+      color: Colors.white.withOpacity(0.08),
+      child: const Icon(PhosphorIconsRegular.discoBall, color: Colors.white30, size: 24),
+    );
+  }
+
+  Widget _fallbackAlbumCoverSquare() {
+    return Container(
+      width: 50,
+      height: 50,
+      color: Colors.white.withOpacity(0.08),
+      child: const Icon(PhosphorIconsRegular.discoBall, color: Colors.white30, size: 20),
     );
   }
 }

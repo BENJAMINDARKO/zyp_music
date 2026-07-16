@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mini_music_visualizer/mini_music_visualizer.dart';
+import '../../core/theme/app_theme.dart';
 import '../../domain/entities/auto_dj_mode.dart';
 import '../../domain/entities/video.dart';
 import '../../presentation/providers/player_provider.dart';
@@ -22,6 +23,58 @@ import 'custom_audio_seekbar.dart';
 import 'seekbar_connector.dart';
 import '../../core/navigation/navigator_key.dart';
 import "../../core/utils/thumbnail_url.dart";
+
+class PrismCapsuleProgressPainter extends CustomPainter {
+  PrismCapsuleProgressPainter({required this.progress});
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(3),
+      const Radius.circular(25),
+    );
+    final path = Path()..addRRect(rrect);
+    final metric = path.computeMetrics().first;
+    final drawLength = metric.length * progress.clamp(0.0, 1.0);
+    if (drawLength <= 0) return;
+
+    final progressPath = metric.extractPath(0, drawLength);
+
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..shader = const LinearGradient(
+        colors: [
+          ZypAuroraColors.cyan,
+          ZypAuroraColors.pink,
+          ZypAuroraColors.peach,
+        ],
+      ).createShader(rect)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawPath(progressPath, glowPaint);
+
+    final ringPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..shader = const LinearGradient(
+        colors: [
+          ZypAuroraColors.cyan,
+          ZypAuroraColors.pink,
+          ZypAuroraColors.peach,
+        ],
+      ).createShader(rect);
+    canvas.drawPath(progressPath, ringPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant PrismCapsuleProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
 
 class BottomPlayer extends StatelessWidget {
   const BottomPlayer({super.key});
@@ -229,7 +282,7 @@ class BottomPlayer extends StatelessWidget {
             children: [
               Consumer<SettingsProvider>(
                 builder: (context, settings, _) {
-                  SeekbarStyle style = SeekbarStyle.minimal;
+                  SeekbarStyle style = SeekbarStyle.prism;
                   switch (settings.seekbarStyle) {
                     case 'Gradient':
                       style = SeekbarStyle.gradient;
@@ -245,6 +298,9 @@ class BottomPlayer extends StatelessWidget {
                       break;
                     case 'Segmented':
                       style = SeekbarStyle.segmented;
+                      break;
+                    case 'Prism':
+                      style = SeekbarStyle.prism;
                       break;
                   }
                   return SeekbarConnector(
@@ -450,140 +506,134 @@ class BottomPlayer extends StatelessWidget {
           );
         }
       },
-      child: Container(
-        height: 80,
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          border: Border(
-            top: BorderSide(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
-              width: 0.5,
-            ),
-          ),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Hero(
-                      tag: 'now-playing-art',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: (track.thumbnailUrl?.isNotEmpty ?? false)
-                            ? CachedNetworkImage(
-                                imageUrl: rewriteThumbnailSize(track.thumbnailUrl),
-                                width: 48,
-                                height: 48,
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => _buildArtPlaceholder(context),
-                              )
-                            : _buildArtPlaceholder(context),
-                      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: ValueListenableBuilder<Duration>(
+          valueListenable: player.positionNotifier,
+          builder: (_, position, child) {
+            final duration = player.duration;
+            final progress = duration.inMilliseconds == 0
+                ? 0.0
+                : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+            return CustomPaint(
+              painter: PrismCapsuleProgressPainter(progress: progress),
+              child: child!,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(25),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                child: Container(
+                  height: 70,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: ZypAuroraColors.glass,
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(
+                      color: ZypAuroraColors.stroke,
+                      width: 1,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            track.title,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (track.author != null && track.author!.isNotEmpty)
+                  ),
+                  child: Row(
+                    children: [
+                      Hero(
+                        tag: 'now-playing-art',
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(17),
+                          child: (track.thumbnailUrl?.isNotEmpty ?? false)
+                              ? CachedNetworkImage(
+                                  imageUrl: rewriteThumbnailSize(track.thumbnailUrl, 120),
+                                  width: 50,
+                                  height: 50,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => _buildArtPlaceholder(context),
+                                )
+                              : _buildArtPlaceholder(context),
+                        ),
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              track.author!,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              track.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.white,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                        ],
+                            if (track.author != null && track.author!.isNotEmpty)
+                              Text(
+                                '${track.author!} • 58% prism',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.62),
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Consumer<PlaylistProvider>(
-                      builder: (context, playlists, _) {
-                        final isFavorite = playlists.isFavorite(track.id);
-                        return IconButton(
-                          icon: Icon(
-                            isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                            color: isFavorite
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                            size: 22,
+                      const SizedBox(width: 8),
+                      Consumer<PlaylistProvider>(
+                        builder: (context, playlists, _) {
+                          final isFavorite = playlists.isFavorite(track.id);
+                          return IconButton(
+                            icon: Icon(
+                              isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                              color: isFavorite ? ZypAuroraColors.success : Colors.white.withOpacity(0.54),
+                              size: 25,
+                            ),
+                            onPressed: () {
+                              playlists.toggleFavorite(
+                                track,
+                                downloadProvider: context.read<DownloadProvider>(),
+                              );
+                            },
+                            padding: const EdgeInsets.all(8),
+                            constraints: const BoxConstraints(),
+                            tooltip: isFavorite ? 'Unlike' : 'Like',
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: player.togglePlayPause,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(17),
+                            gradient: const LinearGradient(
+                              colors: [ZypAuroraColors.cyan, ZypAuroraColors.lime],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                           ),
-                          onPressed: () {
-                            playlists.toggleFavorite(
-                              track,
-                              downloadProvider: context.read<DownloadProvider>(),
-                            );
-                          },
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(),
-                          tooltip: isFavorite ? 'Unlike' : 'Like',
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: Icon(
-                        player.isActuallyPlaying
-                            ? PhosphorIconsFill.pause
-                            : PhosphorIconsFill.play,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        size: 32,
+                          child: Center(
+                            child: Icon(
+                              player.isActuallyPlaying ? Icons.pause : Icons.play_arrow,
+                              color: const Color(0xFF07110D),
+                              size: 20,
+                            ),
+                          ),
+                        ),
                       ),
-                      onPressed: player.togglePlayPause,
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints(),
-                      tooltip: player.isActuallyPlaying ? 'Pause' : 'Play',
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-            ValueListenableBuilder<Duration>(
-              valueListenable: player.positionNotifier,
-              builder: (context, position, _) {
-                final duration = player.duration ?? Duration.zero;
-                final progress = duration.inMilliseconds > 0
-                    ? position.inMilliseconds / duration.inMilliseconds
-                    : 0.0;
-                return SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    trackHeight: 2,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                    activeTrackColor: Colors.white,
-                    inactiveTrackColor: Colors.white.withOpacity(0.25),
-                    thumbColor: Colors.white,
-                    overlayColor: Colors.white.withOpacity(0.15),
-                    trackShape: const RectangularSliderTrackShape(),
-                  ),
-                  child: Slider(
-                    value: progress.clamp(0.0, 1.0),
-                    onChanged: (value) {
-                      player.seekTo(
-                        Duration(
-                          milliseconds: (value * duration.inMilliseconds).round(),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
