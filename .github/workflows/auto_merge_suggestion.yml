@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      SUPABASE_URL: "https://wltbtvzmljsdoqvlthyw.supabase.co"
+      SUPABASE_ANON_KEY: "sb_publishable_VeUpNYJHUsSwVxmJfCx4AQ_bpQ9r_B_"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
