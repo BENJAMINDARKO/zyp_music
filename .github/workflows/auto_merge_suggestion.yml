@@ -8,6 +8,8 @@ jobs:
   merge:
     if: github.event.client_payload.status == 'approved'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3

@@ -1,3 +1,13 @@
+## [1.4.1] - 2026-07-17
+
+### Added
+- **Country Dropdown with Flags**: Genre correction modal now includes a flagged country selector (GH, NG, KE, ZA, TZ, UG, US, GB, CA, BR) pre-filled with the track's existing country. Selected country is submitted alongside genre suggestions.
+- **Supabase DB Trigger**: `dispatch_genre_suggestion_to_github()` trigger auto-fires a GitHub `repository_dispatch` when a suggestion status is updated to `approved`, completing the hands-free DB→CI/CD→CDN merge loop.
+- **Explicit Workflow Permissions**: `auto_merge_suggestion.yml` now declares `permissions: contents: write` to allow the `GITHUB_TOKEN` to push commits without a PAT.
+
+### Changed
+- **Genre Correction Modal**: Migrated from `showModalBottomSheet` to `showGeneralDialog` with `useRootNavigator: true` so the modal renders above the miniplayer instead of behind it.
+
 ## [1.4.0] - 2026-07-17
 
 ### Added
