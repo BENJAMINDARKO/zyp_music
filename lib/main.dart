@@ -383,6 +383,7 @@ Future<void> main() async {
       homeFeedProvider: homeFeedProvider,
       routingService: routingService,
       spotifyMetadata: spotifyMetadata,
+      genreProximityGraph: genreProximityGraph,
     ));
   } catch (e) {
     runApp(

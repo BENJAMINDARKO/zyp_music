@@ -1,0 +1,66 @@
+name: Auto-Merge Genre Suggestions
+
+on:
+  repository_dispatch:
+    types: [approve_suggestion]
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Run Merge Script
+        run: |
+          python -c "
+          import json
+          import sys
+
+          artist_name = '${{ github.event.client_payload.artist_name }}'.strip()
+          suggested_genres = json.loads('${{ toJson(github.event.client_payload.suggested_genres) }}')
+          target_type = '${{ github.event.client_payload.target_type }}'
+
+          if not artist_name or not suggested_genres:
+              print('Invalid payload data. Skipping.')
+              sys.exit(0)
+
+          file_path = 'assets/data/genre_normalization.json'
+          
+          try:
+              with open(file_path, 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(f'Error reading normalization file: {e}')
+              sys.exit(1)
+
+          # Add/Merge suggestions
+          data[artist_name.lower()] = suggested_genres[0]
+          sorted_data = dict(sorted(data.items()))
+
+          try:
+              with open(file_path, 'w', encoding='utf-8') as f:
+                  json.dump(sorted_data, f, indent=2, ensure_ascii=False)
+              print(f'Successfully added: {artist_name.lower()} -> {suggested_genres[0]}')
+          except Exception as e:
+              print(f'Failed to write file: {e}')
+              sys.exit(1)
+          "
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "Auto-DJ Bot"
+          git config --global user.email "bot@zypmusic.com"
+          git add assets/data/genre_normalization.json
+          git commit -m "chore(auto-dj): merge approved artist tag correction [skip ci]" || exit 0
+          git push origin main
+
+      - name: Purge jsDelivr CDN Cache
+        run: |
+          curl -s https://purge.jsdelivr.net/gh/BENJAMINDARKO/zyp_music@main/assets/data/genre_normalization.json
+          echo "CDN cache cleared."

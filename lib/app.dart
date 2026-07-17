@@ -25,6 +25,7 @@ import 'core/services/connectivity_service.dart';
 import 'core/services/dj_history_ledger.dart';
 import 'core/services/queue_manager.dart';
 import 'core/services/genre_enrichment_service.dart';
+import 'core/services/genre_proximity_graph.dart';
 import 'core/services/spotify_metadata_service.dart';
 import 'data/datasources/local/playlist_database.dart';
 import 'core/audio/gapless_queue_mixer.dart';
@@ -57,6 +58,7 @@ class ZYPMusic extends StatelessWidget {
   /// track transition fires background enrichment.
   final GenreEnrichmentService genreEnrichmentService;
   final SpotifyMetadataService spotifyMetadata;
+  final GenreProximityGraph genreProximityGraph;
 
   /// Spec 2H: the [PlaylistDatabase] singleton is exposed
   /// to the widget tree so the Shuffle Library filter
@@ -80,6 +82,7 @@ class ZYPMusic extends StatelessWidget {
     required this.dspEngine,
     required this.genreEnrichmentService,
     required this.spotifyMetadata,
+    required this.genreProximityGraph,
     required this.playlistDatabase,
     required this.homeFeedProvider,
     this.routingService,
@@ -146,6 +149,9 @@ class ZYPMusic extends StatelessWidget {
         ),
         ChangeNotifierProvider.value(
           value: homeFeedProvider,
+        ),
+        Provider<GenreProximityGraph>.value(
+          value: genreProximityGraph,
         ),
         ChangeNotifierProvider(
           create: (_) => MiniplayerVisibilityProvider(),
