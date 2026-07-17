@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:audio_service/audio_service.dart';
@@ -29,6 +31,7 @@ import 'core/services/connectivity_service.dart';
 import 'core/services/local_crate_miner.dart';
 import 'core/services/lyrics_chain_service.dart';
 import 'core/services/local_http_proxy_server.dart';
+import 'core/services/dynamic_metadata_sync_service.dart';
 import 'core/services/queue_manager.dart';
 import 'core/migrations/cache_metadata_backfill.dart';
 import 'core/constants/network_state.dart';
@@ -90,16 +93,20 @@ Future<void> main() async {
   final musicBrainz = MusicBrainzDataSource();
   final genreNormalization = GenreNormalizationService();
   await genreNormalization.initialize();
-  final genreSimilarity = GenreSimilarityEngine();
-  await genreSimilarity.initialize();
   final genreProximityGraph = GenreProximityGraph();
   await genreProximityGraph.initialize();
+  final genreSimilarity = GenreSimilarityEngine(genreProximityGraph);
   // Spec 2E: load the country→region map before any
   // _sameGenre scoring runs. The asset is small (~5KB) and
   // the service is purely additive on the hot path.
   final countryBonus = CountryBonusService();
   await countryBonus.initialize();
-  
+
+  // Fire-and-forget: pull latest genre/country matrices from CDN
+  // (silent no-op if the weekly throttle hasn't expired).
+  final metadataSync = DynamicMetadataSyncService();
+  unawaited(metadataSync.syncIfRequired());
+
   final spotifyMetadata = SpotifyMetadataService(db: localDatabase);
   
   final genreEnrichment = GenreEnrichmentService(

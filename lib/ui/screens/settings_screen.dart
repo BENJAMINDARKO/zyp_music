@@ -17,6 +17,8 @@ import '../../presentation/providers/settings_provider.dart';
 import '../../presentation/providers/equalizer_provider.dart';
 import '../../service/auth_service.dart';
 import '../../service/oauth_service.dart';
+import '../../service/listenbrainz_service.dart';
+import '../../data/datasources/remote/youtube_remote_datasource.dart';
 import 'youtube_login_webview.dart';
 import '../../core/services/audio_cache_service.dart';
 import '../../core/services/update_service.dart';
@@ -959,25 +961,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               SettingRow(
-                title: 'Last.fm',
-                subtitle: 'Not connected',
-                right: _buildConnectButton(
-                  onTap: () => OAuthService().connectLastFm(),
-                ),
-              ),
-              SettingRow(
-                title: 'Libre.fm',
-                subtitle: 'Not connected',
-                right: _buildConnectButton(
-                  onTap: () => OAuthService().connectLibreFm(),
-                ),
-              ),
-              SettingRow(
                 title: 'ListenBrainz',
-                subtitle: 'Not connected',
-                right: _buildConnectButton(
-                  onTap: () => OAuthService().connectListenBrainz(),
-                ),
+                subtitle: 'Token-based scrobbling',
+                right: _buildListenBrainzButton(context),
               ),
             ],
           ),
@@ -987,7 +973,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             children: [
               FutureBuilder<bool>(
-                future: AuthService().hasCookies(),
+                future: AuthService().validateYoutubeCookies(),
                 initialData: false,
                 builder: (ctx, snap) {
                   final connected = snap.data ?? false;
@@ -998,6 +984,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? _buildDisconnectButton(
                             onTap: () async {
                               await AuthService().clearCookies();
+                              await YoutubeRemoteDataSource.instance?.refreshNetworkClientHeaders();
                               setState(() {});
                             },
                           )
@@ -1006,7 +993,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               final result = await Navigator.of(context).push<bool>(
                                 MaterialPageRoute(builder: (_) => const YoutubeLoginWebview()),
                               );
-                              if (result == true) setState(() {});
+                              if (result == true) {
+                                await YoutubeRemoteDataSource.instance?.refreshNetworkClientHeaders();
+                                setState(() {});
+                              }
                             },
                           ),
                   );
@@ -1116,6 +1106,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildListenBrainzButton(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: ListenBrainzService().hasToken(),
+      builder: (ctx, snap) {
+        final connected = snap.data ?? false;
+        if (connected) {
+          return GestureDetector(
+            onTap: () => _showListenBrainzTokenDialog(context, hasToken: true),
+            child: Container(
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6)),
+              ),
+              alignment: Alignment.center,
+              child: const Text(
+                'DISCONNECT',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          );
+        }
+        return _buildConnectButton(
+          onTap: () => _showListenBrainzTokenDialog(context, hasToken: false),
+        );
+      },
+    );
+  }
+
+  Future<void> _showListenBrainzTokenDialog(BuildContext context,
+      {required bool hasToken}) async {
+    final controller = TextEditingController();
+    if (hasToken) {
+      controller.text = (await ListenBrainzService().getToken()) ?? '';
+    }
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'ListenBrainz Token',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your ListenBrainz API token from\n'
+              'https://listenbrainz.org/settings/',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Paste your token here',
+                hintStyle: const TextStyle(color: Colors.white38),
+                filled: true,
+                fillColor: const Color(0xFF2A2A3E),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (hasToken)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Disconnect',
+                  style: TextStyle(color: Colors.redAccent)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white60)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save',
+                style: TextStyle(color: Color(0xFF00E5FF))),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == null) return;
+
+    if (saved == false) {
+      await ListenBrainzService().clearToken();
+    } else {
+      final token = controller.text.trim();
+      if (token.isEmpty) return;
+      await ListenBrainzService().setToken(token);
+    }
+    if (context.mounted) setState(() {});
   }
 
   Widget _buildSystemContent(SettingsProvider provider) {

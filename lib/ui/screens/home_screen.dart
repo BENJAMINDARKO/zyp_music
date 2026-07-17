@@ -21,6 +21,9 @@ import '../widgets/album_export_icon.dart';
 import '../widgets/track_context_menu.dart';
 import '../widgets/album_context_menu.dart';
 import '../widgets/animated_daily_prism_stack.dart';
+import '../widgets/jump_back_in_compact.dart';
+import '../widgets/jump_back_in_sheet.dart';
+import '../../presentation/providers/jump_back_in_provider.dart';
 import 'album_screen.dart';
 import 'artist_screen.dart';
 import 'playlist_screen.dart';
@@ -180,9 +183,27 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 16),
         
         // Jump back in (Quick Grid)
-        _buildSectionHeader('Jump back in'),
-        _buildQuickGrid(),
-        const SizedBox(height: 16),
+        Consumer<JumpBackInProvider>(
+          builder: (context, jb, _) {
+            if (!jb.hasData) return const SizedBox.shrink();
+            return Column(
+              children: [
+                JumpBackInCompactGrid(
+                  items: jb.compactItems,
+                  onMore: () => JumpBackInSheet.show(
+                    context,
+                    recommendations: jb.recommendations,
+                    onRefresh: () => jb.load(
+                      currentGenre: null,
+                    ),
+                    isRefreshing: jb.isLoading,
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            );
+          },
+        ),
 
         // Suggested Songs
         _buildSuggestedSongsSection(),
@@ -602,61 +623,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildQuickGrid() {
-    final quickItems = [
-      {'title': 'Signature', 'art': 'a7', 'route': 'player'},
-      {'title': 'Ghana Hits', 'art': 'a9', 'route': 'playlist'},
-      {'title': 'Golden Hour', 'art': 'a4', 'route': 'album'},
-      {'title': 'Black Sherif', 'art': 'a3', 'route': 'artist'},
-    ];
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 9,
-        crossAxisSpacing: 9,
-        childAspectRatio: 2.8,
-      ),
-      itemCount: quickItems.length,
-      itemBuilder: (context, index) {
-        final item = quickItems[index];
-        return Container(
-          decoration: BoxDecoration(
-            color: ZypAuroraColors.glassSoft,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.095)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: Row(
-              children: [
-                Container(
-                  width: 54,
-                  height: double.infinity,
-                  color: ZypAuroraColors.violet.withOpacity(0.2),
-                  child: Center(
-                    child: Icon(Icons.music_note, color: Colors.white.withOpacity(0.3), size: 24),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    item['title']!,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 

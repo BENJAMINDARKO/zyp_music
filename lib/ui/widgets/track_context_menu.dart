@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:provider/provider.dart';
 import 'dart:ui';
+import '../../core/config/metadata_sync_config.dart';
+import '../../core/services/genre_feedback_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/thumbnail_url.dart';
 import '../../domain/entities/video.dart';
@@ -535,12 +537,23 @@ class TrackContextMenu {
                                 subtitle: 'Reduce similar recommendations in Mood Orbit',
                                 icon: PhosphorIconsRegular.thumbsDown,
                                 isDanger: true,
-                                showBorder: false,
+                                showBorder: true,
                                 onTap: () {
                                   Navigator.pop(sheetContext);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text('We will recommend less of "${track.title}"')),
                                   );
+                                },
+                              ),
+                              _buildOptionRow(
+                                title: 'Suggest Genre Correction',
+                                subtitle: 'Help fine-tune Auto-DJ recommendations',
+                                icon: PhosphorIconsRegular.musicNote,
+                                isDanger: false,
+                                showBorder: false,
+                                onTap: () {
+                                  Navigator.pop(sheetContext);
+                                  _showGenreCorrectionModal(context, track);
                                 },
                               ),
                             ],
@@ -675,6 +688,162 @@ class TrackContextMenu {
           ),
         ),
       ),
+    );
+  }
+
+  static void _showGenreCorrectionModal(BuildContext context, Track track) {
+    final List<String> popularGenres = [
+      'Highlife', 'Hiplife', 'Asakaa', 'Afrobeats',
+      'Dancehall', 'Hip-Hop', 'R&B', 'Gospel',
+      'Drill', 'Amapiano', 'Bashment', 'Reggae',
+    ];
+    final selectedGenres = <String>[];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF17171C).withOpacity(0.95),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40, height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Suggest Tags',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            track.title,
+                            style: const TextStyle(color: Colors.white54, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            track.author ?? 'Unknown Artist',
+                            style: const TextStyle(color: Colors.white38, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Select Matching Genres:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: Colors.amber,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: popularGenres.map((genre) {
+                              final isSelected = selectedGenres.contains(genre);
+                              return ChoiceChip(
+                                label: Text(genre),
+                                selected: isSelected,
+                                selectedColor: Colors.amber,
+                                labelStyle: TextStyle(
+                                  color: isSelected ? Colors.black : Colors.white,
+                                  fontSize: 12,
+                                ),
+                                backgroundColor: const Color(0xFF202026),
+                                onSelected: (selected) {
+                                  setModalState(() {
+                                    if (selected) {
+                                      selectedGenres.add(genre);
+                                    } else {
+                                      selectedGenres.remove(genre);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: ZypAuroraColors.cyan,
+                                foregroundColor: const Color(0xFF080711),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              onPressed: selectedGenres.isEmpty
+                                  ? null
+                                  : () async {
+                                      final feedback = GenreFeedbackService();
+                                      final success =
+                                          await feedback.submitGenreSuggestion(
+                                        track: track,
+                                        genres: List<String>.from(selectedGenres),
+                                      );
+                                      if (ctx.mounted) {
+                                        Navigator.pop(ctx);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              success
+                                                  ? 'Suggestion logged! Updates apply on approval.'
+                                                  : 'Network error. Try again later.',
+                                            ),
+                                            backgroundColor:
+                                                success ? Colors.green : Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    },
+                              child: const Text(
+                                'Submit Suggestion',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

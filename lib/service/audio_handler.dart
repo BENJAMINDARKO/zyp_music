@@ -492,19 +492,25 @@ class MusicAudioHandler extends BaseAudioHandler {
   }
 
   Future<Map<String, String>> _getHeaders() async {
-    final cookies = await _authService.getCookies();
+    final cookieHeader = await _authService.getCookieHeader();
     final headers = <String, String>{
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-          'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 13) '
+          'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36',
     };
     headers['Referer'] = 'https://www.youtube.com/';
-    if (cookies != null && cookies.isNotEmpty) {
-      headers['Cookie'] = cookies;
+    if (cookieHeader != null && cookieHeader.isNotEmpty) {
+      headers['Cookie'] = cookieHeader;
     }
     return headers;
   }
 
   Future<Map<String, String>> getHeaders() => _getHeaders();
+
+  Future<void> refreshAuthState() async {
+    // Cookies are read fresh from secure storage on each getCookieHeader call,
+    // so no cached state to invalidate here. This method exists as a hook
+    // for downstream code that may cache auth state.
+  }
 
   Future<String> resolveRedirects(String url) async {
     final client = http.Client();

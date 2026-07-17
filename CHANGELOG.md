@@ -1,3 +1,17 @@
+## [1.4.0] - 2026-07-17
+
+### Added
+- **Hybrid Auto-DJ Metadata Stack**: Dynamic CDN pull-and-cache for genre matrices, country/region maps, and normalization dictionaries via `DynamicMetadataSyncService` (7-day throttle, atomic writes, jsDelivr-backed).
+- **BFS Multi-Hop Genre Proximity**: `GenreProximityGraph.getTransitiveProximity()` uses max-product BFS up to 3 hops with 0.90 decay factor for continuous similarity scoring between any two genre nodes.
+- **Decoupled GenreSimilarityEngine**: Now injects `GenreProximityGraph` instead of loading its own matrix copy — single memory allocation, delegates all scoring to the graph's BFS path calculator.
+- **Dynamic File Overwrites**: `GenreProximityGraph`, `CountryBonusService` check `<documents>/dynamic_*` before falling back to asset bundle — CDN downloads overwrite local files atomically.
+- **Supabase Crowdsourcing**: `GenreFeedbackService` posts genre suggestions to `pending_metadata_suggestions` table with RLS (anonymous insert, authenticated read).
+- **Suggest Genre Correction UI**: New option in `TrackContextMenu` (Group 4) opens a bottom sheet with 12 genre chips (Highlife, Hiplife, Asakaa, Afrobeats, Dancehall, Hip-Hop, R&B, Gospel, Drill, Amapiano, Bashment, Reggae). Submits to Supabase on tap.
+
+### Changed
+- **GenreSimilarityEngine**: Removed `initialize()` and internal `_matrix` — now a thin wrapper over `GenreProximityGraph.getTransitiveProximity()`.
+- **CountryBonusService**: Removed `AppLogger` dependency, simplified to pure `print`-based error logging.
+
 ## [1.3.3] - 2026-07-16
 
 ### Added

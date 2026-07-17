@@ -20,6 +20,9 @@ import 'youtube_audio_extractor.dart';
 class YoutubeRemoteDataSource {
   static const _timeout = Duration(seconds: 30);
 
+  static YoutubeRemoteDataSource? _instance;
+  static YoutubeRemoteDataSource? get instance => _instance;
+
   final AuthService _authService;
   late YoutubeExplode _yt;
   late ytm.YTMusic _ytMusic;
@@ -33,18 +36,32 @@ class YoutubeRemoteDataSource {
   ytm.YTMusic get ytMusic => _ytMusic;
 
   YoutubeRemoteDataSource({AuthService? authService})
-      : _authService = authService ?? AuthService();
+      : _authService = authService ?? AuthService() {
+    _instance = this;
+  }
 
   Future<void> init() async {
-    final cookies = await _authService.getCookies();
-    final inner = AuthenticatedClient(cookies: cookies);
-    final ytHttp = YoutubeHttpClient(inner);
-    _yt = YoutubeExplode(httpClient: ytHttp);
-    _ytMusic = ytm.YTMusic();
-    try {
-      await _ytMusic.initialize(cookies: cookies);
-    } catch (e) {
-      AppLogger.log('Failed to initialize YTMusic (possibly offline): $e', name: 'YoutubeRemoteDataSource');
+    final cookieHeader = await _authService.getCookieHeader();
+    if (cookieHeader != null && cookieHeader.isNotEmpty) {
+      final inner = AuthenticatedClient(cookieHeader: cookieHeader);
+      final ytHttp = YoutubeHttpClient(inner);
+      _yt = YoutubeExplode(httpClient: ytHttp);
+      _ytMusic = ytm.YTMusic();
+      try {
+        await _ytMusic.initialize(cookies: cookieHeader);
+      } catch (e) {
+        AppLogger.log('Failed to initialize YTMusic (possibly offline): $e', name: 'YoutubeRemoteDataSource');
+      }
+    } else {
+      final inner = http.Client();
+      final ytHttp = YoutubeHttpClient(inner);
+      _yt = YoutubeExplode(httpClient: ytHttp);
+      _ytMusic = ytm.YTMusic();
+      try {
+        await _ytMusic.initialize();
+      } catch (e) {
+        AppLogger.log('Failed to initialize YTMusic (possibly offline): $e', name: 'YoutubeRemoteDataSource');
+      }
     }
   }
 
