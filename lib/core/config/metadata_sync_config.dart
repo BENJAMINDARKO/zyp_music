@@ -14,9 +14,9 @@ class MetadataSyncConfig {
   static const String countryRegionCdnUrl = 
       "https://cdn.jsdelivr.net/gh/$githubUsername/$repoName@$branch/assets/data/country_to_region.json";
 
-  // 3. Supabase Credentials (FILL THESE IN from Supabase settings)
-  static const String supabaseUrl = "https://YOUR_PROJECT_ID.supabase.co"; 
-  static const String supabaseAnonKey = "YOUR_PUBLISHABLE_PUBLIC_ANON_KEY"; 
+  // 3. Supabase Credentials
+  static const String supabaseUrl = "https://wltbtvzmljsdoqvlthyw.supabase.co";
+  static const String supabaseAnonKey = "sb_publishable_VeUpNYJHUsSwVxmJfCx4AQ_bpQ9r_B_";
   
   // Local document storage keys
   static const String proximityFilename = "dynamic_genre_proximity_matrix.json";
