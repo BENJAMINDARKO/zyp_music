@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'core/config/metadata_sync_config.dart';
 
 import 'package:flutter/material.dart';
 import 'package:audio_session/audio_session.dart';
@@ -48,6 +52,26 @@ import 'presentation/providers/settings_provider.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppLogger.init();
+
+  // Clear dynamic metadata overrides on first boot of version 1.4.3
+  // to force reloading the newly deployed 193-genre assets.
+  final cleanPrefs = await SharedPreferences.getInstance();
+  final clearedKey = 'metadata_cleared_v1.4.3';
+  if (!(cleanPrefs.getBool(clearedKey) ?? false)) {
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      final proximityFile = File('${docDir.path}/${MetadataSyncConfig.proximityFilename}');
+      final normalizationFile = File('${docDir.path}/${MetadataSyncConfig.normalizationFilename}');
+      final countryRegionFile = File('${docDir.path}/${MetadataSyncConfig.countryRegionFilename}');
+      if (await proximityFile.exists()) await proximityFile.delete();
+      if (await normalizationFile.exists()) await normalizationFile.delete();
+      if (await countryRegionFile.exists()) await countryRegionFile.delete();
+      await cleanPrefs.setBool(clearedKey, true);
+      debugPrint('[Main] Cleared dynamic metadata overrides for v1.4.3');
+    } catch (e) {
+      debugPrint('[Main] Failed to clear dynamic metadata overrides: $e');
+    }
+  }
 
   await Hive.initFlutter();
   if (!Hive.isAdapterRegistered(1)) {
