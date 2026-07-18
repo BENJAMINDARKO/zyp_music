@@ -1,0 +1,21 @@
+name: Keep Supabase Awake
+
+on:
+  schedule:
+    # Runs at 00:00 every 3 days (Cron syntax)
+    - cron: '0 0 */3 * *'
+  # Allows you to manually trigger it from the Actions tab if you want to test it
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        # Connect directly to your public REST API to make a lightweight query
+        # This simulates an active connection, resetting Supabase's 7-day inactivity timer!
+        run: |
+          curl -X GET "https://wltbtvzmljsdoqvlthyw.supabase.co/rest/v1/pending_metadata_suggestions?limit=1" \
+            -H "apikey: sb_publishable_VeUpNYJHUsSwVxmJfCx4AQ_bpQ9r_B_" \
+            -H "Authorization: Bearer sb_publishable_VeUpNYJHUsSwVxmJfCx4AQ_bpQ9r_B_"
+          echo "Supabase successfully pinged. Keep-alive active."
