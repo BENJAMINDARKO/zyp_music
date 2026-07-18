@@ -226,9 +226,9 @@ void showGenreCorrectionModal(BuildContext context, Track track) {
                               ),
                             ),
                             const SizedBox(height: 20),
-                            const Text(
-                              'Search All 151 Genres:',
-                              style: TextStyle(
+                            Text(
+                              'Search All ${allCanonicalGenres.length} Genres:',
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13,
                                 color: Colors.amber,

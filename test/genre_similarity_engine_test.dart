@@ -50,8 +50,8 @@ Map<String, String> _loadDictionary() {
 /// load + parse logic is the same.
 GenreSimilarityEngine _engineForTesting() {
   final matrix = _parseMatrix();
-  final engine = GenreSimilarityEngine();
-  engine.loadMatrixForTesting(matrix);
+  final graph = GenreProximityGraph()..loadMatrixForTesting(matrix);
+  final engine = GenreSimilarityEngine(graph);
   return engine;
 }
 

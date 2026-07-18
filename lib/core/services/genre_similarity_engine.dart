@@ -5,6 +5,8 @@ class GenreSimilarityEngine {
 
   GenreSimilarityEngine(this._graph);
 
+  int get loadedKeyCount => _graph.knownGenres.length;
+
   double score(List<String> setA, List<String> setB) {
     if (setA.isEmpty || setB.isEmpty) return 0.0;
 
