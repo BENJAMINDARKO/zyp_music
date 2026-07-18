@@ -141,5 +141,74 @@ void main() {
       expect(sameCountry, greaterThan(sameRegion));
       expect(sameRegion, greaterThan(diffRegion));
     });
+
+    test('Fallback - scoreFor(null, null) returns 1.0 (neutral)', () {
+      final service = CountryBonusService();
+      service.loadMapForTesting({'GH': 'Western Africa', 'NG': 'Western Africa'});
+      service.preferredFallbackGl = 'GH';
+      
+      // Both sides null should still default to neutral
+      expect(service.scoreFor(null, null), 1.0);
+    });
+
+    test('Fallback - scoreFor(null, US) with fallback GH returns 0.70 (cross-region)', () {
+      final service = CountryBonusService();
+      service.loadMapForTesting({
+        'GH': 'Western Africa', 
+        'US': 'North America'
+      });
+      service.preferredFallbackGl = 'GH';
+      
+      // Seed is null, should fall back to GH. GH vs US is cross-region -> 0.70
+      expect(service.scoreFor(null, 'US'), 0.70);
+    });
+
+    test('Fallback - scoreFor(null, NG) with fallback GH returns 0.85 (same-region)', () {
+      final service = CountryBonusService();
+      service.loadMapForTesting({
+        'GH': 'Western Africa', 
+        'NG': 'Western Africa'
+      });
+      service.preferredFallbackGl = 'GH';
+      
+      // Seed is null, should fall back to GH. GH vs NG is same-region -> 0.85
+      expect(service.scoreFor(null, 'NG'), 0.85);
+    });
+
+    test('Fallback - scoreFor(null, GH) with fallback GH returns 1.0 (same-country)', () {
+      final service = CountryBonusService();
+      service.loadMapForTesting({'GH': 'Western Africa'});
+      service.preferredFallbackGl = 'GH';
+      
+      // Seed is null, should fall back to GH. GH vs GH is same-country -> 1.0
+      expect(service.scoreFor(null, 'GH'), 1.0);
+    });
+
+    test('Fallback - scoreFor(GH, null) returns 1.0 (neutral)', () {
+      final service = CountryBonusService();
+      service.loadMapForTesting({'GH': 'Western Africa'});
+      service.preferredFallbackGl = 'GH';
+      
+      // If the candidate is null, it should fallback neutrally to 1.0
+      expect(service.scoreFor('GH', null), 1.0);
+    });
+
+    test('Fallback - dynamic preferredFallbackGl updates scoring in real-time', () {
+      final service = CountryBonusService();
+      service.loadMapForTesting({
+        'GH': 'Western Africa', 
+        'NG': 'Western Africa',
+        'ZA': 'Southern Africa'
+      });
+      
+      service.preferredFallbackGl = 'GH';
+      // Seed is null (falls to GH) vs NG (same region) -> 0.85
+      expect(service.scoreFor(null, 'NG'), 0.85);
+      
+      // Dynamic switch mid-session to Southern Africa
+      service.preferredFallbackGl = 'ZA';
+      // Seed is null (falls to ZA) vs NG (different region) -> 0.70
+      expect(service.scoreFor(null, 'NG'), 0.70);
+    });
   });
 }

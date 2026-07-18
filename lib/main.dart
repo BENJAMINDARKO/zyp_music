@@ -226,6 +226,7 @@ Future<void> main() async {
 
     final settingsProvider = SettingsProvider();
     await settingsProvider.load();
+    countryBonus.preferredFallbackGl = settingsProvider.preferredGl ?? 'GH';
 
     final downloadService = DownloadService(
       audioRepository: audioRepository,
@@ -256,6 +257,8 @@ Future<void> main() async {
       if (gl != null) {
         remoteDataSource.setGl(gl);
         homeFeedProvider.refreshYTMusicHome();
+        countryBonus.preferredFallbackGl = gl;
+        print('[CountryBonusService] Fallback region updated in real-time to: $gl');
       }
     });
 

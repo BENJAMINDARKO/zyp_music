@@ -1,3 +1,14 @@
+## [1.4.3] - 2026-07-18
+
+### Added
+- **193-Genre African-First Music Knowledge Graph**: Expanded Auto-DJ's musical vocabulary to a complete, symmetric 193-genre African-first knowledge graph, pre-computing transition weights directly into static JSON adjacency matrix edge factors to eliminate floating-point cosine similarity calculation overhead at runtime on budget mobile devices.
+- **851-Term Normalization Map**: Integrated an expanded 851-term normalization dictionary to map raw streaming metadata tags and user-specified corrections directly to canonical sub-genres.
+- **Auto-DJ Centralized Regional Lock**: Upgraded `CountryBonusService` to fall back to the user's active geographic region preference (`preferredFallbackGl`) when seed track geographic data is missing, applying cross-region penalties or same-region/country bonuses to untagged streams.
+- **Real-Time Settings Sync**: Wired a dynamic change listener to `SettingsProvider` inside `lib/main.dart` to dynamically update `CountryBonusService.preferredFallbackGl` in real-time when the user switches regions in settings.
+
+### Fixed
+- **Country Bonus Service Test Suite Compilation**: Restored the missing `regionFor` reverse-lookup helper method inside `CountryBonusService` to fix compile errors and restore compilation safety to the test suite.
+
 ## [1.4.2] - 2026-07-17
 
 ### Added
