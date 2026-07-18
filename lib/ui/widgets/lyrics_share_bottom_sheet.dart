@@ -14,13 +14,13 @@ class LyricsShareBottomSheet extends StatefulWidget {
   final Color dominantColor;
 
   const LyricsShareBottomSheet({
-    super.key,
+    key,
     required this.selectedLines,
     required this.title,
     required this.artist,
     this.thumbnailUrl,
     required this.dominantColor,
-  });
+  }) : super(key: key);
 
   static Future<void> show(
     BuildContext context, {
@@ -51,9 +51,19 @@ class LyricsShareBottomSheet extends StatefulWidget {
 class _LyricsShareBottomSheetState extends State<LyricsShareBottomSheet> {
   final _repaintKey = GlobalKey();
   String _selectedTheme = 'aurora'; // 'aurora', 'obsidian', 'emerald', 'lavender', 'sunrise'
+  LyricCardStyle _selectedStyle = LyricCardStyle.defaultGlass;
   bool _isSharing = false;
 
   Future<void> _share(String targetPlatform) async {
+    if (widget.selectedLines.length > 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can select a maximum of 6 lines.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     setState(() => _isSharing = true);
     try {
       // Give Flutter one frame to settle the repaint boundary at full size
@@ -67,7 +77,7 @@ class _LyricsShareBottomSheetState extends State<LyricsShareBottomSheet> {
       // Show toast or share
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Sharing to $targetPlatform...'),
+          content: Text('Sharing via $targetPlatform...'),
           backgroundColor: ZypAuroraColors.ink2,
           duration: const Duration(seconds: 1),
         ),
@@ -125,35 +135,118 @@ class _LyricsShareBottomSheetState extends State<LyricsShareBottomSheet> {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
+
+                    // Style Tabs Selector
+                    _buildStyleSelector(),
+                    const SizedBox(height: 12),
 
                     // Card Preview
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: LyricsShareCard(
-                          repaintKey: _repaintKey,
-                          selectedLines: widget.selectedLines,
-                          title: widget.title,
-                          artist: widget.artist,
-                          thumbnailUrl: widget.thumbnailUrl,
-                          themeName: _selectedTheme,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 240),
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+                                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                                ),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: LyricsShareCard(
+                            key: ValueKey(_selectedStyle),
+                            repaintKey: _repaintKey,
+                            selectedLines: widget.selectedLines,
+                            title: widget.title,
+                            artist: widget.artist,
+                            thumbnailUrl: widget.thumbnailUrl,
+                            themeName: _selectedTheme,
+                            selectedStyle: _selectedStyle,
+                          ),
                         ),
                       ),
                     ),
 
                     const SizedBox(height: 20),
 
-                    // Theme selector row
-                    _buildThemeRow(),
+                    // Theme selector row (only visible/expanded for Default style)
+                    AnimatedCrossFade(
+                      firstChild: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildThemeRow(),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                      secondChild: const SizedBox.shrink(),
+                      crossFadeState: _selectedStyle == LyricCardStyle.defaultGlass
+                          ? CrossFadeState.showFirst
+                          : CrossFadeState.showSecond,
+                      duration: const Duration(milliseconds: 200),
+                    ),
 
-                    const SizedBox(height: 20),
-
-                    // Action buttons grid
-                    _buildActionGrid(),
+                    // Share button
+                    _buildShareButton(),
                   ],
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStyleSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            Expanded(child: _buildStyleTab(LyricCardStyle.defaultGlass, 'Default')),
+            Expanded(child: _buildStyleTab(LyricCardStyle.glassPoem, 'Glass Poem')),
+            Expanded(child: _buildStyleTab(LyricCardStyle.minimal, 'Minimal')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStyleTab(LyricCardStyle style, String label) {
+    final isSelected = _selectedStyle == style;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedStyle = style),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: isSelected
+              ? const LinearGradient(
+                  colors: [ZypAuroraColors.cyan, ZypAuroraColors.peach],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: isSelected ? Colors.black : Colors.white70,
             ),
           ),
         ),
@@ -229,65 +322,55 @@ class _LyricsShareBottomSheetState extends State<LyricsShareBottomSheet> {
     );
   }
 
-  Widget _buildActionGrid() {
-    final actions = [
-      {'label': 'Instagram Stories', 'icon': '📸', 'platform': 'Instagram'},
-      {'label': 'WhatsApp Status', 'icon': '💬', 'platform': 'WhatsApp'},
-      {'label': 'Save to Gallery', 'icon': '📥', 'platform': 'Gallery'},
-      {'label': 'More Sharing', 'icon': '🔗', 'platform': 'System Share'},
-    ];
-
+  Widget _buildShareButton() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 2.3,
-        children: actions.map((act) {
-          return GestureDetector(
-            onTap: _isSharing ? null : () => _share(act['platform']!),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.065),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [ZypAuroraColors.cyan, ZypAuroraColors.peach],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.09)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(13),
-                      color: Colors.white.withOpacity(0.08),
-                    ),
-                    child: Center(
-                      child: Text(
-                        act['icon']!,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      act['label']!,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
-          );
-        }).toList(),
+            onPressed: _isSharing ? null : () => _share('System Share'),
+            icon: _isSharing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.black,
+                    ),
+                  )
+                : const Icon(
+                    Icons.share_rounded,
+                    color: Colors.black,
+                    size: 20,
+                  ),
+            label: Text(
+              _isSharing ? 'PREPARING...' : 'SHARE',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: Colors.black,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

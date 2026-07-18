@@ -462,6 +462,16 @@ class AutoDjRoutingService {
     );
   }
 
+  Track _normalizeTrackMetadata(Track track) {
+    if (track.genre != null && 
+        track.genre!.isNotEmpty && 
+        track.genre!.toLowerCase() != 'unknown') {
+      final cleanGenre = _genreNormalization?.normalize(track.genre) ?? track.genre;
+      return track.copyWith(genre: cleanGenre);
+    }
+    return track;
+  }
+
   /// Increments [_cachedHistoryCount] by one. Called by
   /// [PlayerProvider] immediately after
   /// `DJHistoryLedger.logTrack(...)` resolves successfully —
@@ -890,60 +900,111 @@ class AutoDjRoutingService {
   Future<Track?> _similarSongs(Track current, Set<String> exclude) async {
     final fetcher = _onlineFetcher;
     final isOnline = fetcher != null && _connectivityProbe() == NetworkAvailability.online;
-    AppLogger.log('Similar Songs: isOnline=$isOnline, seed=${current.title} (${current.id}), genre=${current.genre}', name: _logTag);
+    
+    // 1. Enrich and normalize the seed track first
+    Track seed = _normalizeTrackMetadata(current);
+    if (_isUnknownGenre(seed.genre) && _genreEnrichment != null) {
+      final cached = await _genreEnrichment!.readNormalized(current);
+      if (cached.isNotEmpty) {
+        seed = seed.copyWith(genre: cached.first);
+      }
+    }
 
+    // If seed has no usable genre and we cannot resolve it, bypass the similarity path
+    // and engage Shuffle Library safety fallback immediately.
+    if (_isUnknownGenre(seed.genre)) {
+      AppLogger.log('[AutoDJEngine] Seed has no usable genre; bypassing similarity path.', name: _logTag);
+      return _shuffleLibrary(current, exclude);
+    }
+
+    final List<Track> rawCandidates = [];
+    final List<Track> onlineCandidates = [];
+    
+    // 2. Gather online suggestions
     if (isOnline) {
       try {
         final online = await fetcher(current);
-        if (online == null || online.isEmpty) {
-          AppLogger.warning(
-            '[Similar Songs] Match query returned 0 nodes for trackId: '
-            '${current.id}. Engaging safety fallback tracker.',
-            name: _logTag,
-          );
-          return _shuffleLibrary(current, exclude);
-        }
-        final candidates = online.where((t) => !exclude.contains(t.id)).toList();
-        AppLogger.log('Similar Songs: Fetched ${online.length} online recommendations, ${candidates.length} unique candidates', name: _logTag);
-        if (candidates.isNotEmpty) {
-          // Skip same-artist for variety; YouTube's gl parameter
-          // already biases results toward the right country
-          final picked = candidates.firstWhere(
-            (t) => !_artistMatches(t.author, current.author ?? ''),
-            orElse: () => candidates.first,
-          );
-          AppLogger.log('Similar Songs: Picked: ${picked.title} (${picked.id})', name: _logTag);
-          return picked;
+        if (online != null && online.isNotEmpty) {
+          final filteredOnline = online.where((t) => !exclude.contains(t.id)).toList();
+          rawCandidates.addAll(filteredOnline);
+          onlineCandidates.addAll(filteredOnline);
         }
       } catch (e) {
-        AppLogger.warning(
-          '[Similar Songs] SimilarAutoNext network fetch failed: $e. '
-          'Engaging safety fallback tracker.',
-          name: _logTag,
-        );
+        AppLogger.log('[AutoDJEngine] Online similar fetch failed: $e', name: _logTag);
         return _shuffleLibrary(current, exclude);
       }
     }
-    AppLogger.log('Similar Songs: Falling back to local attribute intersection.', name: _logTag);
-    if (current.genre == null) {
-      AppLogger.warning(
-        '[Similar Songs] Seed track ${current.id} has no genre metadata; '
-        'bypassing similarity path and engaging Shuffle Library safety '
-        'fallback tracker.',
-        name: _logTag,
-      );
+    
+    // 3. Gather local offline backup candidates
+    final offline = await _crateMiner.mine(excludeIds: exclude);
+    rawCandidates.addAll(offline);
+
+    if (rawCandidates.isEmpty) {
       return _shuffleLibrary(current, exclude);
     }
-    final track = await _attributeIntersection(current, exclude);
-    if (track != null) {
-      AppLogger.log('Similar Songs: Picked local match: ${track.title} (${track.id}), genre=${track.genre}', name: _logTag);
-      return track;
+
+    // 4. Normalize all candidate genres on-the-fly, checking local cache if missing
+    final List<Track> normalizedCandidates = [];
+    for (final t in rawCandidates) {
+      Track normalized = _normalizeTrackMetadata(t);
+      if (_isUnknownGenre(normalized.genre) && _genreEnrichment != null) {
+        final cached = await _genreEnrichment!.readNormalized(t);
+        if (cached.isNotEmpty) {
+          normalized = normalized.copyWith(genre: cached.first);
+        }
+      }
+      normalizedCandidates.add(normalized);
     }
-    AppLogger.warning(
-      '[Similar Songs] No local attribute-intersection match for '
-      'trackId: ${current.id}. Engaging safety fallback tracker.',
-      name: _logTag,
-    );
+
+    // 5. Score candidates based on Transitive BFS Proximity + Country Bonus
+    final scoredPool = <_ScoredTrack>[];
+    final countryBonus = _countryBonusService;
+
+    for (final t in normalizedCandidates) {
+      // Skip tracks by the same artist to maintain session variety
+      if (_artistMatches(t.author, seed.author ?? '')) continue;
+
+      double genreScore = 0.0;
+      if (seed.genre != null && t.genre != null) {
+        genreScore = _graph.getTransitiveProximity(seed.genre, t.genre);
+      }
+
+      final cBonus = countryBonus == null ? 1.0 : countryBonus.scoreFor(seed.country, t.country);
+      final finalScore = genreScore * cBonus;
+
+      // STRICT SIMILARITY THRESHOLD: Discard drift candidates (Pop/Hip-Hop clashing with Highlife)
+      if (finalScore >= 0.15) { 
+        scoredPool.add(_ScoredTrack(t, finalScore));
+      }
+    }
+
+    // 6. Select the highest-rated candidate
+    if (scoredPool.isNotEmpty) {
+      scoredPool.sort((a, b) => b.score.compareTo(a.score));
+      AppLogger.log(
+        '[AutoDJEngine] SimilarSongs chosen: ${scoredPool.first.track.title} by ${scoredPool.first.track.author} (Score: ${scoredPool.first.score.toStringAsFixed(2)})', 
+        name: _logTag
+      );
+      return scoredPool.first.track;
+    }
+
+    // 7. Fallback A: SameGenre pool
+    AppLogger.log('[AutoDJEngine] Online recommendations drifted. Falling back to SameGenre pool.', name: _logTag);
+    final sameGenreFallback = await _sameGenre(seed, exclude, []);
+    if (sameGenreFallback != null) return sameGenreFallback;
+
+    // 8. Fallback B: If online candidates exist, fallback to the first online candidate (excluding same-artist)
+    if (onlineCandidates.isNotEmpty) {
+      final fallbackOnline = onlineCandidates.firstWhere(
+        (t) => !_artistMatches(t.author, seed.author ?? ''),
+        orElse: () => onlineCandidates.first,
+      );
+      AppLogger.log('[AutoDJEngine] SameGenre empty. Falling back to first online candidate: ${fallbackOnline.title}', name: _logTag);
+      return fallbackOnline;
+    }
+
+    // 9. Fallback C: Shuffle Library
+    AppLogger.log('[AutoDJEngine] All fallbacks exhausted. Engaging Shuffle Library safety fallback.', name: _logTag);
     return _shuffleLibrary(current, exclude);
   }
 
@@ -1134,9 +1195,13 @@ class AutoDjRoutingService {
     required String? seedGenre,
     required List<Track> candidates,
   }) {
-    final hasUsableSeed = seedGenre != null &&
-        seedGenre.isNotEmpty &&
-        seedGenre != 'Unknown';
+    // Normalize and clean seed genre first
+    final cleanSeed = _genreNormalization?.normalize(seedGenre ?? '') ?? seedGenre;
+    
+    final hasUsableSeed = cleanSeed != null &&
+        cleanSeed.isNotEmpty &&
+        cleanSeed.toLowerCase() != 'unknown';
+        
     if (!hasUsableSeed) {
       final dominant = _extractDominantPoolGenre(candidates);
       if (dominant == null) {
@@ -1154,13 +1219,24 @@ class AutoDjRoutingService {
         name: _logTag,
       );
       seedGenre = dominant;
+    } else {
+      seedGenre = cleanSeed;
     }
+    
     final harvested = <Track>[];
     final harvestedIds = <String>{};
+    
     for (final g in _graph.searchBreadth(seedGenre)) {
       for (final t in candidates) {
         if (harvestedIds.contains(t.id)) continue;
-        if ((t.genre ?? 'Unknown') == g) {
+        
+        // Normalize candidate genre on-the-fly using your CDN/Supabase dictionary
+        final cleanTrackGenre = _genreNormalization?.normalize(t.genre ?? '') ?? t.genre;
+        
+        // STRICT FILTER: Prevent Null or 'Unknown' wildcards from matching!
+        if (cleanTrackGenre == null || cleanTrackGenre.toLowerCase() == 'unknown') continue;
+        
+        if (cleanTrackGenre == g) {
           harvested.add(t);
           harvestedIds.add(t.id);
         }

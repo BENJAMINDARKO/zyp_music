@@ -1,3 +1,23 @@
+## [1.4.2] - 2026-07-17
+
+### Added
+- **Lyrics Share Card Styles**: Three card styles (Default/Glass Poem/Minimal) with style selector tabs in the share bottom sheet. Glass Poem mode features rich radial orb background, gloss sheen overlay, and bottom-right glow. Minimal mode provides a clean compact layout.
+- **Dynamic Font Sizing in Lyrics Share Card**: Font size auto-scales based on line count and text length, eliminating all truncation and ellipsis. Scales from 34px for short lyrics down to 14px for dense text.
+- **Vocal Remover Drawer**: Inline vocal reduction control in the full-screen player with percentage readout and auto-disable on mono tracks.
+- **Native EQ/Vocal MethodChannels**: `MainActivity.kt` registers `vocal_control` and `equalizer_control` channels for Flutter-to-native DSP control, including mono-track detection callback.
+- **Max 6-Line Enforcement**: Lyric selection and sharing now validate a maximum of 6 lines with snackbar feedback.
+
+### Changed
+- **AppleMusicSheet Redesigned**: Complete Prism/Aurora frosted-glass visual overhaul with glow orbs, prism grid painter, gradient title, and layered box shadows. `buildMenuItem` signature changed to 4 positional required params with destructive mode and icon-in-gradient-container. `buildSection` with gradient border and decorative orb.
+- **AutoDJ Similar Songs Engine**: Track metadata normalization with genre enrichment cache, Transitive BFS Proximity scoring with country bonus, strict 0.15 similarity threshold to prevent genre drift, and multi-tier fallback chain (SameGenre → online candidate → Shuffle Library).
+- **Playing Screen Lyric Selection**: Enforces max 6 lines with snackbar validation. Integrated vocal remover drawer with `VocalRemoverService`.
+- **Equalizer Provider/Service Refactored**: Migrated from local singleton to broadcast-based architecture with `CopyOnWriteArrayList` active-processor registry.
+
+### Fixed
+- **Audio Pipeline `isEnded()` Contract Stall**: Both `AdvancedVocalRemoverProcessor` and `AdvancedEqualizerProcessor` now correctly report stream drained state via `@Volatile inputEnded` flag, preventing permanent playback stall.
+- **DSP Singleton Race Condition**: `AudioPlayer.java` now creates fresh `AdvancedVocalRemoverProcessor`/`AdvancedEqualizerProcessor` instances per player instead of sharing singletons, eliminating cross-player corruption on `replacePlayer()`.
+- **Lyric Text Truncation**: Removed `maxLines`/`overflow: ellipsis` from share card RichText — all selected lines now display without cutting off content.
+
 ## [1.4.1] - 2026-07-17
 
 ### Added

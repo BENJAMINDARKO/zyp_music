@@ -39,6 +39,12 @@ class CountryBonusService {
     }
   }
 
+  void loadMapForTesting(Map<String, String> map) {
+    _countryToRegion = Map<String, String>.unmodifiable(
+      map.map((k, v) => MapEntry(k.toUpperCase(), v.trim())),
+    );
+  }
+
   double scoreFor(String? seedCountry, String? candidateCountry) {
     final seed = _normalise(seedCountry);
     final cand = _normalise(candidateCountry);

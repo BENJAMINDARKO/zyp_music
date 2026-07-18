@@ -33,6 +33,7 @@ import 'artist_screen.dart';
 import 'album_screen.dart';
 import '../widgets/apple_music_sheet.dart';
 import '../widgets/miniplayer_timer_view.dart';
+import '../../core/services/vocal_remover_service.dart';
 import 'equalizer_screen.dart';
 import '../widgets/explicit_icon.dart';
 import '../widgets/animated_eq_mini_curve.dart';
@@ -60,6 +61,8 @@ class _PlayingScreenState extends State<PlayingScreen>
   bool _wasPlaying = false;
   _LyricsViewMode _lyricsViewMode = _LyricsViewMode.compact;
   bool _karaokeMode = false;
+  bool _showVocal = false;
+  Timer? _longPressTimer;
   bool _showQueue = false;
   bool _showEq = false;
 
@@ -130,6 +133,15 @@ class _PlayingScreenState extends State<PlayingScreen>
       if (_selectedLyricIndices.contains(index)) {
         _selectedLyricIndices.remove(index);
       } else {
+        if (_selectedLyricIndices.length >= 6) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You can select a maximum of 6 lines.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
         _selectedLyricIndices.add(index);
       }
     });
@@ -151,6 +163,15 @@ class _PlayingScreenState extends State<PlayingScreen>
         .where((w) => w.isNotEmpty)
         .toList();
     if (lines.isEmpty) return;
+    if (lines.length > 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can select a maximum of 6 lines.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     LyricsShareBottomSheet.show(
       context,
       selectedLines: lines,
@@ -533,6 +554,83 @@ class _PlayingScreenState extends State<PlayingScreen>
                 color: Colors.black,
                 size: iconSize,
               ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerVocalDrawer(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, left: 12, right: 12),
+      child: AnimatedBuilder(
+        animation: VocalRemoverService(),
+        builder: (context, _) {
+          final reduction = VocalRemoverService().vocalReductionFactor;
+          final isMono = VocalRemoverService().isMonoTrack;
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              color: Colors.white.withOpacity(0.055),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  PhosphorIconsRegular.microphone,
+                  size: 16,
+                  color: Colors.white.withOpacity(0.6),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isMono ? 'Vocal Remover (Mono - Disabled)' : 'Vocal Remover',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            '${(reduction * 100).toStringAsFixed(0)}%',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 3,
+                          activeTrackColor: Theme.of(context).colorScheme.primary,
+                          inactiveTrackColor: Colors.white.withOpacity(0.12),
+                          thumbColor: Colors.white,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                        ),
+                        child: Slider(
+                          value: reduction,
+                          onChanged: isMono ? null : (val) {
+                            VocalRemoverService().setVocalReduction(val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -1673,8 +1771,78 @@ class _PlayingScreenState extends State<PlayingScreen>
                 ),
                 onPressed: () {
                   _resetLyricsExpansionTimer();
-                  setState(() => _showEq = !_showEq);
+                  setState(() {
+                    _showEq = !_showEq;
+                    if (_showEq) {
+                      _showVocal = false;
+                    }
+                  });
                 },
+              ),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (_) {
+                  _longPressTimer?.cancel();
+                  _longPressTimer = Timer(const Duration(seconds: 2), () {
+                    VocalRemoverService().setVocalReduction(0.0);
+                    setState(() {
+                      _showVocal = false;
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Vocal Remover toggled OFF',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                        backgroundColor: Colors.black.withOpacity(0.85),
+                        duration: const Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                    _longPressTimer = null;
+                  });
+                },
+                onTapUp: (_) {
+                  if (_longPressTimer != null) {
+                    _longPressTimer!.cancel();
+                    _longPressTimer = null;
+                    _resetLyricsExpansionTimer();
+                    setState(() {
+                      _showVocal = !_showVocal;
+                      if (_showVocal) {
+                        _showEq = false;
+                      }
+                    });
+                  }
+                },
+                onTapCancel: () {
+                  _longPressTimer?.cancel();
+                  _longPressTimer = null;
+                },
+                child: IgnorePointer(
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: AnimatedBuilder(
+                      animation: VocalRemoverService(),
+                      builder: (context, _) {
+                        final isActive = VocalRemoverService().vocalReductionFactor > 0.0;
+                        return Icon(
+                          isActive ? PhosphorIconsFill.waveform : PhosphorIconsRegular.waveform,
+                          color: isActive
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.white.withOpacity(0.6),
+                          size: actionIconSize,
+                        );
+                      }
+                    ),
+                    onPressed: () {},
+                    tooltip: 'Vocal Remover',
+                  ),
+                ),
               ),
               IconButton(
                 padding: EdgeInsets.zero,
@@ -1697,7 +1865,9 @@ class _PlayingScreenState extends State<PlayingScreen>
           curve: Curves.easeInOut,
           child: _showEq
               ? _buildPlayerEqDrawer(context)
-              : const SizedBox.shrink(),
+              : (_showVocal
+                  ? _buildPlayerVocalDrawer(context)
+                  : const SizedBox.shrink()),
         ),
         const SizedBox(height: 10),
         Center(
@@ -2077,7 +2247,7 @@ class _PlayingScreenState extends State<PlayingScreen>
                             const SizedBox(height: 6),
                             Text(
                               player.activeAutoDJMode != AutoDJMode.off
-                                  ? 'AutoPlaying same genre'
+                                  ? _getAutoplaySubtext(player.activeAutoDJMode)
                                   : 'End of manual queue',
                               style: TextStyle(
                                 fontSize: 13,

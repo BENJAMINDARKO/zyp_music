@@ -95,19 +95,16 @@ class AlbumContextMenu {
                   AppleMusicSheet.buildSection(context, [
                     AppleMusicSheet.buildMenuItem(
                       context,
-                      title: 'Start Auto DJ',
-                      icon: PhosphorIconsRegular.sparkle,
+                      'Start Auto DJ',
+                      PhosphorIconsRegular.sparkle,
+                      () => AutoDJModePicker.show(sheetContext),
                       subtitle: 'Pick a mode — Off, Shuffle Library, Similar Songs...',
-                      onTap: () {
-                        AutoDJModePicker.show(sheetContext);
-                      },
                     ),
                     AppleMusicSheet.buildMenuItem(
                       context,
-                      title: 'Add to Queue',
-                      icon: PhosphorIconsRegular.playlist,
-                      subtitle: 'Append every track to current queue',
-                      onTap: () {
+                      'Add to Queue',
+                      PhosphorIconsRegular.playlist,
+                      () {
                         final player = sheetContext.read<PlayerProvider>();
                         player.appendToQueue(tracks);
                         Navigator.pop(sheetContext);
@@ -115,6 +112,7 @@ class AlbumContextMenu {
                           SnackBar(content: Text('Added ${tracks.length} track(s) to queue')),
                         );
                       },
+                      subtitle: 'Append every track to current queue',
                     ),
                   ]),
 
@@ -130,10 +128,9 @@ class AlbumContextMenu {
                       // Favorite Album
                       list.add(AppleMusicSheet.buildMenuItem(
                         context,
-                        title: 'Favorite Album',
-                        icon: isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
-                        iconColor: isFav ? Colors.red : Colors.white,
-                        onTap: () {
+                        'Favorite Album',
+                        isFav ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+                        () {
                           playlistProvider.toggleFavoriteAlbum(album);
                           Navigator.pop(sheetContext);
                           ScaffoldMessenger.of(sheetContext).showSnackBar(
@@ -142,6 +139,7 @@ class AlbumContextMenu {
                             ),
                           );
                         },
+                        iconColor: isFav ? Colors.red : Colors.white,
                       ));
 
                       // Export Album
@@ -198,12 +196,9 @@ class AlbumContextMenu {
                       return AppleMusicSheet.buildSection(context, [
                         AppleMusicSheet.buildMenuItem(
                           context,
-                          title: 'Remove from Cache',
-                          icon: PhosphorIconsRegular.trash,
-                          textColor: const Color(0xFFEF4444),
-                          iconColor: const Color(0xFFEF4444),
-                          subtitle: 'Frees local storage for every cached track in this album',
-                          onTap: () async {
+                          'Remove from Cache',
+                          PhosphorIconsRegular.trash,
+                          () async {
                             Navigator.pop(sheetContext);
                             ScaffoldMessenger.of(sheetContext).showSnackBar(
                               SnackBar(content: Text('Clearing cache for "${album.title}"…')),
@@ -221,6 +216,8 @@ class AlbumContextMenu {
                               );
                             }
                           },
+                          destructive: true,
+                          subtitle: 'Frees local storage for every cached track in this album',
                         ),
                       ]);
                     },

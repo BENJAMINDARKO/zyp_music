@@ -117,7 +117,7 @@ void main() {
   });
 
   group('PlaybackSpeedSelector widget', () {
-    testWidgets('tapping cycles speed and shows next label', (tester) async {
+    testWidgets('tapping plus and minus increments and decrements by 0.01', (tester) async {
       final repo = _MockAudioRepository();
       final provider = PlayerProvider(repo, SettingsProvider(), HybridCacheService());
 
@@ -135,14 +135,32 @@ void main() {
         ),
       );
 
-      // Initially 1.0x
-      expect(find.text('1.0x'), findsOneWidget);
+      // Initially 1.00x
+      expect(find.text('1.00x'), findsOneWidget);
 
-      // Tap the selector to cycle to 1.5x
-      await tester.tap(find.byKey(const Key('playback-speed-selector')));
+      // Tap the plus button to increment to 1.01x
+      await tester.tap(find.byIcon(Icons.add));
       await tester.pumpAndSettle();
+      expect(find.text('1.01x'), findsOneWidget);
 
-      expect(find.text('1.5x'), findsOneWidget);
+      // Tap the minus button to decrement back to 1.00x
+      await tester.tap(find.byIcon(Icons.remove));
+      await tester.pumpAndSettle();
+      expect(find.text('1.00x'), findsOneWidget);
+
+      // Tap plus button twice (1.02x) then double tap the text to reset to 1.00x
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add));
+      await tester.pumpAndSettle();
+      expect(find.text('1.02x'), findsOneWidget);
+
+      // Double tap to reset
+      await tester.tap(find.text('1.02x'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('1.02x'));
+      await tester.pumpAndSettle();
+      expect(find.text('1.00x'), findsOneWidget);
     });
   });
 }

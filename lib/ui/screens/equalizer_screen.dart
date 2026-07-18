@@ -111,7 +111,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
                   const SizedBox(height: 12),
 
                   // 2. Equalizer Hero Card
-                  _buildHeroCard(),
+                  _buildHeroCard(settings),
                   const SizedBox(height: 16),
 
                   // 3. Enabled State Switch
@@ -201,7 +201,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
     );
   }
 
-  Widget _buildHeroCard() {
+  Widget _buildHeroCard(EqualizerSettings settings) {
     return AuroraGlass(
       borderRadius: 34,
       padding: const EdgeInsets.all(18),
@@ -289,7 +289,7 @@ class _EqualizerScreenState extends State<EqualizerScreen> {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: AnimatedEqMiniCurve(
-                values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                values: settings.bandGains,
                 height: 60,
               ),
             ),
