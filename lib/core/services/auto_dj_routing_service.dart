@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -230,6 +231,10 @@ List<Map<String, dynamic>> smartDjIsolateScore(
 /// app.
 class AutoDjRoutingService {
   static const String _logTag = 'AutoDjRoutingService';
+
+  // 🌍 THE SPIDER WEB MATRIX: On-Device Artist Cooldown Queue
+  final Queue<String> _playedArtistsHistory = Queue<String>();
+  static const int _artistCooldownLimit = 15; // Track last 15 played artists
 
   /// Number of consecutive history rows the Smart-DJ Markov state
   /// spans. The spec is explicit: "Evaluate the last 3 tracks
@@ -472,6 +477,17 @@ class AutoDjRoutingService {
     return track;
   }
 
+  /// Calculates a severe 95% penalty for recently played artists to force exploration
+  double _getArtistCooldownPenalty(String? author) {
+    if (author == null) return 1.0;
+    final normAuthor = author.trim().toLowerCase();
+    
+    if (_playedArtistsHistory.contains(normAuthor)) {
+      return 0.05; // 95% penalty: pushes them to the absolute bottom of the pile
+    }
+    return 1.0;
+  }
+
   /// Increments [_cachedHistoryCount] by one. Called by
   /// [PlayerProvider] immediately after
   /// `DJHistoryLedger.logTrack(...)` resolves successfully —
@@ -611,6 +627,25 @@ class AutoDjRoutingService {
       return null;
     }
 
+    // 🌍 SPIDER WEB MATRIX: Push played artist to the cooldown queue
+    final currentArtist = current.author?.trim().toLowerCase();
+    if (currentArtist != null && currentArtist.isNotEmpty) {
+      if (!_playedArtistsHistory.contains(currentArtist)) {
+        _playedArtistsHistory.addLast(currentArtist);
+        if (_playedArtistsHistory.length > _artistCooldownLimit) {
+          _playedArtistsHistory.removeFirst();
+        }
+      }
+    }
+
+    // 🌍 SPIDER WEB MATRIX: Roll a 20% mutation chance to bypass country locks
+    final double mutationRoll = _random.nextDouble();
+    final bool bypassCountryLock = mutationRoll < 0.20; // 20% mutation rate
+
+    if (bypassCountryLock) {
+      AppLogger.log('[SpiderWeb] Mutation triggered! Bypassing regional locks for global exploration.', name: _logTag);
+    }
+
     try {
       // If smartMode is active, we route to smart logic, but tell it to filter its
       // candidate pool based on the baseMode.
@@ -624,10 +659,10 @@ class AutoDjRoutingService {
           return await _shuffleLibrary(current, exclude);
 
         case AutoDJMode.similarSongs:
-          return await _similarSongs(current, exclude);
+          return await _similarSongs(current, exclude, bypassCountryLock);
 
         case AutoDJMode.sameGenre:
-          return await _sameGenre(current, exclude, history);
+          return await _sameGenre(current, exclude, history, bypassCountryLock);
 
         case AutoDJMode.sameArtist:
           return await _sameArtist(current, exclude, history);
@@ -636,7 +671,7 @@ class AutoDjRoutingService {
           return await _smartDj(current, exclude, history, actualBaseMode);
 
         case AutoDJMode.vibeMatch:
-          return await _vibeMatch(current, exclude, history, actualBaseMode);
+          return await _vibeMatch(current, exclude, history, actualBaseMode, bypassCountryLock);
       }
     } catch (e, st) {
       AppLogger.log('[AutoDJEngine] Strategy error: $e', name: _logTag);
@@ -897,7 +932,7 @@ class AutoDjRoutingService {
     return filtered;
   }
 
-  Future<Track?> _similarSongs(Track current, Set<String> exclude) async {
+  Future<Track?> _similarSongs(Track current, Set<String> exclude, bool bypassCountryLock) async {
     final fetcher = _onlineFetcher;
     final isOnline = fetcher != null && _connectivityProbe() == NetworkAvailability.online;
     
@@ -969,8 +1004,15 @@ class AutoDjRoutingService {
         genreScore = _graph.getTransitiveProximity(seed.genre, t.genre);
       }
 
-      final cBonus = countryBonus == null ? 1.0 : countryBonus.scoreFor(seed.country, t.country);
-      final finalScore = genreScore * cBonus;
+      // Apply geographic regional multipliers (bypassed if mutation is active)
+      final cBonus = (bypassCountryLock || countryBonus == null)
+          ? 1.0
+          : countryBonus.scoreFor(seed.country, t.country);
+
+      // Apply Artist Cooldown Penalty (last 15 artists)
+      final artistCooldownPenalty = _getArtistCooldownPenalty(t.author);
+
+      final finalScore = genreScore * cBonus * artistCooldownPenalty;
 
       // STRICT SIMILARITY THRESHOLD: Discard drift candidates (Pop/Hip-Hop clashing with Highlife)
       if (finalScore >= 0.15) { 
@@ -990,7 +1032,7 @@ class AutoDjRoutingService {
 
     // 7. Fallback A: SameGenre pool
     AppLogger.log('[AutoDJEngine] Online recommendations drifted. Falling back to SameGenre pool.', name: _logTag);
-    final sameGenreFallback = await _sameGenre(seed, exclude, []);
+    final sameGenreFallback = await _sameGenre(seed, exclude, [], bypassCountryLock);
     if (sameGenreFallback != null) return sameGenreFallback;
 
     // 8. Fallback B: If online candidates exist, fallback to the first online candidate (excluding same-artist)
@@ -1012,6 +1054,7 @@ class AutoDjRoutingService {
     Track current,
     Set<String> exclude,
     List<Track> history,
+    bool bypassCountryLock,
   ) async {
     final candidates = <Track>[];
 
@@ -1118,10 +1161,16 @@ class AutoDjRoutingService {
     for (final track in rawCandidates) {
       final wPath = _pathProximity(seed.genre, track.genre);
       final aPenalty = _artistDecayPenalty(track, history);
-      final cBonus = countryBonus == null
+      
+      // Apply geographic regional multipliers (bypassed if mutation is active)
+      final cBonus = (bypassCountryLock || countryBonus == null)
           ? 1.0
           : countryBonus.scoreFor(seed.country, track.country);
-      final finalScore = wPath * aPenalty * cBonus;
+
+      // Apply Artist Cooldown Penalty (last 15 artists)
+      final artistCooldownPenalty = _getArtistCooldownPenalty(track.author);
+
+      final finalScore = wPath * aPenalty * cBonus * artistCooldownPenalty;
       if (finalScore > 0.0) {
         cumulativeScoreSum += finalScore;
         scoredPool.add(MapEntry<Track, double>(track, cumulativeScoreSum));
@@ -1874,6 +1923,7 @@ class AutoDjRoutingService {
     Set<String> exclude,
     List<Track> history,
     AutoDJMode baseMode,
+    bool bypassCountryLock,
   ) async {
     final db = _crateMiner.libraryDatabase;
     if (db == null) {
@@ -1900,6 +1950,8 @@ class AutoDjRoutingService {
 
     final features = await db.getAudioFeaturesBatch(crate.map((t) => t.id));
     final scored = <_ScoredTrack>[];
+    
+    final countryBonus = _countryBonusService;
 
     for (final track in crate) {
       final f = features[track.id];
@@ -1907,23 +1959,30 @@ class AutoDjRoutingService {
 
       final bpmDelta = (f.bpm! - currentBpm).abs();
       final energyDelta = (f.energy! - currentEnergy).abs();
-
-      // Heuristic:
-      // BPM within ±8% is ideal (crossfade limits).
-      // Energy within ±0.2 is ideal.
-      // Score = 1.0 - normalized distances.
-      final maxBpmDelta = 20.0;
-      final maxEnergyDelta = 0.4;
+      
+      const maxBpmDelta = 20.0;
+      const maxEnergyDelta = 0.4;
 
       if (bpmDelta > maxBpmDelta || energyDelta > maxEnergyDelta) continue;
 
       final bpmPenalty = (bpmDelta / maxBpmDelta) * (bpmDelta / maxBpmDelta);
       final energyPenalty = (energyDelta / maxEnergyDelta) * (energyDelta / maxEnergyDelta);
+      
       var score = 1.0 - bpmPenalty - energyPenalty;
 
       if (score > 0) {
-        // Tie-breaker: affinity
         score += _likedAffinityFor(track) * 0.1;
+
+        // Apply geographic regional multipliers (bypassed if mutation is active)
+        if (countryBonus != null) {
+          final geoBonus = bypassCountryLock ? 1.0 : countryBonus.scoreFor(current.country, track.country);
+          score *= geoBonus;
+        }
+
+        // Apply Artist Cooldown Penalty (last 15 artists)
+        final artistCooldownPenalty = _getArtistCooldownPenalty(track.author);
+        score *= artistCooldownPenalty;
+
         scored.add(_ScoredTrack(track, score));
       }
     }
@@ -1934,23 +1993,6 @@ class AutoDjRoutingService {
         name: _logTag,
       );
       return _smartDj(current, exclude, history, baseMode);
-    }
-
-    // Apply recent artist penalty
-    final lastTwoArtists = <String>{};
-    for (final track in history.take(2)) {
-      final artist = track.author?.toLowerCase();
-      if (artist != null && artist.isNotEmpty) {
-        lastTwoArtists.add(artist);
-      }
-    }
-
-    for (var i = 0; i < scored.length; i++) {
-      final t = scored[i].track;
-      final artist = t.author?.toLowerCase();
-      if (artist != null && lastTwoArtists.contains(artist)) {
-        scored[i] = _ScoredTrack(t, scored[i].score * 0.3);
-      }
     }
 
     scored.sort((a, b) => b.score.compareTo(a.score));
