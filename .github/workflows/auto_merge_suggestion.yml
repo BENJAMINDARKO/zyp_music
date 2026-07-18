@@ -3,7 +3,6 @@ name: Batch-Deploy Genre Suggestions
 on:
   repository_dispatch:
     types: [deploy_batch]
-  # Added: A standard push trigger to force GitHub to register and activate this brand-new workflow
   push:
     branches: [main]
 
@@ -22,7 +21,6 @@ jobs:
           python-version: '3.x'
 
       - name: Run Batch Merge Script
-        # Connect directly to your public Supabase REST API to pull and sync all approved suggestions at once!
         env:
           SUPABASE_URL: "https://wltbtvzmljsdoqvlthyw.supabase.co"
           SUPABASE_ANON_KEY: "sb_publishable_VeUpNYJHUsSwVxmJfCx4AQ_bpQ9r_B_"
@@ -66,46 +64,62 @@ jobs:
               print('No pending approvals found. Nothing to merge.')
               sys.exit(0)
 
-          # 2. Open your local normalization file
-          file_path = 'assets/data/genre_normalization.json'
+          # 2. Open the artist matrix file
+          file_path = 'assets/data/artists_matrix.json'
           try:
               with open(file_path, 'r', encoding='utf-8') as f:
                   data = json.load(f)
           except Exception as e:
-              print(f'Error reading normalization matrix: {e}')
+              print(f'Error reading artist matrix: {e}')
               sys.exit(1)
 
-          # 3. Merge ALL approved items at once in a single execution loop!
+          # 3. Merge ALL approved items into the artist matrix
           merged_count = 0
           for row in approved_rows:
               artist = row.get('artist_name', '').strip()
               genres = row.get('suggested_genres', [])
-              if artist and genres:
-                  data[artist.lower()] = genres[0]
-                  merged_count += 1
+              suggested_country = row.get('suggested_country')
+              if not artist or not genres:
+                  continue
 
-          # Sort the output alphabetically
+              key = artist.lower()
+
+              # Build deduplicated genre list — merge new with existing
+              existing_entry = data.get(key, {})
+              existing_genres = existing_entry.get('genres', [])
+              merged_genres = list(dict.fromkeys(list(existing_genres) + list(genres)))
+
+              # Use existing country unless suggestion provides one
+              existing_country = existing_entry.get('country')
+              final_country = suggested_country if suggested_country else existing_country
+
+              data[key] = {
+                  'display_name': artist,
+                  'country': final_country,
+                  'genres': merged_genres
+              }
+              merged_count += 1
+
+          # Sort the output alphabetically by key
           sorted_data = dict(sorted(data.items()))
 
           try:
               with open(file_path, 'w', encoding='utf-8') as f:
                   json.dump(sorted_data, f, indent=2, ensure_ascii=False)
-              print(f'Successfully merged {merged_count} artist mappings in batch.')
+              print(f'Successfully merged {merged_count} artist mappings into artist matrix.')
           except Exception as e:
               print(f'Failed to write updated JSON file: {e}')
               sys.exit(1)
 
-          # 4. Push PATCH request back to Supabase to mark those rows as 'synced'
-          # This prevents them from being approved or processed again
+          # 4. Mark processed rows as 'synced' in Supabase
           patch_endpoint = f'{supabase_url}/rest/v1/pending_metadata_suggestions?status=eq.approved'
           patch_payload = json.dumps({'status': 'synced'}).encode('utf-8')
-          
+
           patch_req = urllib.request.Request(patch_endpoint, data=patch_payload, headers=headers, method='PATCH')
           try:
               with urllib.request.urlopen(patch_req) as patch_res:
                   print(f'Supabase status codes successfully updated to synced: {patch_res.status}.')
           except urllib.error.HTTPError as e:
-              # Deep diagnostics: Read the exact database error message from Supabase's body (e.g., check constraints)
               print(f'Database returned HTTP Error during PATCH: {e.code} - {e.read().decode()}')
               sys.exit(1)
           except Exception as e:
@@ -117,11 +131,11 @@ jobs:
         run: |
           git config --global user.name "Auto-DJ Bot"
           git config --global user.email "bot@zypmusic.com"
-          git add assets/data/genre_normalization.json
-          git commit -m "chore(auto-dj): deploy batch approvals to production [skip ci]" || exit 0
+          git add assets/data/artists_matrix.json
+          git commit -m "chore(auto-dj): deploy batch approvals to artist matrix [skip ci]" || exit 0
           git push origin main
 
       - name: Purge jsDelivr CDN Cache
         run: |
-          curl -s https://purge.jsdelivr.net/gh/BENJAMINDARKO/zyp_music@main/assets/data/genre_normalization.json
+          curl -s https://purge.jsdelivr.net/gh/BENJAMINDARKO/zyp_music@main/assets/data/artists_matrix.json
           echo "CDN cache cleared."
