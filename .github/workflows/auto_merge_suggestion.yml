@@ -1,18 +1,17 @@
-name: Auto-Merge Genre Suggestions
+name: Batch-Deploy Genre Suggestions
 
 on:
   repository_dispatch:
-    types: [approve_suggestion]
+    types: [deploy_batch]
+  # Added: A standard push trigger to force GitHub to register and activate this brand-new workflow
+  push:
+    branches: [main]
 
 jobs:
-  merge:
-    if: github.event.client_payload.status == 'approved'
+  deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      SUPABASE_URL: "https://wltbtvzmljsdoqvlthyw.supabase.co"
-      SUPABASE_ANON_KEY: "sb_publishable_VeUpNYJHUsSwVxmJfCx4AQ_bpQ9r_B_"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -22,47 +21,95 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Run Merge Script
+      - name: Run Batch Merge Script
+        # Connect directly to your public Supabase REST API to pull and sync all approved suggestions at once!
         env:
-          ARTIST_NAME: ${{ github.event.client_payload.artist_name }}
-          SUGGESTED_GENRES: ${{ toJson(github.event.client_payload.suggested_genres) }}
-          TARGET_TYPE: ${{ github.event.client_payload.target_type }}
+          SUPABASE_URL: "https://wltbtvzmljsdoqvlthyw.supabase.co"
+          SUPABASE_ANON_KEY: "sb_publishable_VeUpNYJHUsSwVxmJfCx4AQ_bpQ9r_B_"
         run: |
           python -c "
-          import os, json, sys
+          import os
+          import json
+          import sys
+          import urllib.request
+          import urllib.error
 
-          artist_name = os.environ.get('ARTIST_NAME', '').strip()
-          target_type = os.environ.get('TARGET_TYPE', 'track')
-          genres_raw = os.environ.get('SUGGESTED_GENRES', '[]')
+          supabase_url = os.environ.get('SUPABASE_URL')
+          supabase_key = os.environ.get('SUPABASE_ANON_KEY')
 
-          try:
-              suggested_genres = json.loads(genres_raw)
-          except Exception as e:
-              print(f'Failed to parse genres JSON: {e}')
+          if not supabase_url or not supabase_key:
+              print('Missing Supabase configuration. Aborting.')
               sys.exit(1)
 
-          if not artist_name or not suggested_genres:
-              print('Invalid or empty payload data. Skipping.')
+          # 1. Fetch all rows where status is 'approved'
+          api_endpoint = f'{supabase_url}/rest/v1/pending_metadata_suggestions?status=eq.approved'
+          headers = {
+              'apikey': supabase_key,
+              'Authorization': f'Bearer {supabase_key}',
+              'Content-Type': 'application/json'
+          }
+
+          req = urllib.request.Request(api_endpoint, headers=headers, method='GET')
+          try:
+              with urllib.request.urlopen(req) as response:
+                  res_body = response.read().decode('utf-8')
+                  approved_rows = json.loads(res_body)
+          except urllib.error.HTTPError as e:
+              print(f'Database returned HTTP Error during GET: {e.code} - {e.read().decode()}')
+              sys.exit(1)
+          except Exception as e:
+              print(f'Failed to query approved rows from Supabase: {e}')
+              sys.exit(1)
+
+          print(f'Pulled {len(approved_rows)} approved rows from the database.')
+          if len(approved_rows) == 0:
+              print('No pending approvals found. Nothing to merge.')
               sys.exit(0)
 
+          # 2. Open your local normalization file
           file_path = 'assets/data/genre_normalization.json'
-
           try:
               with open(file_path, 'r', encoding='utf-8') as f:
                   data = json.load(f)
           except Exception as e:
-              print(f'Error reading normalization file: {e}')
+              print(f'Error reading normalization matrix: {e}')
               sys.exit(1)
 
-          data[artist_name.lower()] = suggested_genres[0]
+          # 3. Merge ALL approved items at once in a single execution loop!
+          merged_count = 0
+          for row in approved_rows:
+              artist = row.get('artist_name', '').strip()
+              genres = row.get('suggested_genres', [])
+              if artist and genres:
+                  data[artist.lower()] = genres[0]
+                  merged_count += 1
+
+          # Sort the output alphabetically
           sorted_data = dict(sorted(data.items()))
 
           try:
               with open(file_path, 'w', encoding='utf-8') as f:
                   json.dump(sorted_data, f, indent=2, ensure_ascii=False)
-              print(f'Successfully updated matrix: {artist_name.lower()} -> {suggested_genres[0]}')
+              print(f'Successfully merged {merged_count} artist mappings in batch.')
           except Exception as e:
-              print(f'Failed to write file: {e}')
+              print(f'Failed to write updated JSON file: {e}')
+              sys.exit(1)
+
+          # 4. Push PATCH request back to Supabase to mark those rows as 'synced'
+          # This prevents them from being approved or processed again
+          patch_endpoint = f'{supabase_url}/rest/v1/pending_metadata_suggestions?status=eq.approved'
+          patch_payload = json.dumps({'status': 'synced'}).encode('utf-8')
+          
+          patch_req = urllib.request.Request(patch_endpoint, data=patch_payload, headers=headers, method='PATCH')
+          try:
+              with urllib.request.urlopen(patch_req) as patch_res:
+                  print(f'Supabase status codes successfully updated to synced: {patch_res.status}.')
+          except urllib.error.HTTPError as e:
+              # Deep diagnostics: Read the exact database error message from Supabase's body (e.g., check constraints)
+              print(f'Database returned HTTP Error during PATCH: {e.code} - {e.read().decode()}')
+              sys.exit(1)
+          except Exception as e:
+              print(f'Warning: Failed to update status codes in Supabase: {e}')
               sys.exit(1)
           "
 
@@ -71,7 +118,7 @@ jobs:
           git config --global user.name "Auto-DJ Bot"
           git config --global user.email "bot@zypmusic.com"
           git add assets/data/genre_normalization.json
-          git commit -m "chore(auto-dj): merge approved artist tag correction [skip ci]" || exit 0
+          git commit -m "chore(auto-dj): deploy batch approvals to production [skip ci]" || exit 0
           git push origin main
 
       - name: Purge jsDelivr CDN Cache
